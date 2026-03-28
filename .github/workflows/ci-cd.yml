@@ -21,6 +21,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
+      - name: Tidy modules
+        run: go mod tidy
       - name: Lint
         uses: golangci/golangci-lint-action@v6
         with:
