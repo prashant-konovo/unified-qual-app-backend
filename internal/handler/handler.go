@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 
@@ -127,19 +128,30 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload := centralAuthLoginRequest{
-		UserName:   req.Email,
-		Password:   req.Password,
-		UserPoolId: h.cfg.Cognito.UserPoolID,
-		ClientId:   h.cfg.Cognito.AppClientID,
+	// Try central auth service first
+	if h.cfg.AuthAPIURL != "" {
+		payload := centralAuthLoginRequest{
+			UserName:   req.Email,
+			Password:   req.Password,
+			UserPoolId: h.cfg.Cognito.UserPoolID,
+			ClientId:   h.cfg.Cognito.AppClientID,
+		}
+		body, status, err := h.callAuthService(r.Context(), "/authentication/qs/login", payload)
+		if err == nil && status >= 200 && status < 500 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			_, _ = w.Write(body)
+			return
+		}
+		log.Printf("[auth] central auth service failed (status=%d, err=%v), falling back to direct Cognito", status, err)
 	}
 
-	body, status, err := h.callAuthService(r.Context(), "/authentication/qs/login", payload)
+	// Fallback: call Cognito ADMIN_USER_PASSWORD_AUTH directly via HTTP
+	body, status, err := h.cognitoAdminAuth(r.Context(), req.Email, req.Password)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("auth service error: %v", err)})
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("cognito auth error: %v", err)})
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
@@ -238,6 +250,102 @@ func (h *Handler) callAuthService(ctx context.Context, path string, payload any)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, 0, fmt.Errorf("read response: %w", err)
+	}
+
+	return body, resp.StatusCode, nil
+}
+
+// cognitoAdminAuth calls the Cognito InitiateAuth API directly via HTTPS.
+// This is the fallback when the central auth service Lambda is unavailable.
+// Uses USER_PASSWORD_AUTH flow which doesn't require SigV4 signing.
+func (h *Handler) cognitoAdminAuth(ctx context.Context, username, password string) ([]byte, int, error) {
+	endpoint := fmt.Sprintf("https://cognito-idp.%s.amazonaws.com/", h.cfg.Cognito.Region)
+
+	payload := map[string]any{
+		"AuthFlow": "USER_PASSWORD_AUTH",
+		"ClientId": h.cfg.Cognito.AppClientID,
+		"AuthParameters": map[string]string{
+			"USERNAME": username,
+			"PASSWORD": password,
+		},
+	}
+
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return nil, 0, fmt.Errorf("marshal cognito payload: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, 0, fmt.Errorf("create cognito request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-amz-json-1.1")
+	req.Header.Set("X-Amz-Target", "AWSCognitoIdentityProviderService.InitiateAuth")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("call cognito: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read cognito response: %w", err)
+	}
+
+	// Cognito returns AuthenticationResult on success — normalize to simpler shape
+	if resp.StatusCode == http.StatusOK {
+		var cognitoResp struct {
+			AuthenticationResult struct {
+				IdToken      string `json:"IdToken"`
+				AccessToken  string `json:"AccessToken"`
+				RefreshToken string `json:"RefreshToken"`
+				ExpiresIn    int    `json:"ExpiresIn"`
+				TokenType    string `json:"TokenType"`
+			} `json:"AuthenticationResult"`
+		}
+		if err := json.Unmarshal(body, &cognitoResp); err == nil && cognitoResp.AuthenticationResult.IdToken != "" {
+			normalized, _ := json.Marshal(map[string]any{
+				"IdToken":      cognitoResp.AuthenticationResult.IdToken,
+				"AccessToken":  cognitoResp.AuthenticationResult.AccessToken,
+				"RefreshToken": cognitoResp.AuthenticationResult.RefreshToken,
+				"ExpiresIn":    cognitoResp.AuthenticationResult.ExpiresIn,
+				"TokenType":    cognitoResp.AuthenticationResult.TokenType,
+			})
+			return normalized, http.StatusOK, nil
+		}
+	}
+
+	// On error, translate Cognito error to user-friendly response
+	if resp.StatusCode != http.StatusOK {
+		var cognitoErr struct {
+			Type    string `json:"__type"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(body, &cognitoErr); err == nil {
+			status := http.StatusUnauthorized
+			msg := "Invalid email or password"
+			switch cognitoErr.Type {
+			case "NotAuthorizedException":
+				msg = "Invalid email or password"
+			case "UserNotFoundException":
+				msg = "Invalid email or password" // Don't leak user existence
+			case "UserNotConfirmedException":
+				msg = "Account not confirmed. Please check your email."
+				status = http.StatusForbidden
+			case "PasswordResetRequiredException":
+				msg = "Password reset required"
+				status = http.StatusForbidden
+			default:
+				msg = cognitoErr.Message
+				status = http.StatusBadRequest
+			}
+			errorResp, _ := json.Marshal(map[string]any{"error": msg})
+			return errorResp, status, nil
+		}
 	}
 
 	return body, resp.StatusCode, nil
