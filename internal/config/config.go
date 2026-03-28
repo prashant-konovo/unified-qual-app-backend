@@ -67,7 +67,7 @@ type CognitoConfig struct {
 	AllClientIDs   []string // All recognised client IDs for JWT audience validation
 	SSOClientID    string   // OAuth client for SSO (authorization code flow)
 	SSOClientSecret string  // Secret for the SSO OAuth client
-	Domain         string   // Cognito hosted UI domain prefix (e.g. "apollo-dev")
+	Domain         string   // Cognito hosted UI domain (full hostname, e.g. "admin-dev-auth.incrowdanswers.com")
 	SSORedirectURI string   // Callback URL for SSO code exchange
 }
 

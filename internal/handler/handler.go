@@ -242,8 +242,8 @@ func (h *Handler) AuthSSOConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	authorizeURL := fmt.Sprintf(
-		"https://%s.auth.%s.amazoncognito.com/oauth2/authorize?response_type=code&client_id=%s&scope=email+openid&redirect_uri=%s",
-		c.Domain, c.Region, c.SSOClientID, c.SSORedirectURI,
+		"https://%s/oauth2/authorize?response_type=code&client_id=%s&scope=email+openid&redirect_uri=%s",
+		c.Domain, c.SSOClientID, c.SSORedirectURI,
 	)
 
 	success(w, map[string]any{
@@ -295,7 +295,7 @@ func (h *Handler) AuthSSOCallback(w http.ResponseWriter, r *http.Request) {
 // an authorization code for id_token, access_token, and refresh_token.
 func (h *Handler) cognitoTokenExchange(ctx context.Context, code, redirectURI string) ([]byte, int, error) {
 	c := h.cfg.Cognito
-	tokenURL := fmt.Sprintf("https://%s.auth.%s.amazoncognito.com/oauth2/token", c.Domain, c.Region)
+	tokenURL := fmt.Sprintf("https://%s/oauth2/token", c.Domain)
 
 	form := fmt.Sprintf(
 		"grant_type=authorization_code&client_id=%s&client_secret=%s&code=%s&redirect_uri=%s",
