@@ -61,20 +61,26 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-      - name: Update kubeconfig
+          repository: prashant-konovo/qual-gitops
+          ref: data-qa
+          token: ${{ secrets.GITOPS_PAT }}
+          path: gitops
+      - name: Update image tag in values
         run: |
-          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }} --role-arn arn:aws:iam::631543112504:role/eks-admin-apps-use2-konovo-dev
-      - name: Deploy to EKS
+          IMAGE_TAG=${{ github.sha }}
+          cd gitops
+          sed -i "s|tag: .*|tag: \"${IMAGE_TAG}\"|" envs/konovo-dev/us-east-2/unified-qual-api-values.yaml
+          echo "Updated image tag to ${IMAGE_TAG}"
+          grep 'tag:' envs/konovo-dev/us-east-2/unified-qual-api-values.yaml
+      - name: Commit and push
         run: |
-          IMAGE=${{ needs.build-push.outputs.image }}
-          kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} \
-            api=$IMAGE -n ${{ env.K8S_NAMESPACE }}
-          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} \
-            -n ${{ env.K8S_NAMESPACE }} --timeout=300s
+          cd gitops
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add envs/konovo-dev/us-east-2/unified-qual-api-values.yaml
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: update unified-qual-api image to ${{ github.sha }}"
+          git push origin data-qa
