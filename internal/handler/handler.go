@@ -327,12 +327,10 @@ func (h *Handler) cognitoAdminAuth(ctx context.Context, username, password strin
 		}
 		if err := json.Unmarshal(body, &cognitoErr); err == nil {
 			status := http.StatusUnauthorized
-			msg := "Invalid email or password"
+			var msg string
 			switch cognitoErr.Type {
-			case "NotAuthorizedException":
+			case "NotAuthorizedException", "UserNotFoundException":
 				msg = "Invalid email or password"
-			case "UserNotFoundException":
-				msg = "Invalid email or password" // Don't leak user existence
 			case "UserNotConfirmedException":
 				msg = "Account not confirmed. Please check your email."
 				status = http.StatusForbidden
