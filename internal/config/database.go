@@ -7,16 +7,17 @@ import (
 	"log"
 	"time"
 
-	_ "github.com/lib/pq"
+	_ "github.com/go-sql-driver/mysql"
 )
 
-// DBPair holds both database connections.
+// DBPair holds all database connections.
 type DBPair struct {
-	IRIS *sql.DB
-	QS   *sql.DB
+	IRIS         *sql.DB // InCrowd primary (read-write)
+	IRISReadOnly *sql.DB // InCrowd read-replica
+	QS           *sql.DB // QS-Tool
 }
 
-// ConnectDatabases opens connection pools for both IRIS and QS databases.
+// ConnectDatabases opens connection pools for IRIS (primary + read-replica) and QS databases.
 // Returns nil pools (not an error) when credentials are not configured,
 // allowing the app to run in dummy mode.
 func ConnectDatabases(cfg *Config) (*DBPair, error) {
@@ -34,6 +35,12 @@ func ConnectDatabases(cfg *Config) (*DBPair, error) {
 		if err != nil {
 			return nil, fmt.Errorf("iris db: %w", err)
 		}
+
+		pair.IRISReadOnly, err = openDB("iris-ro", cfg.IRISReadOnlyDB)
+		if err != nil {
+			log.Printf("[db] iris read-only failed, falling back to primary: %v", err)
+			pair.IRISReadOnly = pair.IRIS
+		}
 	}
 
 	if cfg.QSDB.Password != "" {
@@ -47,7 +54,7 @@ func ConnectDatabases(cfg *Config) (*DBPair, error) {
 }
 
 func openDB(label string, dbCfg DatabaseConfig) (*sql.DB, error) {
-	db, err := sql.Open("postgres", dbCfg.DSN())
+	db, err := sql.Open("mysql", dbCfg.DSN())
 	if err != nil {
 		return nil, fmt.Errorf("open %s: %w", label, err)
 	}
@@ -68,21 +75,25 @@ func openDB(label string, dbCfg DatabaseConfig) (*sql.DB, error) {
 	return db, nil
 }
 
-// Close gracefully shuts down both pools.
+// Close gracefully shuts down all pools.
 func (d *DBPair) Close() {
 	if d.IRIS != nil {
 		d.IRIS.Close()
+	}
+	if d.IRISReadOnly != nil && d.IRISReadOnly != d.IRIS {
+		d.IRISReadOnly.Close()
 	}
 	if d.QS != nil {
 		d.QS.Close()
 	}
 }
 
-// HealthCheck pings both databases and returns a per-db status map.
+// HealthCheck pings all databases and returns a per-db status map.
 func (d *DBPair) HealthCheck(ctx context.Context) map[string]string {
 	status := map[string]string{
-		"incrowdDB": "not_configured",
-		"qstoolDB":  "not_configured",
+		"incrowdDB":   "not_configured",
+		"incrowdRODB": "not_configured",
+		"qstoolDB":    "not_configured",
 	}
 
 	if d.IRIS != nil {
@@ -90,6 +101,14 @@ func (d *DBPair) HealthCheck(ctx context.Context) map[string]string {
 			status["incrowdDB"] = fmt.Sprintf("error: %v", err)
 		} else {
 			status["incrowdDB"] = "ok"
+		}
+	}
+
+	if d.IRISReadOnly != nil {
+		if err := d.IRISReadOnly.PingContext(ctx); err != nil {
+			status["incrowdRODB"] = fmt.Sprintf("error: %v", err)
+		} else {
+			status["incrowdRODB"] = "ok"
 		}
 	}
 
