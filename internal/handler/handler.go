@@ -84,7 +84,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, httpCode, map[string]any{
 		"status":      status,
-		"version":     "1.1.0",
+		"version":     "1.2.0",
 		"environment": h.cfg.Environment,
 		"checks":      dbChecks,
 	})
