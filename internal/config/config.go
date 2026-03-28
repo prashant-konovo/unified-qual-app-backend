@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -60,9 +61,10 @@ type DocumentDBConfig struct {
 }
 
 type CognitoConfig struct {
-	Region       string
-	UserPoolID   string
-	AppClientID  string
+	Region         string
+	UserPoolID     string
+	AppClientID    string   // Primary client used for login (USER_PASSWORD_AUTH)
+	AllClientIDs   []string // All recognised client IDs for JWT audience validation
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -118,9 +120,10 @@ func Load() *Config {
 		},
 
 		Cognito: CognitoConfig{
-			Region:      envOr("COGNITO_REGION", "us-east-1"),
-			UserPoolID:  envOr("COGNITO_USER_POOL_ID", ""),
-			AppClientID: envOr("COGNITO_APP_CLIENT_ID", ""),
+			Region:       envOr("COGNITO_REGION", "us-east-1"),
+			UserPoolID:   envOr("COGNITO_USER_POOL_ID", ""),
+			AppClientID:  envOr("COGNITO_APP_CLIENT_ID", ""),
+			AllClientIDs: parseClientIDs(envOr("COGNITO_APP_CLIENT_ID", ""), envOr("COGNITO_APP_CLIENT_IDS", "")),
 		},
 
 		AuthAPIURL: envOr("AUTH_API_URL", ""),
@@ -148,4 +151,23 @@ func envIntOr(key string, fallback int) int {
 		}
 	}
 	return fallback
+}
+
+// parseClientIDs builds a deduplicated list of Cognito app client IDs.
+// primary is the main login client; extra is a comma-separated list of additional IDs.
+func parseClientIDs(primary, extra string) []string {
+	seen := map[string]bool{}
+	var ids []string
+	add := func(id string) {
+		id = strings.TrimSpace(id)
+		if id != "" && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	add(primary)
+	for _, id := range strings.Split(extra, ",") {
+		add(id)
+	}
+	return ids
 }

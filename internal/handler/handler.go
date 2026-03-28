@@ -179,18 +179,29 @@ func (h *Handler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	payload := centralAuthRefreshRequest{
-		RefreshToken: req.RefreshToken,
-		UserPoolId:   h.cfg.Cognito.UserPoolID,
-		ClientId:     h.cfg.Cognito.AppClientID,
+	// Try central auth service first
+	if h.cfg.AuthAPIURL != "" {
+		payload := centralAuthRefreshRequest{
+			RefreshToken: req.RefreshToken,
+			UserPoolId:   h.cfg.Cognito.UserPoolID,
+			ClientId:     h.cfg.Cognito.AppClientID,
+		}
+		body, status, err := h.callAuthService(r.Context(), "/authentication/qs/refresh", payload)
+		if err == nil && status >= 200 && status < 500 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			_, _ = w.Write(body)
+			return
+		}
+		log.Printf("[auth] central auth refresh failed (status=%d, err=%v), falling back to direct Cognito", status, err)
 	}
 
-	body, status, err := h.callAuthService(r.Context(), "/authentication/qs/refresh", payload)
+	// Fallback: call Cognito InitiateAuth with REFRESH_TOKEN flow directly
+	body, status, err := h.cognitoRefresh(r.Context(), req.RefreshToken)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("auth service error: %v", err)})
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("cognito refresh error: %v", err)})
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
@@ -343,6 +354,78 @@ func (h *Handler) cognitoAdminAuth(ctx context.Context, username, password strin
 			}
 			errorResp, _ := json.Marshal(map[string]any{"error": msg})
 			return errorResp, status, nil
+		}
+	}
+
+	return body, resp.StatusCode, nil
+}
+
+// cognitoRefresh calls the Cognito InitiateAuth API with REFRESH_TOKEN flow.
+func (h *Handler) cognitoRefresh(ctx context.Context, refreshToken string) ([]byte, int, error) {
+	endpoint := fmt.Sprintf("https://cognito-idp.%s.amazonaws.com/", h.cfg.Cognito.Region)
+
+	payload := map[string]any{
+		"AuthFlow": "REFRESH_TOKEN_AUTH",
+		"ClientId": h.cfg.Cognito.AppClientID,
+		"AuthParameters": map[string]string{
+			"REFRESH_TOKEN": refreshToken,
+		},
+	}
+
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return nil, 0, fmt.Errorf("marshal cognito payload: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, 0, fmt.Errorf("create cognito request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-amz-json-1.1")
+	req.Header.Set("X-Amz-Target", "AWSCognitoIdentityProviderService.InitiateAuth")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("call cognito: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read cognito response: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusOK {
+		var cognitoResp struct {
+			AuthenticationResult struct {
+				IdToken     string `json:"IdToken"`
+				AccessToken string `json:"AccessToken"`
+				ExpiresIn   int    `json:"ExpiresIn"`
+				TokenType   string `json:"TokenType"`
+			} `json:"AuthenticationResult"`
+		}
+		if err := json.Unmarshal(body, &cognitoResp); err == nil && cognitoResp.AuthenticationResult.IdToken != "" {
+			normalized, _ := json.Marshal(map[string]any{
+				"IdToken":     cognitoResp.AuthenticationResult.IdToken,
+				"AccessToken": cognitoResp.AuthenticationResult.AccessToken,
+				"ExpiresIn":   cognitoResp.AuthenticationResult.ExpiresIn,
+				"TokenType":   cognitoResp.AuthenticationResult.TokenType,
+			})
+			return normalized, http.StatusOK, nil
+		}
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var cognitoErr struct {
+			Type    string `json:"__type"`
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(body, &cognitoErr); err == nil {
+			errorResp, _ := json.Marshal(map[string]any{"error": cognitoErr.Message})
+			return errorResp, http.StatusUnauthorized, nil
 		}
 	}
 

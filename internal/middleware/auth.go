@@ -19,7 +19,7 @@ import (
 type JWTAuth struct {
 	region     string
 	userPoolID string
-	clientID   string
+	clientIDs  map[string]bool // recognised Cognito app client IDs
 
 	mu   sync.RWMutex
 	keys map[string]*rsa.PublicKey // kid → RSA public key
@@ -27,11 +27,18 @@ type JWTAuth struct {
 
 // NewJWTAuth creates a new JWT authentication middleware that validates
 // tokens issued by the given Cognito user pool.
-func NewJWTAuth(region, userPoolID, clientID string) *JWTAuth {
+// clientIDs lists all recognised app client IDs (for audience validation).
+func NewJWTAuth(region, userPoolID string, clientIDs []string) *JWTAuth {
+	cidMap := make(map[string]bool, len(clientIDs))
+	for _, id := range clientIDs {
+		if id != "" {
+			cidMap[id] = true
+		}
+	}
 	j := &JWTAuth{
 		region:     region,
 		userPoolID: userPoolID,
-		clientID:   clientID,
+		clientIDs:  cidMap,
 		keys:       make(map[string]*rsa.PublicKey),
 	}
 	// Pre-fetch JWKS at startup (non-fatal).
@@ -122,19 +129,19 @@ func (j *JWTAuth) validateToken(tokenStr string) (*UserClaims, error) {
 		return nil, fmt.Errorf("invalid token_use: %s", tokenUse)
 	}
 
-	// For id tokens, validate audience matches our client ID.
+	// For id tokens, validate audience matches one of our client IDs.
 	if tokenUse == "id" {
 		aud, _ := mapClaims["aud"].(string)
-		if j.clientID != "" && aud != j.clientID {
-			return nil, fmt.Errorf("audience mismatch: got %s, want %s", aud, j.clientID)
+		if len(j.clientIDs) > 0 && !j.clientIDs[aud] {
+			return nil, fmt.Errorf("audience mismatch: %s not in recognised clients", aud)
 		}
 	}
 
 	// For access tokens, validate client_id claim.
 	if tokenUse == "access" {
 		cid, _ := mapClaims["client_id"].(string)
-		if j.clientID != "" && cid != j.clientID {
-			return nil, fmt.Errorf("client_id mismatch: got %s, want %s", cid, j.clientID)
+		if len(j.clientIDs) > 0 && !j.clientIDs[cid] {
+			return nil, fmt.Errorf("client_id mismatch: %s not in recognised clients", cid)
 		}
 	}
 

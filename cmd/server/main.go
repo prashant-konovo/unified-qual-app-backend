@@ -20,7 +20,7 @@ func main() {
 	jwtAuth := middleware.NewJWTAuth(
 		cfg.Cognito.Region,
 		cfg.Cognito.UserPoolID,
-		cfg.Cognito.AppClientID,
+		cfg.Cognito.AllClientIDs,
 	)
 
 	h := handler.New(cfg, db)
