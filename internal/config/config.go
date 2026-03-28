@@ -114,7 +114,7 @@ func Load() *Config {
 		},
 
 		Cognito: CognitoConfig{
-			Region:      envOr("AWS_REGION", "us-east-1"),
+			Region:      envOr("COGNITO_REGION", "us-east-1"),
 			UserPoolID:  envOr("COGNITO_USER_POOL_ID", ""),
 			AppClientID: envOr("COGNITO_APP_CLIENT_ID", ""),
 		},
