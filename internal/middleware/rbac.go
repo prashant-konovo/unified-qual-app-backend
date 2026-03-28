@@ -5,7 +5,7 @@ import (
 )
 
 // RequireRoles returns middleware that checks the authenticated user
-// belongs to at least one of the specified Cognito groups.
+// holds at least one of the specified unified roles (admin, manager, moderator, observer, external).
 func RequireRoles(roles ...string) func(http.Handler) http.Handler {
 	allowed := make(map[string]struct{}, len(roles))
 	for _, r := range roles {
@@ -20,8 +20,8 @@ func RequireRoles(roles ...string) func(http.Handler) http.Handler {
 				return
 			}
 
-			for _, g := range user.Groups {
-				if _, ok := allowed[g]; ok {
+			for _, role := range user.Roles {
+				if _, ok := allowed[role]; ok {
 					next.ServeHTTP(w, r)
 					return
 				}

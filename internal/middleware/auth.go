@@ -164,6 +164,9 @@ func extractClaims(m jwt.MapClaims) *UserClaims {
 		}
 	}
 
+	// Derive unified roles from Cognito groups
+	c.Roles = MapCognitoGroupsToRoles(c.Groups)
+
 	return c
 }
 

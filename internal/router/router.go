@@ -51,98 +51,142 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 			r.Put("/auth/password", h.AuthPassword)
 			r.Get("/auth/me", h.AuthMe)
 
-			// ── Projects ──
-			r.Get("/projects", h.ListProjects)
-			r.Post("/project", h.CreateProject)
-			r.Get("/project/{id}", h.GetProject)
-			r.Put("/project/{id}", h.UpdateProject)
-			r.Delete("/project/{id}", h.DeleteProject)
+			// ── Projects (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/projects", h.ListProjects)
+				r.Post("/project", h.CreateProject)
+				r.Get("/project/{id}", h.GetProject)
+				r.Put("/project/{id}", h.UpdateProject)
+				r.Delete("/project/{id}", h.DeleteProject)
+			})
 
-			// ── Surveys ──
-			r.Get("/surveys", h.ListSurveys)
-			r.Post("/survey", h.CreateSurvey)
-			r.Put("/survey/{id}", h.UpdateSurvey)
-			r.Delete("/survey/{id}", h.DeleteSurvey)
+			// ── Surveys (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/surveys", h.ListSurveys)
+				r.Post("/survey", h.CreateSurvey)
+				r.Put("/survey/{id}", h.UpdateSurvey)
+				r.Delete("/survey/{id}", h.DeleteSurvey)
+			})
 
-			// ── Survey Responses ──
+			// ── Survey Responses (any authenticated user) ──
 			r.Get("/survey-responses/{userId}", h.GetSurveyResponses)
 			r.Post("/survey-responses", h.SubmitSurveyResponse)
 
-			// ── Timeslots ──
-			r.Get("/timeslots", h.ListTimeslots)
-			r.Post("/timeslots", h.CreateTimeslot)
-			r.Get("/timeslots/{id}", h.GetTimeslot)
-			r.Put("/timeslots/{id}", h.UpdateTimeslot)
-			r.Delete("/timeslots/{id}", h.DeleteTimeslot)
-
-			// ── Interview Slots ──
-			r.Post("/slots/generate", h.GenerateSlots)
-			r.Get("/ai/suggested-slots", h.GetAISuggestions)
-
-			// ── Moderators ──
-			r.Get("/moderators", h.ListModerators)
-			r.Post("/moderators", h.CreateModerator)
-			r.Get("/moderators/{id}", h.GetModerator)
-			r.Put("/moderators/{id}", h.UpdateModerator)
-			r.Delete("/moderators/{id}", h.DeleteModerator)
-			r.Post("/moderators/bulk-upload", h.BulkUploadModerators)
-			r.Get("/moderators/{moderatorId}/timeslots", h.GetModeratorTimeslots)
-
-			// ── Participants ──
-			r.Get("/participants", h.ListParticipants)
-			r.Post("/participants", h.CreateParticipant)
-			r.Get("/participants/{id}", h.GetParticipant)
-
-			// ── Bookings ──
-			r.Get("/bookings", h.ListBookings)
-			r.Post("/bookings", h.CreateBooking)
-			r.Get("/bookings/{userId}", h.GetBookingsByUser)
-			r.Put("/bookings/{id}", h.UpdateBooking)
-			r.Put("/bookings/{id}/reward", h.UpdateBookingReward)
-
-			// ── Subscriptions ──
-			r.Get("/subscriptions", h.ListSubscriptions)
-			r.Post("/subscription", h.CreateSubscription)
-			r.Get("/subscription/{id}", h.GetSubscription)
-			r.Put("/subscription/{id}", h.UpdateSubscription)
-			r.Delete("/subscription/{id}", h.DeleteSubscription)
-
-			// ── Waiting Queue ──
-			r.Get("/waiting-queue", h.GetWaitingQueue)
-			r.Post("/waiting-queue", h.AddToWaitingQueue)
-			r.Delete("/waiting-queue/{id}", h.RemoveFromWaitingQueue)
-			r.Post("/match-slots", h.TriggerMatching)
-
-			// ── Scheduler (LLD endpoints) ──
-			r.Post("/interviews/schedule", h.ScheduleInterview)
-			r.Post("/interviews/{id}/cancel", h.CancelInterview)
-			r.Post("/interviews/{id}/reschedule", h.RescheduleInterview)
-
-			// ── Moderator Availability (LLD endpoints) ──
-			r.Get("/moderators/{id}/availability", h.GetModeratorAvailability)
-			r.Post("/moderators/{id}/availability", h.PostModeratorAvailability)
-			r.Get("/timeslots/{id}/moderators/options", h.GetTimeslotModeratorOptions)
-
-			// ── Conference (LLD endpoints) ──
-			r.Post("/meetings/{meetingId}/action/{action}", h.MeetingAction)
-			r.Post("/meeting/{meetingId}/universal", h.MeetingUniversalJoin)
-
-			// ── Payments (LLD endpoints) ──
-			r.Post("/payments/timeslot", h.CreatePayment)
-			r.Post("/payments/custom-honorarium", h.CreateCustomHonorarium)
-			r.Get("/payments/status-list", h.GetPaymentStatusList)
-
-			// ── Translations (LLD endpoints) ──
-			r.Get("/translations/locales", h.GetLocales)
-			r.Put("/projects/{projectId}/topics/translations", h.UpdateTopicTranslations)
-
-			// ── Notifications (LLD endpoints) ──
-			r.Get("/notifications/email-template", h.GetEmailTemplate)
-			r.Post("/notifications/reminder", h.SendReminder)
-
-			// ── Admin (requires ADMIN role) ──
+			// ── Timeslots (admin + manager) ──
 			r.Group(func(r chi.Router) {
-				r.Use(middleware.RequireRoles("QUAL_SCHEDULER_ADMIN"))
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/timeslots", h.ListTimeslots)
+				r.Post("/timeslots", h.CreateTimeslot)
+				r.Get("/timeslots/{id}", h.GetTimeslot)
+				r.Put("/timeslots/{id}", h.UpdateTimeslot)
+				r.Delete("/timeslots/{id}", h.DeleteTimeslot)
+			})
+
+			// ── Interview Slots (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Post("/slots/generate", h.GenerateSlots)
+				r.Get("/ai/suggested-slots", h.GetAISuggestions)
+			})
+
+			// ── Moderators (admin + manager for mgmt; moderator for own schedule) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/moderators", h.ListModerators)
+				r.Post("/moderators", h.CreateModerator)
+				r.Get("/moderators/{id}", h.GetModerator)
+				r.Put("/moderators/{id}", h.UpdateModerator)
+				r.Delete("/moderators/{id}", h.DeleteModerator)
+				r.Post("/moderators/bulk-upload", h.BulkUploadModerators)
+			})
+			// Moderator availability — admin, manager, or moderator (own)
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager", "moderator"))
+				r.Get("/moderators/{id}/availability", h.GetModeratorAvailability)
+				r.Post("/moderators/{id}/availability", h.PostModeratorAvailability)
+				r.Get("/moderators/{moderatorId}/timeslots", h.GetModeratorTimeslots)
+				r.Get("/timeslots/{id}/moderators/options", h.GetTimeslotModeratorOptions)
+			})
+
+			// ── Interviews (any authenticated user: admin, manager, moderator) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager", "moderator"))
+				r.Post("/interviews/schedule", h.ScheduleInterview)
+				r.Post("/interviews/{id}/cancel", h.CancelInterview)
+				r.Post("/interviews/{id}/reschedule", h.RescheduleInterview)
+			})
+
+			// ── Participants (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/participants", h.ListParticipants)
+				r.Post("/participants", h.CreateParticipant)
+				r.Get("/participants/{id}", h.GetParticipant)
+			})
+
+			// ── Bookings (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/bookings", h.ListBookings)
+				r.Post("/bookings", h.CreateBooking)
+				r.Get("/bookings/{userId}", h.GetBookingsByUser)
+				r.Put("/bookings/{id}", h.UpdateBooking)
+				r.Put("/bookings/{id}/reward", h.UpdateBookingReward)
+			})
+
+			// ── Subscriptions (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/subscriptions", h.ListSubscriptions)
+				r.Post("/subscription", h.CreateSubscription)
+				r.Get("/subscription/{id}", h.GetSubscription)
+				r.Put("/subscription/{id}", h.UpdateSubscription)
+				r.Delete("/subscription/{id}", h.DeleteSubscription)
+			})
+
+			// ── Waiting Queue (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/waiting-queue", h.GetWaitingQueue)
+				r.Post("/waiting-queue", h.AddToWaitingQueue)
+				r.Delete("/waiting-queue/{id}", h.RemoveFromWaitingQueue)
+				r.Post("/match-slots", h.TriggerMatching)
+			})
+
+			// ── Conference (admin + manager + moderator) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager", "moderator"))
+				r.Post("/meetings/{meetingId}/action/{action}", h.MeetingAction)
+				r.Post("/meeting/{meetingId}/universal", h.MeetingUniversalJoin)
+			})
+
+			// ── Payments (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Post("/payments/timeslot", h.CreatePayment)
+				r.Post("/payments/custom-honorarium", h.CreateCustomHonorarium)
+				r.Get("/payments/status-list", h.GetPaymentStatusList)
+			})
+
+			// ── Translations (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/translations/locales", h.GetLocales)
+				r.Put("/projects/{projectId}/topics/translations", h.UpdateTopicTranslations)
+			})
+
+			// ── Notifications (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/notifications/email-template", h.GetEmailTemplate)
+				r.Post("/notifications/reminder", h.SendReminder)
+			})
+
+			// ── Admin (requires admin role only) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin"))
 				r.Get("/admin/users", h.ListAdminUsers)
 				r.Post("/admin/users", h.CreateAdminUser)
 			})

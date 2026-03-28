@@ -14,7 +14,8 @@ type UserClaims struct {
 	Sub      string   // Cognito user sub (unique ID)
 	Email    string   // email claim
 	Username string   // cognito:username
-	Groups   []string // cognito:groups — role-based access
+	Groups   []string // cognito:groups — raw Cognito groups
+	Roles    []string // Unified roles derived from Cognito groups (admin, manager, moderator, observer, external)
 }
 
 // SetUser stores claims in the request context.

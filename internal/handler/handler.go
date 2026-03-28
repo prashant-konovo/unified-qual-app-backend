@@ -226,6 +226,7 @@ func (h *Handler) AuthMe(w http.ResponseWriter, r *http.Request) {
 		"email":    user.Email,
 		"username": user.Username,
 		"groups":   user.Groups,
+		"roles":    user.Roles,
 	})
 }
 
