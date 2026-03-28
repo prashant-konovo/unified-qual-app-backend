@@ -1,18 +1,23 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
 
+	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-type Handler struct{}
+type Handler struct {
+	cfg *config.Config
+	db  *config.DBPair
+}
 
-func New() *Handler {
-	return &Handler{}
+func New(cfg *config.Config, db *config.DBPair) *Handler {
+	return &Handler{cfg: cfg, db: db}
 }
 
 // ──────────────────────────────────────────────
@@ -62,15 +67,26 @@ func now() string { return time.Now().UTC().Format(time.RFC3339) }
 // ──────────────────────────────────────────────
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"status":  "healthy",
-		"version": "1.0.0-dummy",
-		"uptime":  "0h0m",
-		"checks": map[string]string{
-			"incrowdDB": "ok",
-			"qstoolDB":  "ok",
-			"cognito":   "ok",
-		},
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	dbChecks := h.db.HealthCheck(ctx)
+
+	status := "healthy"
+	httpCode := http.StatusOK
+	for _, v := range dbChecks {
+		if v != "ok" && v != "not_configured" {
+			status = "degraded"
+			httpCode = http.StatusServiceUnavailable
+			break
+		}
+	}
+
+	writeJSON(w, httpCode, map[string]any{
+		"status":      status,
+		"version":     "1.1.0",
+		"environment": h.cfg.Environment,
+		"checks":      dbChecks,
 	})
 }
 
