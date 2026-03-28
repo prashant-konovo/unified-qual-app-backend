@@ -1,12 +1,16 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
+	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -91,46 +95,152 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 }
 
 // ──────────────────────────────────────────────
-// Auth
+// Auth — proxies to central auth service (API Gateway → Lambda → Cognito)
 // ──────────────────────────────────────────────
 
+type loginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type centralAuthLoginRequest struct {
+	UserName   string `json:"UserName"`
+	Password   string `json:"Password"`
+	UserPoolId string `json:"UserPoolId"`
+	ClientId   string `json:"ClientId"`
+}
+
+type centralAuthRefreshRequest struct {
+	RefreshToken string `json:"RefreshToken"`
+	UserPoolId   string `json:"UserPoolId"`
+	ClientId     string `json:"ClientId"`
+}
+
 func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{
-		"user": map[string]any{
-			"id":        12345,
-			"email":     "demo@konovo.com",
-			"firstName": "Demo",
-			"lastName":  "User",
-			"roles":     []string{"admin", "manager"},
-			"timezone":  "America/New_York",
-			"brand":     "unified",
-		},
-		"token":        "dummy-jwt-token-" + id(),
-		"cognitoToken": "dummy-cognito-token-" + id(),
-		"apiKey":       "dummy-api-key",
-	})
+	var req loginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+	if req.Email == "" || req.Password == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "email and password are required"})
+		return
+	}
+
+	payload := centralAuthLoginRequest{
+		UserName:   req.Email,
+		Password:   req.Password,
+		UserPoolId: h.cfg.Cognito.UserPoolID,
+		ClientId:   h.cfg.Cognito.AppClientID,
+	}
+
+	body, status, err := h.callAuthService(r.Context(), "/authentication/qs/login", payload)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("auth service error: %v", err)})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
 }
 
 func (h *Handler) AuthMagicLink(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{
-		"user": map[string]any{
-			"id": 12345, "email": "magic@konovo.com",
-			"firstName": "Magic", "lastName": "User",
-			"roles": []string{"moderator"}, "brand": "unified",
-		},
-		"token": "dummy-magic-jwt-" + id(),
+	// Magic link auth is not yet supported by the central service — return stub.
+	writeJSON(w, http.StatusNotImplemented, map[string]any{
+		"error": "magic link authentication not yet implemented",
 	})
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refreshToken"`
 }
 
 func (h *Handler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{
-		"token":        "dummy-refreshed-jwt-" + id(),
-		"cognitoToken": "dummy-refreshed-cognito-" + id(),
-	})
+	var req refreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+	if req.RefreshToken == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "refreshToken is required"})
+		return
+	}
+
+	payload := centralAuthRefreshRequest{
+		RefreshToken: req.RefreshToken,
+		UserPoolId:   h.cfg.Cognito.UserPoolID,
+		ClientId:     h.cfg.Cognito.AppClientID,
+	}
+
+	body, status, err := h.callAuthService(r.Context(), "/authentication/qs/refresh", payload)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("auth service error: %v", err)})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
 }
 
 func (h *Handler) AuthPassword(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{"message": "password updated successfully"})
+	// Password change is not yet wired through central service — return stub.
+	writeJSON(w, http.StatusNotImplemented, map[string]any{
+		"error": "password change not yet implemented",
+	})
+}
+
+// AuthMe returns the authenticated user's claims from the JWT.
+func (h *Handler) AuthMe(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r)
+	if user == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "not authenticated"})
+		return
+	}
+	success(w, map[string]any{
+		"sub":      user.Sub,
+		"email":    user.Email,
+		"username": user.Username,
+		"groups":   user.Groups,
+	})
+}
+
+// callAuthService sends a JSON payload to the central auth API Gateway endpoint.
+func (h *Handler) callAuthService(ctx context.Context, path string, payload any) ([]byte, int, error) {
+	if h.cfg.AuthAPIURL == "" {
+		return nil, 0, fmt.Errorf("AUTH_API_URL not configured")
+	}
+
+	jsonBody, err := json.Marshal(payload)
+	if err != nil {
+		return nil, 0, fmt.Errorf("marshal payload: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.cfg.AuthAPIURL+path, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, 0, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if h.cfg.AuthAPIKey != "" {
+		req.Header.Set("X-API-Key", h.cfg.AuthAPIKey)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("call auth service: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read response: %w", err)
+	}
+
+	return body, resp.StatusCode, nil
 }
 
 // ──────────────────────────────────────────────

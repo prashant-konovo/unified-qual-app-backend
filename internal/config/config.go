@@ -26,6 +26,10 @@ type Config struct {
 	// AWS Cognito
 	Cognito CognitoConfig
 
+	// Central auth service (API Gateway wrapping Cognito)
+	AuthAPIURL string
+	AuthAPIKey string
+
 	// CORS
 	CORSOrigins string
 }
@@ -118,6 +122,9 @@ func Load() *Config {
 			UserPoolID:  envOr("COGNITO_USER_POOL_ID", ""),
 			AppClientID: envOr("COGNITO_APP_CLIENT_ID", ""),
 		},
+
+		AuthAPIURL: envOr("AUTH_API_URL", ""),
+		AuthAPIKey: envOr("AUTH_API_KEY", ""),
 	}
 }
 
