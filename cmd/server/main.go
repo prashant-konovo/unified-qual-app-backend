@@ -13,10 +13,7 @@ import (
 func main() {
 	cfg := config.Load()
 
-	db, err := config.ConnectDatabases(cfg)
-	if err != nil {
-		log.Fatalf("database connection failed: %v", err)
-	}
+	db := config.ConnectDatabases(cfg)
 	defer db.Close()
 
 	h := handler.New(cfg, db)

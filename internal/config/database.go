@@ -20,37 +20,43 @@ type DBPair struct {
 // ConnectDatabases opens connection pools for IRIS (primary + read-replica) and QS databases.
 // Returns nil pools (not an error) when credentials are not configured,
 // allowing the app to run in dummy mode.
-func ConnectDatabases(cfg *Config) (*DBPair, error) {
+// Connections are best-effort: the app starts even if databases are unreachable,
+// and health checks report actual connectivity status.
+func ConnectDatabases(cfg *Config) *DBPair {
 	pair := &DBPair{}
 
 	if cfg.IsDummy() {
 		log.Println("[db] no credentials configured — running in dummy mode")
-		return pair, nil
+		return pair
 	}
 
-	var err error
-
 	if cfg.IRISDB.Password != "" {
-		pair.IRIS, err = openDB("iris", cfg.IRISDB)
+		db, err := openDB("iris", cfg.IRISDB)
 		if err != nil {
-			return nil, fmt.Errorf("iris db: %w", err)
+			log.Printf("[db] WARNING iris primary connection failed (will retry on queries): %v", err)
+		} else {
+			pair.IRIS = db
 		}
 
-		pair.IRISReadOnly, err = openDB("iris-ro", cfg.IRISReadOnlyDB)
+		roDB, err := openDB("iris-ro", cfg.IRISReadOnlyDB)
 		if err != nil {
 			log.Printf("[db] iris read-only failed, falling back to primary: %v", err)
 			pair.IRISReadOnly = pair.IRIS
+		} else {
+			pair.IRISReadOnly = roDB
 		}
 	}
 
 	if cfg.QSDB.Password != "" {
-		pair.QS, err = openDB("qs", cfg.QSDB)
+		db, err := openDB("qs", cfg.QSDB)
 		if err != nil {
-			return nil, fmt.Errorf("qs db: %w", err)
+			log.Printf("[db] WARNING qs connection failed (will retry on queries): %v", err)
+		} else {
+			pair.QS = db
 		}
 	}
 
-	return pair, nil
+	return pair
 }
 
 func openDB(label string, dbCfg DatabaseConfig) (*sql.DB, error) {
