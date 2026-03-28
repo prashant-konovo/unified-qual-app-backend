@@ -187,7 +187,7 @@ func (h *Handler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 			ClientId:     h.cfg.Cognito.AppClientID,
 		}
 		body, status, err := h.callAuthService(r.Context(), "/authentication/qs/refresh", payload)
-		if err == nil && status >= 200 && status < 500 {
+		if err == nil && status >= 200 && status < 400 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(status)
 			_, _ = w.Write(body)
