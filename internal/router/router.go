@@ -34,6 +34,8 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 		r.Post("/auth/login", h.AuthLogin)
 		r.Post("/auth/magic-link", h.AuthMagicLink)
 		r.Post("/auth/refresh", h.AuthRefresh)
+		r.Get("/auth/sso/config", h.AuthSSOConfig)
+		r.Post("/auth/sso/callback", h.AuthSSOCallback)
 
 		// ── Public: Participant-facing endpoints ──
 		r.Get("/survey/{surveyId}/public", h.GetPublicSurvey)

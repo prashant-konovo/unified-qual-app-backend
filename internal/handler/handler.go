@@ -229,6 +229,135 @@ func (h *Handler) AuthMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ──────────────────────────────────────────────
+// SSO — Cognito Hosted UI OAuth2 authorization code flow
+// ──────────────────────────────────────────────
+
+// AuthSSOConfig returns the SSO authorize URL so the frontend can redirect.
+func (h *Handler) AuthSSOConfig(w http.ResponseWriter, r *http.Request) {
+	c := h.cfg.Cognito
+	if c.SSOClientID == "" || c.Domain == "" || c.SSORedirectURI == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "SSO not configured"})
+		return
+	}
+
+	authorizeURL := fmt.Sprintf(
+		"https://%s.auth.%s.amazoncognito.com/oauth2/authorize?response_type=code&client_id=%s&scope=email+openid&redirect_uri=%s",
+		c.Domain, c.Region, c.SSOClientID, c.SSORedirectURI,
+	)
+
+	success(w, map[string]any{
+		"authorizeUrl": authorizeURL,
+		"clientId":     c.SSOClientID,
+		"redirectUri":  c.SSORedirectURI,
+	})
+}
+
+type ssoCallbackRequest struct {
+	Code        string `json:"code"`
+	RedirectURI string `json:"redirectUri"`
+}
+
+// AuthSSOCallback exchanges an OAuth2 authorization code for Cognito tokens.
+func (h *Handler) AuthSSOCallback(w http.ResponseWriter, r *http.Request) {
+	var req ssoCallbackRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+	if req.Code == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "code is required"})
+		return
+	}
+
+	c := h.cfg.Cognito
+	if c.SSOClientID == "" || c.Domain == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "SSO not configured"})
+		return
+	}
+
+	redirectURI := req.RedirectURI
+	if redirectURI == "" {
+		redirectURI = c.SSORedirectURI
+	}
+
+	body, status, err := h.cognitoTokenExchange(r.Context(), req.Code, redirectURI)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("token exchange error: %v", err)})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
+}
+
+// cognitoTokenExchange calls the Cognito /oauth2/token endpoint to exchange
+// an authorization code for id_token, access_token, and refresh_token.
+func (h *Handler) cognitoTokenExchange(ctx context.Context, code, redirectURI string) ([]byte, int, error) {
+	c := h.cfg.Cognito
+	tokenURL := fmt.Sprintf("https://%s.auth.%s.amazoncognito.com/oauth2/token", c.Domain, c.Region)
+
+	form := fmt.Sprintf(
+		"grant_type=authorization_code&client_id=%s&client_secret=%s&code=%s&redirect_uri=%s",
+		c.SSOClientID, c.SSOClientSecret, code, redirectURI,
+	)
+
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, bytes.NewBufferString(form))
+	if err != nil {
+		return nil, 0, fmt.Errorf("create token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("call cognito token: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("read token response: %w", err)
+	}
+
+	// Cognito returns {id_token, access_token, refresh_token, expires_in, token_type}
+	// Normalize to our standard shape
+	if resp.StatusCode == http.StatusOK {
+		var tokenResp struct {
+			IDToken      string `json:"id_token"`
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+			ExpiresIn    int    `json:"expires_in"`
+			TokenType    string `json:"token_type"`
+		}
+		if err := json.Unmarshal(body, &tokenResp); err == nil && tokenResp.IDToken != "" {
+			normalized, _ := json.Marshal(map[string]any{
+				"IdToken":      tokenResp.IDToken,
+				"AccessToken":  tokenResp.AccessToken,
+				"RefreshToken": tokenResp.RefreshToken,
+				"ExpiresIn":    tokenResp.ExpiresIn,
+				"TokenType":    tokenResp.TokenType,
+			})
+			return normalized, http.StatusOK, nil
+		}
+	}
+
+	// On error, return Cognito's error response
+	if resp.StatusCode != http.StatusOK {
+		var cognitoErr struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(body, &cognitoErr); err == nil && cognitoErr.Error != "" {
+			errorResp, _ := json.Marshal(map[string]any{"error": cognitoErr.Error})
+			return errorResp, http.StatusUnauthorized, nil
+		}
+	}
+
+	return body, resp.StatusCode, nil
+}
+
 // callAuthService sends a JSON payload to the central auth API Gateway endpoint.
 func (h *Handler) callAuthService(ctx context.Context, path string, payload any) ([]byte, int, error) {
 	if h.cfg.AuthAPIURL == "" {

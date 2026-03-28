@@ -65,6 +65,10 @@ type CognitoConfig struct {
 	UserPoolID     string
 	AppClientID    string   // Primary client used for login (USER_PASSWORD_AUTH)
 	AllClientIDs   []string // All recognised client IDs for JWT audience validation
+	SSOClientID    string   // OAuth client for SSO (authorization code flow)
+	SSOClientSecret string  // Secret for the SSO OAuth client
+	Domain         string   // Cognito hosted UI domain prefix (e.g. "apollo-dev")
+	SSORedirectURI string   // Callback URL for SSO code exchange
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -120,10 +124,14 @@ func Load() *Config {
 		},
 
 		Cognito: CognitoConfig{
-			Region:       envOr("COGNITO_REGION", "us-east-1"),
-			UserPoolID:   envOr("COGNITO_USER_POOL_ID", ""),
-			AppClientID:  envOr("COGNITO_APP_CLIENT_ID", ""),
-			AllClientIDs: parseClientIDs(envOr("COGNITO_APP_CLIENT_ID", ""), envOr("COGNITO_APP_CLIENT_IDS", "")),
+			Region:          envOr("COGNITO_REGION", "us-east-1"),
+			UserPoolID:       envOr("COGNITO_USER_POOL_ID", ""),
+			AppClientID:      envOr("COGNITO_APP_CLIENT_ID", ""),
+			AllClientIDs:     parseClientIDs(envOr("COGNITO_APP_CLIENT_ID", ""), envOr("COGNITO_APP_CLIENT_IDS", "")),
+			SSOClientID:      envOr("COGNITO_SSO_CLIENT_ID", ""),
+			SSOClientSecret:  envOr("COGNITO_SSO_CLIENT_SECRET", ""),
+			Domain:           envOr("COGNITO_DOMAIN", ""),
+			SSORedirectURI:   envOr("COGNITO_SSO_REDIRECT_URI", ""),
 		},
 
 		AuthAPIURL: envOr("AUTH_API_URL", ""),
