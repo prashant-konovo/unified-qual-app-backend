@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"strings"
@@ -43,7 +43,7 @@ func NewJWTAuth(region, userPoolID string, clientIDs []string) *JWTAuth {
 	}
 	// Pre-fetch JWKS at startup (non-fatal).
 	if err := j.refreshKeys(); err != nil {
-		log.Printf("[auth] WARNING failed to fetch JWKS at startup: %v", err)
+		slog.Warn("failed to fetch JWKS at startup", "error", err)
 	}
 	return j
 }
@@ -59,7 +59,7 @@ func (j *JWTAuth) Middleware(next http.Handler) http.Handler {
 
 		claims, err := j.validateToken(tokenStr)
 		if err != nil {
-			log.Printf("[auth] token validation failed: %v", err)
+			slog.Warn("token validation failed", "error", err, "path", r.URL.Path)
 			http.Error(w, `{"error":"invalid or expired token"}`, http.StatusUnauthorized)
 			return
 		}
@@ -218,7 +218,7 @@ func (j *JWTAuth) refreshKeys() error {
 		}
 		pub, err := parseRSAPublicKey(k.N, k.E)
 		if err != nil {
-			log.Printf("[auth] skipping kid %s: %v", k.Kid, err)
+			slog.Warn("skipping JWKS kid", "kid", k.Kid, "error", err)
 			continue
 		}
 		newKeys[k.Kid] = pub
@@ -228,7 +228,7 @@ func (j *JWTAuth) refreshKeys() error {
 	j.keys = newKeys
 	j.mu.Unlock()
 
-	log.Printf("[auth] JWKS refreshed: %d keys cached", len(newKeys))
+	slog.Info("JWKS refreshed", "keys_cached", len(newKeys))
 	return nil
 }
 

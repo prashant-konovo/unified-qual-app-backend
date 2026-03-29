@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -26,21 +26,21 @@ func ConnectDatabases(cfg *Config) *DBPair {
 	pair := &DBPair{}
 
 	if cfg.IsDummy() {
-		log.Println("[db] no credentials configured — running in dummy mode")
+		slog.Warn("no DB credentials configured, running in dummy mode")
 		return pair
 	}
 
 	if cfg.IRISDB.Password != "" {
 		db, err := openDB("iris", cfg.IRISDB)
 		if err != nil {
-			log.Printf("[db] WARNING iris primary connection failed (will retry on queries): %v", err)
+			slog.Warn("iris primary connection failed, will retry on queries", "error", err)
 		} else {
 			pair.IRIS = db
 		}
 
 		roDB, err := openDB("iris-ro", cfg.IRISReadOnlyDB)
 		if err != nil {
-			log.Printf("[db] iris read-only failed, falling back to primary: %v", err)
+			slog.Warn("iris read-only failed, falling back to primary", "error", err)
 			pair.IRISReadOnly = pair.IRIS
 		} else {
 			pair.IRISReadOnly = roDB
@@ -50,7 +50,7 @@ func ConnectDatabases(cfg *Config) *DBPair {
 	if cfg.QSDB.Password != "" {
 		db, err := openDB("qs", cfg.QSDB)
 		if err != nil {
-			log.Printf("[db] WARNING qs connection failed (will retry on queries): %v", err)
+			slog.Warn("qs connection failed, will retry on queries", "error", err)
 		} else {
 			pair.QS = db
 		}
@@ -77,7 +77,7 @@ func openDB(label string, dbCfg DatabaseConfig) (*sql.DB, error) {
 		return nil, fmt.Errorf("ping %s: %w", label, err)
 	}
 
-	log.Printf("[db] %s connected (%s:%d/%s)", label, dbCfg.Host, dbCfg.Port, dbCfg.Name)
+	slog.Info("database connected", "db", label, "host", dbCfg.Host, "port", dbCfg.Port, "schema", dbCfg.Name)
 	return db, nil
 }
 

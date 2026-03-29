@@ -2,17 +2,21 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
+	"github.com/InCrowd/unified-qual-api/internal/logger"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
+	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
+	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/InCrowd/unified-qual-api/internal/router"
 )
 
 func main() {
 	cfg := config.Load()
+	logger.Setup(cfg.LogLevel)
 
 	db := config.ConnectDatabases(cfg)
 	defer db.Close()
@@ -23,12 +27,22 @@ func main() {
 		cfg.Cognito.AllClientIDs,
 	)
 
-	h := handler.New(cfg, db)
+	// Repository layer
+	var irisProjectRepo *iris.ProjectRepo
+	if db.IRIS != nil {
+		irisProjectRepo = iris.NewProjectRepo(db.IRIS, db.IRISReadOnly)
+	}
+	var qsProjectRepo *qs.ProjectRepo
+	if db.QS != nil {
+		qsProjectRepo = qs.NewProjectRepo(db.QS)
+	}
+
+	h := handler.New(cfg, db, irisProjectRepo, qsProjectRepo)
 	r := router.New(h, jwtAuth)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
-	log.Printf("unified-qual-api starting on %s (env=%s, dummy=%v)", addr, cfg.Environment, cfg.IsDummy())
+	slog.Info("server starting", "addr", addr, "env", cfg.Environment, "dummy", cfg.IsDummy())
 	if err := http.ListenAndServe(addr, r); err != nil {
-		log.Fatalf("server error: %v", err)
+		slog.Error("server error", "error", err)
 	}
 }

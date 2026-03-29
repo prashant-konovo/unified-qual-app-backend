@@ -2,6 +2,7 @@ package router
 
 import (
 	"github.com/InCrowd/unified-qual-api/internal/handler"
+	"github.com/InCrowd/unified-qual-api/internal/logger"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -14,7 +15,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 	// Middleware
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
-	r.Use(chimw.Logger)
+	r.Use(logger.Middleware) // structured JSON logging with request ID
 	r.Use(chimw.Recoverer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
