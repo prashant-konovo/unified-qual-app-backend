@@ -107,6 +107,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Use(middleware.RequireRoles("admin", "manager", "moderator"))
 				r.Get("/moderators/{id}/availability", h.GetModeratorAvailability)
 				r.Post("/moderators/{id}/availability", h.PostModeratorAvailability)
+				r.Delete("/moderators/{id}/availability/{availabilityId}", h.DeleteModeratorAvailability)
 				r.Get("/moderators/{moderatorId}/timeslots", h.GetModeratorTimeslots)
 				r.Get("/timeslots/{id}/moderators/options", h.GetTimeslotModeratorOptions)
 			})

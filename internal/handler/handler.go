@@ -606,13 +606,13 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
 	source := r.URL.Query().Get("source") // "iris", "qs", or "" (both)
 
-	// Support serviceCategory filter (LS→qs, MRA→iris)
+	// Support serviceCategory filter (LS→iris, MRA→qs)
 	if sc := strings.ToUpper(r.URL.Query().Get("serviceCategory")); sc != "" {
 		switch sc {
 		case "LS":
-			source = "qs"
-		case "MRA":
 			source = "iris"
+		case "MRA":
+			source = "qs"
 		}
 	}
 
@@ -647,7 +647,7 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 						"createdAt":           p.CreatedOn.Format(time.RFC3339),
 						"modifiedAt":          nullTime(p.ModifiedOn),
 						"source":              "iris",
-						"serviceCategory":     "MRA",
+						"serviceCategory":     "LS",
 					})
 				}
 				_ = irisTotal
@@ -678,7 +678,7 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 						"createdAt":           p.CreatedOn.Format(time.RFC3339),
 						"modifiedAt":          nullTime(p.ModifiedOn),
 						"source":              "qs",
-						"serviceCategory":     "LS",
+						"serviceCategory":     "MRA",
 					})
 				}
 				_ = qsTotal
@@ -744,7 +744,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create project"})
 			return
 		}
-		created(w, map[string]any{"id": id, "source": "iris", "serviceCategory": "MRA"})
+		created(w, map[string]any{"id": id, "source": "iris", "serviceCategory": "LS"})
 		return
 	}
 
@@ -765,7 +765,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create project"})
 			return
 		}
-		created(w, map[string]any{"id": id, "source": "qs", "serviceCategory": "LS"})
+		created(w, map[string]any{"id": id, "source": "qs", "serviceCategory": "MRA"})
 		return
 	}
 
@@ -815,7 +815,7 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 				"createdAt":             p.CreatedOn.Format(time.RFC3339),
 				"modifiedAt":            nullTime(p.ModifiedOn),
 				"source":               "qs",
-				"serviceCategory":       "LS",
+				"serviceCategory":       "MRA",
 			})
 			return
 		}
@@ -844,7 +844,7 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 				"createdAt":           p.CreatedOn.Format(time.RFC3339),
 				"modifiedAt":          nullTime(p.ModifiedOn),
 				"source":              "iris",
-				"serviceCategory":     "MRA",
+				"serviceCategory":     "LS",
 			})
 			return
 		}
@@ -934,12 +934,27 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	source := r.URL.Query().Get("source")
+
+	if source == "qs" && h.qsProjectRepo != nil {
+		// QS: set project_status_id = 5 (Canceled)
+		if err := h.qsProjectRepo.Update(r.Context(), projectID, map[string]any{"project_status_id": 5}); err != nil {
+			slog.Error("qs project archive failed", "id", projectID, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "archive failed"})
+			return
+		}
+		success(w, map[string]any{"archived": true, "id": projectID, "source": "qs"})
+		return
+	}
+
 	if h.irisProjectRepo != nil {
 		if err := h.irisProjectRepo.Update(r.Context(), projectID, map[string]any{"is_archived": true}); err != nil {
 			slog.Error("iris project archive failed", "id", projectID, "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "archive failed"})
+			return
 		}
 	}
-	success(w, map[string]any{"archived": true, "id": projectID})
+	success(w, map[string]any{"archived": true, "id": projectID, "source": "iris"})
 }
 
 // Null-safe helpers for JSON serialization
@@ -1214,7 +1229,7 @@ func (h *Handler) ListModerators(w http.ResponseWriter, r *http.Request) {
 					"roles":     roles,
 					"status":    "active",
 					"source":    "qs",
-					"serviceCategory": "LS",
+					"serviceCategory": "MRA",
 					"timezone":  m.TimeZone.String,
 					"updatedAt": m.ModifiedOn.Format(time.RFC3339),
 				})
@@ -1278,7 +1293,7 @@ func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
 			"moderatorBuffer": u.ModeratorBuffer.Int64,
 			"termsAccepted":   u.TermsAccepted == 1,
 			"source":          "qs",
-			"serviceCategory": "LS",
+			"serviceCategory": "MRA",
 			"modifiedOn":      u.ModifiedOn.Format(time.RFC3339),
 		})
 	case "iris":
@@ -1300,7 +1315,7 @@ func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
 			"roles":           u.RoleNames,
 			"timezone":        u.TimeZone.String,
 			"source":          "iris",
-			"serviceCategory": "MRA",
+			"serviceCategory": "LS",
 			"lastLogin":       u.LastLogin.Time.Format(time.RFC3339),
 			"registeredAt":    u.RegistrationDate.Format(time.RFC3339),
 		})
@@ -1723,6 +1738,29 @@ func (h *Handler) PostModeratorAvailability(w http.ResponseWriter, r *http.Reque
 	})
 }
 
+func (h *Handler) DeleteModeratorAvailability(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	availID := chi.URLParam(r, "availabilityId")
+	nid, err := strconv.ParseInt(availID, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid availability id"})
+		return
+	}
+
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	if err := h.qsUserRepo.DeleteModeratorAvailability(ctx, nid); err != nil {
+		slog.ErrorContext(ctx, "delete moderator availability failed", "error", err, "availabilityId", nid)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete availability"})
+		return
+	}
+
+	success(w, map[string]any{"deleted": true, "availabilityId": nid})
+}
+
 func (h *Handler) GetTimeslotModeratorOptions(w http.ResponseWriter, r *http.Request) {
 	success(w, map[string]any{
 		"availableModerators": []map[string]any{
@@ -1847,7 +1885,7 @@ func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 					"email":           u.Email.String,
 					"roles":           roles,
 					"source":          "qs",
-					"serviceCategory": "LS",
+					"serviceCategory": "MRA",
 					"updatedAt":       u.ModifiedOn.Format(time.RFC3339),
 				})
 			}
@@ -1873,7 +1911,7 @@ func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 					"email":           u.Email.String,
 					"roles":           strings.Split(u.RoleNames, ","),
 					"source":          "iris",
-					"serviceCategory": "MRA",
+					"serviceCategory": "LS",
 					"lastLogin":       lastLogin,
 					"registeredAt":    u.RegistrationDate.Format(time.RFC3339),
 				})
