@@ -226,22 +226,20 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// QS: list surveys where project_id = ?
-	if h.qsSurveyRepo != nil {
-		surveys, err := h.qsSurveyRepo.List(r.Context(), "")
+	// QS: list native surveys by project
+	if h.qsAnswerRepo != nil {
+		surveys, err := h.qsAnswerRepo.ListNativeSurveysByProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs project surveys failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		result := make([]map[string]any, 0)
+		result := make([]map[string]any, 0, len(surveys))
 		for _, s := range surveys {
-			if s.ProjectID.Valid && s.ProjectID.Int64 == projectID {
-				result = append(result, map[string]any{
-					"id": s.ID, "title": s.Title, "status": s.Status,
-					"createdOn": s.CreatedOn.Format(time.RFC3339), "source": "qs",
-				})
-			}
+			result = append(result, map[string]any{
+				"id": s.ID, "projectId": s.ProjectID,
+				"createdOn": s.CreatedOn.Format(time.RFC3339), "source": "qs",
+			})
 		}
 		success(w, result)
 		return

@@ -387,3 +387,31 @@ func (r *AnswerRepo) GetParticipantEligibility(ctx context.Context, responderID,
 		"status": status, "modifiedOn": modOn.Format(time.RFC3339),
 	}, nil
 }
+
+// NativeSurvey represents a row from the native QS survey table.
+type NativeSurvey struct {
+	ID        int64     `json:"id"`
+	ProjectID int64     `json:"projectId"`
+	CreatedBy int64     `json:"createdBy"`
+	CreatedOn time.Time `json:"createdOn"`
+	OwnedBy   int64     `json:"ownedBy"`
+}
+
+// ListNativeSurveysByProject returns native QS surveys for a project.
+func (r *AnswerRepo) ListNativeSurveysByProject(ctx context.Context, projectID int64) ([]NativeSurvey, error) {
+	q := `SELECT id, project_id, created_by, created_on, owned_by FROM survey WHERE project_id = ? ORDER BY created_on DESC`
+	rows, err := r.db.QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list native surveys: %w", err)
+	}
+	defer rows.Close()
+	var result []NativeSurvey
+	for rows.Next() {
+		var s NativeSurvey
+		if err := rows.Scan(&s.ID, &s.ProjectID, &s.CreatedBy, &s.CreatedOn, &s.OwnedBy); err != nil {
+			return nil, fmt.Errorf("scan native survey: %w", err)
+		}
+		result = append(result, s)
+	}
+	return result, rows.Err()
+}
