@@ -1126,8 +1126,24 @@ func (h *Handler) ListTimeslots(w http.ResponseWriter, r *http.Request) {
 			moderatorID = &v
 		}
 	}
+	var fromTime, toTime *time.Time
+	if f := r.URL.Query().Get("from"); f != "" {
+		if t, err := time.Parse("2006-01-02", f); err == nil {
+			fromTime = &t
+			// when date filters are present, increase default pageSize to cover a full week
+			if pageSize == 20 {
+				pageSize = 500
+			}
+		}
+	}
+	if t := r.URL.Query().Get("to"); t != "" {
+		if parsed, err := time.Parse("2006-01-02", t); err == nil {
+			eod := parsed.Add(24*time.Hour - time.Second)
+			toTime = &eod
+		}
+	}
 
-	slots, total, err := h.qsTimeSlotRepo.List(ctx, page, pageSize, projectID, statusID, moderatorID)
+	slots, total, err := h.qsTimeSlotRepo.List(ctx, page, pageSize, projectID, statusID, moderatorID, fromTime, toTime)
 	if err != nil {
 		slog.ErrorContext(ctx, "list timeslots failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list timeslots"})
@@ -1445,7 +1461,7 @@ func (h *Handler) GetAvailableSlots(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	slots, _, err := h.qsTimeSlotRepo.List(ctx, 1, 50, projectID, &openStatus, nil)
+	slots, _, err := h.qsTimeSlotRepo.List(ctx, 1, 50, projectID, &openStatus, nil, nil, nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "get available slots failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get available slots"})
@@ -1979,7 +1995,7 @@ func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Bookings are timeslots that have a linked respondent (non-OPEN status)
-	slots, total, err := h.qsTimeSlotRepo.List(ctx, page, pageSize, projectID, nil, nil)
+	slots, total, err := h.qsTimeSlotRepo.List(ctx, page, pageSize, projectID, nil, nil, nil, nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "list bookings failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list bookings"})
@@ -2094,53 +2110,55 @@ func (h *Handler) UpdateBookingReward(w http.ResponseWriter, r *http.Request) {
 // Subscriptions
 // ──────────────────────────────────────────────
 
-func dummySubscription(sid string) map[string]any {
-	return map[string]any{
-		"id":                  sid,
-		"company":             "Konovo Health",
-		"plan":                "enterprise",
-		"shortCode":           "KH",
-		"serviceType":         "full-service",
-		"businessType":        "pharmaceutical",
-		"salesforceAccount":   "SF-ACC-001",
-		"salesContact":        "sales@konovo.com",
-		"pmContact":           "pm@konovo.com",
-		"csUser":              "cs@konovo.com",
-		"currency":            "USD",
-		"markets":             "US,EU",
-		"panels":              "HCP",
-		"phone":               "+15551234567",
-		"aeConsent":           true,
-		"aeReporting":         "quarterly",
-		"skipSfValidation":    false,
-		"createdAt":           "2025-01-01T00:00:00Z",
-	}
-}
-
 func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
-	subs := []map[string]any{
-		dummySubscription("sub-1"),
-		dummySubscription("sub-2"),
+	ctx := r.Context()
+	q := `SELECT DISTINCT s.id, s.company
+	      FROM subscription s
+	      JOIN project p ON p.subscription_id = s.id
+	      WHERE p.project_type_id = 2
+	      ORDER BY s.company`
+	rows, err := h.db.IRISReadOnly.QueryContext(ctx, q)
+	if err != nil {
+		slog.Error("list subscriptions", "err", err)
+		writeJSON(w, http.StatusOK, []map[string]any{})
+		return
 	}
-	subs[1]["company"] = "Apollo Research"
-	subs[1]["shortCode"] = "AR"
+	defer rows.Close()
+
+	subs := []map[string]any{}
+	for rows.Next() {
+		var id int64
+		var company string
+		if err := rows.Scan(&id, &company); err != nil {
+			continue
+		}
+		subs = append(subs, map[string]any{
+			"id":      strconv.FormatInt(id, 10),
+			"company": company,
+			"plan":    "enterprise",
+		})
+	}
 	writeJSON(w, http.StatusOK, subs)
 }
 
 func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
-	s := dummySubscription("sub-" + id()[:8])
-	s["createdAt"] = now()
-	created(w, s)
+	created(w, map[string]any{"message": "subscription creation not yet implemented"})
 }
 
 func (h *Handler) GetSubscription(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, dummySubscription(chi.URLParam(r, "id")))
+	sid := chi.URLParam(r, "id")
+	ctx := r.Context()
+	var company string
+	err := h.db.IRISReadOnly.QueryRowContext(ctx, "SELECT company FROM subscription WHERE id = ?", sid).Scan(&company)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"id": sid, "company": "Unknown"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"id": sid, "company": company, "plan": "enterprise"})
 }
 
 func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
-	s := dummySubscription(chi.URLParam(r, "id"))
-	s["updatedAt"] = now()
-	writeJSON(w, http.StatusOK, s)
+	writeJSON(w, http.StatusOK, map[string]any{"message": "subscription update not yet implemented"})
 }
 
 func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {

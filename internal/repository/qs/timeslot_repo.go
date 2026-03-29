@@ -107,7 +107,7 @@ LEFT JOIN responder r ON r.id = cirts.responder_id
 `
 
 // List returns timeslots with optional filters.
-func (repo *TimeSlotRepo) List(ctx context.Context, page, pageSize int, projectID *int64, statusID *int, moderatorID *int64) ([]TimeSlotListRow, int, error) {
+func (repo *TimeSlotRepo) List(ctx context.Context, page, pageSize int, projectID *int64, statusID *int, moderatorID *int64, from *time.Time, to *time.Time) ([]TimeSlotListRow, int, error) {
 	var conditions []string
 	var args []any
 
@@ -122,6 +122,14 @@ func (repo *TimeSlotRepo) List(ctx context.Context, page, pageSize int, projectI
 	if moderatorID != nil {
 		conditions = append(conditions, "mts.moderator_id = ?")
 		args = append(args, *moderatorID)
+	}
+	if from != nil {
+		conditions = append(conditions, "ts.start_time >= ?")
+		args = append(args, *from)
+	}
+	if to != nil {
+		conditions = append(conditions, "ts.start_time <= ?")
+		args = append(args, *to)
 	}
 
 	where := ""
@@ -303,12 +311,12 @@ func (repo *TimeSlotRepo) Delete(ctx context.Context, id int64) error {
 
 // ListByModerator returns timeslots for a specific moderator.
 func (repo *TimeSlotRepo) ListByModerator(ctx context.Context, moderatorID int64, page, pageSize int) ([]TimeSlotListRow, int, error) {
-	return repo.List(ctx, page, pageSize, nil, nil, &moderatorID)
+	return repo.List(ctx, page, pageSize, nil, nil, &moderatorID, nil, nil)
 }
 
 // ListByProject returns timeslots for a specific project.
 func (repo *TimeSlotRepo) ListByProject(ctx context.Context, projectID int64, page, pageSize int) ([]TimeSlotListRow, int, error) {
-	return repo.List(ctx, page, pageSize, &projectID, nil, nil)
+	return repo.List(ctx, page, pageSize, &projectID, nil, nil, nil, nil)
 }
 
 // ListStatuses returns all timeslot statuses.
