@@ -91,10 +91,12 @@ func (r *AnswerRepo) GetDetails(ctx context.Context, answerID int64) ([]AnswerDe
 
 // LanguageLocalisation maps to the QS language_localisation table.
 type LanguageLocalisation struct {
-	ID           int64  `json:"id"`
-	LanguageCode string `json:"languageCode"`
-	LanguageName string `json:"languageName"`
-	IsActive     bool   `json:"isActive"`
+	ID                  int64  `json:"id"`
+	Country             string `json:"country"`
+	CountryCode         string `json:"countryCode"`
+	LanguageName        string `json:"languageName"`
+	LanguageCode        string `json:"languageCode"`
+	LangCodeCountryCode string `json:"langCodeCountryCode"`
 }
 
 // ListTopics returns topics for a project (uses Topic defined in project_repo.go).
@@ -119,7 +121,7 @@ func (r *AnswerRepo) ListTopics(ctx context.Context, projectID int64) ([]Topic, 
 
 // ListLocales returns active language localisations.
 func (r *AnswerRepo) ListLocales(ctx context.Context) ([]LanguageLocalisation, error) {
-	q := `SELECT id, language_code, language_name, is_active FROM language_localisation WHERE is_active = 1 ORDER BY language_name`
+	q := `SELECT id, country, country_code, language_name, language_code, langCode_countryCode FROM language_localisation ORDER BY language_name`
 	rows, err := r.db.QueryContext(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("list locales: %w", err)
@@ -128,7 +130,7 @@ func (r *AnswerRepo) ListLocales(ctx context.Context) ([]LanguageLocalisation, e
 	var result []LanguageLocalisation
 	for rows.Next() {
 		var l LanguageLocalisation
-		if err := rows.Scan(&l.ID, &l.LanguageCode, &l.LanguageName, &l.IsActive); err != nil {
+		if err := rows.Scan(&l.ID, &l.Country, &l.CountryCode, &l.LanguageName, &l.LanguageCode, &l.LangCodeCountryCode); err != nil {
 			return nil, fmt.Errorf("scan locale: %w", err)
 		}
 		result = append(result, l)

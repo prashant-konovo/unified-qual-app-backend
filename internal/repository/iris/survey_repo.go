@@ -360,11 +360,11 @@ func (r *SurveyRepo) ListMarketsWithNPI(ctx context.Context) ([]ICMarket, error)
 
 // GetCrowdableAttributes returns crowdable attributes for a market.
 func (r *SurveyRepo) GetCrowdableAttributes(ctx context.Context, marketID int64) ([]map[string]any, error) {
-	q := `SELECT ma.id, ma.market_id, a.id AS attr_id, a.label, a.type, a.is_crowdable
+	q := `SELECT ma.id, ma.market_id, a.id AS attr_id, a.name, a.label, a.input_type_id, a.crowd_selector
 	      FROM market_attribute ma
 	      JOIN attribute a ON a.id = ma.attribute_id
-	      WHERE ma.market_id = ? AND a.is_crowdable = 1
-	      ORDER BY a.label`
+	      WHERE ma.market_id = ? AND a.crowd_selector = 1
+	      ORDER BY a.name`
 	rows, err := r.ro().QueryContext(ctx, q, marketID)
 	if err != nil {
 		return nil, fmt.Errorf("get crowdable attrs: %w", err)
@@ -373,14 +373,15 @@ func (r *SurveyRepo) GetCrowdableAttributes(ctx context.Context, marketID int64)
 	var result []map[string]any
 	for rows.Next() {
 		var maID, mktID, attrID int64
-		var label, attrType string
-		var isCrowdable bool
-		if err := rows.Scan(&maID, &mktID, &attrID, &label, &attrType, &isCrowdable); err != nil {
+		var name, label string
+		var inputTypeID int
+		var crowdSelector bool
+		if err := rows.Scan(&maID, &mktID, &attrID, &name, &label, &inputTypeID, &crowdSelector); err != nil {
 			return nil, fmt.Errorf("scan crowdable attr: %w", err)
 		}
 		result = append(result, map[string]any{
 			"id": maID, "marketId": mktID, "attributeId": attrID,
-			"label": label, "type": attrType, "isCrowdable": isCrowdable,
+			"name": name, "label": label, "inputTypeId": inputTypeID, "crowdSelector": crowdSelector,
 		})
 	}
 	return result, rows.Err()
@@ -851,7 +852,7 @@ func (r *SurveyRepo) GetNoShowCheck(ctx context.Context) (map[string]any, error)
 	       ts.interviewee_id, CONCAT(u.first_name, ' ', u.last_name) AS name
 	      FROM time_slot ts
 	      LEFT JOIN user u ON u.id = ts.interviewee_id
-	      WHERE ts.status_id IN (2, 7, 8) AND ts.start_time < NOW() AND ts.soft_deleted = 0
+	      WHERE ts.status_id IN (2, 7, 8) AND ts.start_time < NOW() AND ts.is_invalid = 0
 	      ORDER BY ts.start_time DESC LIMIT 1`
 	var tsID, projectID int64
 	var startTime, endTime time.Time
