@@ -54,10 +54,6 @@ func Middleware(next http.Handler) http.Handler {
 	})
 }
 
-type ctxKey string
-
-const requestIDKey ctxKey = "request_id"
-
 // FromCtx returns a logger enriched with the request ID from context.
 func FromCtx(ctx context.Context) *slog.Logger {
 	if reqID := chimw.GetReqID(ctx); reqID != "" {
