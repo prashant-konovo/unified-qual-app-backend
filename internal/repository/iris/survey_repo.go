@@ -360,10 +360,11 @@ func (r *SurveyRepo) ListMarketsWithNPI(ctx context.Context) ([]ICMarket, error)
 
 // GetCrowdableAttributes returns crowdable attributes for a market.
 func (r *SurveyRepo) GetCrowdableAttributes(ctx context.Context, marketID int64) ([]map[string]any, error) {
-	q := `SELECT ma.id, ma.market_id, a.id AS attr_id, a.name, a.label, a.input_type_id, a.crowd_selector
+	q := `SELECT ma.id, ma.market_id, a.id AS attr_id, a.name, a.label, a.input_type_id,
+	             CAST(a.crowd_selector AS UNSIGNED) AS crowd_selector
 	      FROM market_attribute ma
 	      JOIN attribute a ON a.id = ma.attribute_id
-	      WHERE ma.market_id = ? AND a.crowd_selector = 1
+	      WHERE ma.market_id = ? AND a.crowd_selector = b'1'
 	      ORDER BY a.name`
 	rows, err := r.ro().QueryContext(ctx, q, marketID)
 	if err != nil {
@@ -375,13 +376,13 @@ func (r *SurveyRepo) GetCrowdableAttributes(ctx context.Context, marketID int64)
 		var maID, mktID, attrID int64
 		var name, label string
 		var inputTypeID int
-		var crowdSelector bool
+		var crowdSelector int
 		if err := rows.Scan(&maID, &mktID, &attrID, &name, &label, &inputTypeID, &crowdSelector); err != nil {
 			return nil, fmt.Errorf("scan crowdable attr: %w", err)
 		}
 		result = append(result, map[string]any{
 			"id": maID, "marketId": mktID, "attributeId": attrID,
-			"name": name, "label": label, "inputTypeId": inputTypeID, "crowdSelector": crowdSelector,
+			"name": name, "label": label, "inputTypeId": inputTypeID, "crowdSelector": crowdSelector == 1,
 		})
 	}
 	return result, rows.Err()
@@ -531,9 +532,11 @@ func (r *SurveyRepo) DeleteModeratorAvailability(ctx context.Context, id int64) 
 // GetModeratorsForTimeSlot returns moderators assigned to a timeslot (IRIS).
 func (r *SurveyRepo) GetModeratorsForTimeSlot(ctx context.Context, timeSlotID int64) ([]map[string]any, error) {
 	q := `SELECT mts.id, mts.moderator_id, mts.time_slot_id, mts.is_host,
-	       CONCAT(u.first_name, ' ', u.last_name) AS label, u.email
+	       CONCAT(u.first_name, ' ', u.last_name) AS label,
+	       COALESCE(uca.address,'') AS email
 	      FROM moderator_time_slot mts
-	      JOIN user u ON u.id = mts.moderator_id
+	      JOIN ic_user u ON u.id = mts.moderator_id
+	      LEFT JOIN user_communication_address uca ON uca.user_id = u.id AND uca.transport_type_id = 1
 	      WHERE mts.time_slot_id = ?`
 	rows, err := r.ro().QueryContext(ctx, q, timeSlotID)
 	if err != nil {
@@ -578,9 +581,10 @@ func (r *SurveyRepo) RemoveModeratorFromTimeSlot(ctx context.Context, timeSlotID
 // ListUserProjects returns users assigned to a project.
 func (r *SurveyRepo) ListUserProjects(ctx context.Context, projectID int64) ([]map[string]any, error) {
 	q := `SELECT up.id, up.user_id, up.project_id, up.can_write, up.can_read,
-	       u.first_name, u.last_name, u.email
+	       u.first_name, u.last_name, COALESCE(uca.address,'') AS email
 	      FROM user_project up
-	      JOIN user u ON u.id = up.user_id
+	      JOIN ic_user u ON u.id = up.user_id
+	      LEFT JOIN user_communication_address uca ON uca.user_id = u.id AND uca.transport_type_id = 1
 	      WHERE up.project_id = ?`
 	rows, err := r.ro().QueryContext(ctx, q, projectID)
 	if err != nil {
@@ -675,17 +679,17 @@ func (r *SurveyRepo) GetProjectInquiry(ctx context.Context, subscriptionID, proj
 func (r *SurveyRepo) GetAvailabilityAndTimeslotsForProject(ctx context.Context, projectID int64) (map[string]any, error) {
 	// Time slots for this project
 	var totalSlots, openSlots, bookedSlots int
-	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND soft_deleted = 0", projectID).Scan(&totalSlots)
-	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND soft_deleted = 0 AND status_id = 1", projectID).Scan(&openSlots)
-	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND soft_deleted = 0 AND status_id IN (2,3,4,7,8,9)", projectID).Scan(&bookedSlots)
+	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND is_invalid = 0", projectID).Scan(&totalSlots)
+	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND is_invalid = 0 AND status_id = 1", projectID).Scan(&openSlots)
+	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND is_invalid = 0 AND status_id IN (2,3,4,7,8,9)", projectID).Scan(&bookedSlots)
 
 	// Moderator availability — get moderators assigned to this project
 	avails := []map[string]any{}
 	q := `SELECT ma.id, ma.moderator_id, ma.start_time, ma.end_time,
 	       CONCAT(u.first_name, ' ', u.last_name) AS moderator_name
 	      FROM moderator_availability ma
-	      JOIN project_moderator pm ON pm.moderator_id = ma.moderator_id AND pm.project_id = ?
-	      JOIN user u ON u.id = ma.moderator_id
+	      JOIN user_project upx ON upx.user_id = ma.moderator_id AND upx.project_id = ?
+	      JOIN ic_user u ON u.id = ma.moderator_id
 	      ORDER BY ma.start_time`
 	rows, err := r.ro().QueryContext(ctx, q, projectID)
 	if err == nil {
@@ -713,10 +717,12 @@ func (r *SurveyRepo) GetAvailabilityAndTimeslotsForProject(ctx context.Context, 
 
 // GetSchedulerModerators returns moderators + their timeslots for project scheduler.
 func (r *SurveyRepo) GetSchedulerModerators(ctx context.Context, projectID int64) ([]map[string]any, error) {
-	q := `SELECT DISTINCT mts.moderator_id, CONCAT(u.first_name, ' ', u.last_name) AS name, u.email
+	q := `SELECT DISTINCT mts.moderator_id, CONCAT(u.first_name, ' ', u.last_name) AS name,
+	       COALESCE(uca.address,'') AS email
 	      FROM moderator_time_slot mts
 	      JOIN time_slot ts ON ts.id = mts.time_slot_id AND ts.project_id = ?
-	      JOIN user u ON u.id = mts.moderator_id
+	      JOIN ic_user u ON u.id = mts.moderator_id
+	      LEFT JOIN user_communication_address uca ON uca.user_id = u.id AND uca.transport_type_id = 1
 	      ORDER BY name`
 	rows, err := r.ro().QueryContext(ctx, q, projectID)
 	if err != nil {
@@ -767,8 +773,8 @@ func (r *SurveyRepo) GetSubscriptionInterviews(ctx context.Context, subscription
 	       CONCAT(u.first_name, ' ', u.last_name) AS interviewee_name
 	      FROM time_slot ts
 	      JOIN project p ON p.id = ts.project_id AND p.subscription_id = ?
-	      LEFT JOIN user u ON u.id = ts.interviewee_id
-	      WHERE ts.soft_deleted = 0
+	      LEFT JOIN ic_user u ON u.id = ts.interviewee_id
+	      WHERE ts.is_invalid = 0
 	      ORDER BY ts.start_time DESC LIMIT 500`
 	rows, err := r.ro().QueryContext(ctx, q, subscriptionID)
 	if err != nil {
@@ -851,7 +857,7 @@ func (r *SurveyRepo) GetNoShowCheck(ctx context.Context) (map[string]any, error)
 	q := `SELECT ts.id, ts.project_id, ts.start_time, ts.end_time, ts.status_id,
 	       ts.interviewee_id, CONCAT(u.first_name, ' ', u.last_name) AS name
 	      FROM time_slot ts
-	      LEFT JOIN user u ON u.id = ts.interviewee_id
+	      LEFT JOIN ic_user u ON u.id = ts.interviewee_id
 	      WHERE ts.status_id IN (2, 7, 8) AND ts.start_time < NOW() AND ts.is_invalid = 0
 	      ORDER BY ts.start_time DESC LIMIT 1`
 	var tsID, projectID int64
@@ -897,9 +903,11 @@ func (r *SurveyRepo) GetPossibleModeratorsForTimeSlot(ctx context.Context, timeS
 	}
 
 	// Find moderators who: (1) are assigned to this project, (2) have availability covering this slot
-	q := `SELECT DISTINCT u.id, CONCAT(u.first_name, ' ', u.last_name) AS name, u.email
-	      FROM user u
+	q := `SELECT DISTINCT u.id, CONCAT(u.first_name, ' ', u.last_name) AS name,
+	       COALESCE(uca.address,'') AS email
+	      FROM ic_user u
 	      JOIN user_project up ON up.user_id = u.id AND up.project_id = ?
+	      LEFT JOIN user_communication_address uca ON uca.user_id = u.id AND uca.transport_type_id = 1
 	      JOIN moderator_availability ma ON ma.moderator_id = u.id
 	        AND ma.start_time <= ? AND ma.end_time >= ?
 	      WHERE u.id NOT IN (
