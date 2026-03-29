@@ -60,10 +60,6 @@ func NewUserRepo(rw, ro *sql.DB) *UserRepo {
 	return &UserRepo{rw: rw, ro: ro}
 }
 
-// adminRoleIDs are the security_role IDs relevant for the admin console.
-// ADMIN=1, SUPER ADMIN=5, SUB OWNER=10, SUB ADMIN=11, QS MANAGER=15, QS MODERATOR=16, QS ADMIN=17, PANEL ADMIN=21, SHG ADMIN=23
-var adminRoleIDs = []int64{1, 5, 10, 11, 15, 16, 17, 21, 23}
-
 const irisUserListQuery = `
 SELECT u.id, u.first_name, u.last_name,
        uca.address AS email,
