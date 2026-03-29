@@ -592,6 +592,16 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
 	source := r.URL.Query().Get("source") // "iris", "qs", or "" (both)
 
+	// Support serviceCategory filter (LS→qs, MRA→iris)
+	if sc := strings.ToUpper(r.URL.Query().Get("serviceCategory")); sc != "" {
+		switch sc {
+		case "LS":
+			source = "qs"
+		case "MRA":
+			source = "iris"
+		}
+	}
+
 	var statusID *int
 	if s := r.URL.Query().Get("statusId"); s != "" {
 		if v, err := strconv.Atoi(s); err == nil {
@@ -623,6 +633,7 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 						"createdAt":           p.CreatedOn.Format(time.RFC3339),
 						"modifiedAt":          nullTime(p.ModifiedOn),
 						"source":              "iris",
+						"serviceCategory":     "MRA",
 					})
 				}
 				_ = irisTotal
@@ -653,6 +664,7 @@ func (h *Handler) ListProjects(w http.ResponseWriter, r *http.Request) {
 						"createdAt":           p.CreatedOn.Format(time.RFC3339),
 						"modifiedAt":          nullTime(p.ModifiedOn),
 						"source":              "qs",
+						"serviceCategory":     "LS",
 					})
 				}
 				_ = qsTotal
@@ -718,7 +730,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create project"})
 			return
 		}
-		created(w, map[string]any{"id": id, "source": "iris"})
+		created(w, map[string]any{"id": id, "source": "iris", "serviceCategory": "MRA"})
 		return
 	}
 
@@ -739,7 +751,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create project"})
 			return
 		}
-		created(w, map[string]any{"id": id, "source": "qs"})
+		created(w, map[string]any{"id": id, "source": "qs", "serviceCategory": "LS"})
 		return
 	}
 
@@ -789,6 +801,7 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 				"createdAt":             p.CreatedOn.Format(time.RFC3339),
 				"modifiedAt":            nullTime(p.ModifiedOn),
 				"source":               "qs",
+				"serviceCategory":       "LS",
 			})
 			return
 		}
@@ -817,6 +830,7 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 				"createdAt":           p.CreatedOn.Format(time.RFC3339),
 				"modifiedAt":          nullTime(p.ModifiedOn),
 				"source":              "iris",
+				"serviceCategory":     "MRA",
 			})
 			return
 		}
