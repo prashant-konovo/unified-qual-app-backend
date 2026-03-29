@@ -29,15 +29,19 @@ func main() {
 
 	// Repository layer
 	var irisProjectRepo *iris.ProjectRepo
+	var irisUserRepo *iris.UserRepo
 	if db.IRIS != nil {
 		irisProjectRepo = iris.NewProjectRepo(db.IRIS, db.IRISReadOnly)
+		irisUserRepo = iris.NewUserRepo(db.IRIS, db.IRISReadOnly)
 	}
 	var qsProjectRepo *qs.ProjectRepo
+	var qsUserRepo *qs.UserRepo
 	if db.QS != nil {
 		qsProjectRepo = qs.NewProjectRepo(db.QS)
+		qsUserRepo = qs.NewUserRepo(db.QS)
 	}
 
-	h := handler.New(cfg, db, irisProjectRepo, qsProjectRepo)
+	h := handler.New(cfg, db, irisProjectRepo, qsProjectRepo, irisUserRepo, qsUserRepo)
 	r := router.New(h, jwtAuth)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)

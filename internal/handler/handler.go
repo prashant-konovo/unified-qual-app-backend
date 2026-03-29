@@ -22,14 +22,16 @@ import (
 )
 
 type Handler struct {
-	cfg            *config.Config
-	db             *config.DBPair
-	irisProjectRepo *iris.ProjectRepo
+	cfg              *config.Config
+	db               *config.DBPair
+	irisProjectRepo  *iris.ProjectRepo
 	qsProjectRepo   *qs.ProjectRepo
+	irisUserRepo    *iris.UserRepo
+	qsUserRepo      *qs.UserRepo
 }
 
-func New(cfg *config.Config, db *config.DBPair, irisRepo *iris.ProjectRepo, qsRepo *qs.ProjectRepo) *Handler {
-	return &Handler{cfg: cfg, db: db, irisProjectRepo: irisRepo, qsProjectRepo: qsRepo}
+func New(cfg *config.Config, db *config.DBPair, irisRepo *iris.ProjectRepo, qsRepo *qs.ProjectRepo, irisUserRepo *iris.UserRepo, qsUserRepo *qs.UserRepo) *Handler {
+	return &Handler{cfg: cfg, db: db, irisProjectRepo: irisRepo, qsProjectRepo: qsRepo, irisUserRepo: irisUserRepo, qsUserRepo: qsUserRepo}
 }
 
 // ──────────────────────────────────────────────
@@ -73,6 +75,18 @@ func successList(w http.ResponseWriter, data any, total int) {
 func id() string { return uuid.New().String() }
 
 func now() string { return time.Now().UTC().Format(time.RFC3339) }
+
+func parsePagination(r *http.Request) (int, int) {
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	return page, pageSize
+}
 
 // ──────────────────────────────────────────────
 // Health
@@ -1144,48 +1158,208 @@ func (h *Handler) GetAISuggestions(w http.ResponseWriter, r *http.Request) {
 }
 
 // ──────────────────────────────────────────────
-// Moderators
+// Moderators (real dual-DB)
 // ──────────────────────────────────────────────
 
-func dummyModerator(mid string) map[string]any {
-	return map[string]any{
-		"id":        mid,
-		"name":      "Jane Smith",
-		"email":     "jane.smith@konovo.com",
-		"phone":     "+15551234567",
-		"role":      "moderator",
-		"status":    "active",
-		"createdAt": "2025-06-01T10:00:00Z",
+// qsRoleName maps QS role_id to a human-readable name.
+func qsRoleName(id int) string {
+	switch id {
+	case 1:
+		return "moderator"
+	case 2:
+		return "manager"
+	case 3:
+		return "admin"
+	default:
+		return fmt.Sprintf("role_%d", id)
 	}
+}
+
+// parseRoleCSV splits a comma-separated role-id string from GROUP_CONCAT.
+func parseRoleCSV(csv string) []int {
+	if csv == "" {
+		return nil
+	}
+	parts := strings.Split(csv, ",")
+	ids := make([]int, 0, len(parts))
+	for _, p := range parts {
+		v, err := strconv.Atoi(strings.TrimSpace(p))
+		if err == nil {
+			ids = append(ids, v)
+		}
+	}
+	return ids
 }
 
 func (h *Handler) ListModerators(w http.ResponseWriter, r *http.Request) {
-	mods := []map[string]any{
-		dummyModerator("mod-201"),
-		dummyModerator("mod-202"),
-		dummyModerator("mod-203"),
+	ctx := r.Context()
+	var combined []map[string]any
+
+	// QS moderators (role_id = 1)
+	if h.qsUserRepo != nil {
+		mods, err := h.qsUserRepo.GetModerators(ctx)
+		if err != nil {
+			slog.ErrorContext(ctx, "list QS moderators failed", "error", err)
+		} else {
+			for _, m := range mods {
+				roles := []string{}
+				for _, rid := range parseRoleCSV(m.RoleIDs) {
+					roles = append(roles, qsRoleName(rid))
+				}
+				combined = append(combined, map[string]any{
+					"id":        m.ID,
+					"name":      strings.TrimSpace(m.FirstName.String + " " + m.LastName.String),
+					"email":     m.Email.String,
+					"role":      "moderator",
+					"roles":     roles,
+					"status":    "active",
+					"source":    "qs",
+					"serviceCategory": "LS",
+					"timezone":  m.TimeZone.String,
+					"updatedAt": m.ModifiedOn.Format(time.RFC3339),
+				})
+			}
+		}
 	}
-	mods[1]["name"] = "Bob Wilson"
-	mods[1]["email"] = "bob.wilson@konovo.com"
-	mods[2]["name"] = "Carol Davis"
-	mods[2]["email"] = "carol.davis@konovo.com"
-	writeJSON(w, http.StatusOK, mods)
+
+	writeJSON(w, http.StatusOK, combined)
 }
 
 func (h *Handler) CreateModerator(w http.ResponseWriter, r *http.Request) {
-	m := dummyModerator("mod-" + id()[:8])
-	m["createdAt"] = now()
+	// Create moderator is still a stub — user creation requires Cognito + DB coordination
+	m := map[string]any{
+		"id":        "mod-" + id()[:8],
+		"name":      "New Moderator",
+		"email":     "new@konovo.com",
+		"role":      "moderator",
+		"status":    "active",
+		"createdAt": now(),
+	}
 	created(w, m)
 }
 
 func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, dummyModerator(chi.URLParam(r, "id")))
+	ctx := r.Context()
+	modID := chi.URLParam(r, "id")
+	nid, err := strconv.ParseInt(modID, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator id"})
+		return
+	}
+
+	source := r.URL.Query().Get("source")
+	if source == "" {
+		source = "qs" // default to QS for moderators
+	}
+
+	switch source {
+	case "qs":
+		if h.qsUserRepo == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+			return
+		}
+		u, err := h.qsUserRepo.GetByID(ctx, nid)
+		if err != nil {
+			slog.ErrorContext(ctx, "get QS moderator failed", "error", err, "id", nid)
+			writeJSON(w, http.StatusNotFound, map[string]any{"error": "moderator not found"})
+			return
+		}
+		roles := []string{}
+		for _, rid := range u.RoleIDs {
+			roles = append(roles, qsRoleName(rid))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":              u.ID,
+			"firstName":       u.FirstName.String,
+			"lastName":        u.LastName.String,
+			"email":           u.Email.String,
+			"roles":           roles,
+			"timezone":        u.TimeZone.String,
+			"moderatorBuffer": u.ModeratorBuffer.Int64,
+			"termsAccepted":   u.TermsAccepted == 1,
+			"source":          "qs",
+			"serviceCategory": "LS",
+			"modifiedOn":      u.ModifiedOn.Format(time.RFC3339),
+		})
+	case "iris":
+		if h.irisUserRepo == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "IRIS database unavailable"})
+			return
+		}
+		u, err := h.irisUserRepo.GetByID(ctx, nid)
+		if err != nil {
+			slog.ErrorContext(ctx, "get IRIS moderator failed", "error", err, "id", nid)
+			writeJSON(w, http.StatusNotFound, map[string]any{"error": "moderator not found"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id":              u.ID,
+			"firstName":       u.FirstName,
+			"lastName":        u.LastName,
+			"email":           u.Email.String,
+			"roles":           u.RoleNames,
+			"timezone":        u.TimeZone.String,
+			"source":          "iris",
+			"serviceCategory": "MRA",
+			"lastLogin":       u.LastLogin.Time.Format(time.RFC3339),
+			"registeredAt":    u.RegistrationDate.Format(time.RFC3339),
+		})
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid source, use qs or iris"})
+	}
 }
 
 func (h *Handler) UpdateModerator(w http.ResponseWriter, r *http.Request) {
-	m := dummyModerator(chi.URLParam(r, "id"))
-	m["updatedAt"] = now()
-	writeJSON(w, http.StatusOK, m)
+	ctx := r.Context()
+	modID := chi.URLParam(r, "id")
+	nid, err := strconv.ParseInt(modID, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator id"})
+		return
+	}
+
+	var body struct {
+		FirstName string `json:"firstName"`
+		LastName  string `json:"lastName"`
+		TimeZone  string `json:"timezone"`
+		Source    string `json:"source"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+
+	if body.Source == "" {
+		body.Source = "qs"
+	}
+
+	switch body.Source {
+	case "qs":
+		if h.qsUserRepo == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+			return
+		}
+		if err := h.qsUserRepo.Update(ctx, nid, body.FirstName, body.LastName, body.TimeZone); err != nil {
+			slog.ErrorContext(ctx, "update QS moderator failed", "error", err, "id", nid)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			return
+		}
+	case "iris":
+		if h.irisUserRepo == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "IRIS database unavailable"})
+			return
+		}
+		if err := h.irisUserRepo.Update(ctx, nid, body.FirstName, body.LastName, body.TimeZone); err != nil {
+			slog.ErrorContext(ctx, "update IRIS moderator failed", "error", err, "id", nid)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			return
+		}
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid source"})
+		return
+	}
+
+	success(w, map[string]any{"updated": true, "id": nid})
 }
 
 func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
@@ -1194,7 +1368,7 @@ func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) BulkUploadModerators(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"created": 5, "failed": 0, "errors": []any{},
+		"created": 0, "failed": 0, "errors": []any{}, "message": "bulk upload not yet implemented",
 	})
 }
 
@@ -1455,22 +1629,97 @@ func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) GetModeratorAvailability(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{
-		"availabilities": []map[string]any{
-			{"id": 801, "moderatorId": chi.URLParam(r, "id"),
-				"startTime": "2026-04-01T09:00:00Z", "endTime": "2026-04-01T17:00:00Z",
-				"isImported": false},
-			{"id": 802, "moderatorId": chi.URLParam(r, "id"),
-				"startTime": "2026-04-02T09:00:00Z", "endTime": "2026-04-02T12:00:00Z",
-				"isImported": true, "projectId": "proj-101"},
-		},
-	})
+	ctx := r.Context()
+	modID := chi.URLParam(r, "id")
+	nid, err := strconv.ParseInt(modID, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator id"})
+		return
+	}
+
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	var clientID *int64
+	if cid := r.URL.Query().Get("clientId"); cid != "" {
+		v, err := strconv.ParseInt(cid, 10, 64)
+		if err == nil {
+			clientID = &v
+		}
+	}
+	startDate := r.URL.Query().Get("startDate")
+	endDate := r.URL.Query().Get("endDate")
+
+	avails, err := h.qsUserRepo.ListModeratorAvailability(ctx, nid, clientID, startDate, endDate)
+	if err != nil {
+		slog.ErrorContext(ctx, "list moderator availability failed", "error", err, "moderatorId", nid)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to fetch availability"})
+		return
+	}
+
+	items := make([]map[string]any, 0, len(avails))
+	for _, a := range avails {
+		items = append(items, map[string]any{
+			"id":          a.ID,
+			"moderatorId": a.ModeratorID,
+			"clientId":    a.ClientID,
+			"startTime":   a.StartTime.Format(time.RFC3339),
+			"endTime":     a.EndTime.Format(time.RFC3339),
+			"isImported":  false,
+		})
+	}
+	success(w, map[string]any{"availabilities": items})
 }
 
 func (h *Handler) PostModeratorAvailability(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	modID := chi.URLParam(r, "id")
+	nid, err := strconv.ParseInt(modID, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator id"})
+		return
+	}
+
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	var body struct {
+		ClientID  int64  `json:"clientId"`
+		StartTime string `json:"startTime"`
+		EndTime   string `json:"endTime"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+
+	st, err := time.Parse(time.RFC3339, body.StartTime)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid startTime format, use RFC3339"})
+		return
+	}
+	et, err := time.Parse(time.RFC3339, body.EndTime)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid endTime format, use RFC3339"})
+		return
+	}
+
+	avail, err := h.qsUserRepo.CreateModeratorAvailability(ctx, nid, body.ClientID, st, et)
+	if err != nil {
+		slog.ErrorContext(ctx, "create moderator availability failed", "error", err, "moderatorId", nid)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create availability"})
+		return
+	}
+
 	created(w, map[string]any{
-		"id": 803, "moderatorId": chi.URLParam(r, "id"),
-		"startTime": "2026-04-05T09:00:00Z", "endTime": "2026-04-05T17:00:00Z",
+		"id":          avail.ID,
+		"moderatorId": avail.ModeratorID,
+		"startTime":   avail.StartTime.Format(time.RFC3339),
+		"endTime":     avail.EndTime.Format(time.RFC3339),
 	})
 }
 
@@ -1573,20 +1822,72 @@ func (h *Handler) SendReminder(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
-	successList(w, map[string]any{
-		"users": []map[string]any{
-			{"id": 12345, "email": "john@konovo.com", "firstName": "John", "lastName": "Doe",
-				"roles": []string{"manager"}, "createdAt": "2025-01-15T10:00:00Z",
-				"lastLogin": "2026-03-20T09:30:00Z"},
-			{"id": 12346, "email": "jane@konovo.com", "firstName": "Jane", "lastName": "Smith",
-				"roles": []string{"admin"}, "createdAt": "2025-02-01T10:00:00Z",
-				"lastLogin": "2026-03-21T14:00:00Z"},
-		},
-	}, 2)
+	ctx := r.Context()
+	page, pageSize := parsePagination(r)
+	search := r.URL.Query().Get("search")
+	source := r.URL.Query().Get("source") // "qs", "iris", or "" (both)
+
+	var allUsers []map[string]any
+
+	// QS users
+	if (source == "" || source == "qs") && h.qsUserRepo != nil {
+		users, total, err := h.qsUserRepo.List(ctx, page, pageSize, nil, search)
+		if err != nil {
+			slog.ErrorContext(ctx, "list QS users failed", "error", err)
+		} else {
+			for _, u := range users {
+				roles := []string{}
+				for _, rid := range parseRoleCSV(u.RoleIDs) {
+					roles = append(roles, qsRoleName(rid))
+				}
+				allUsers = append(allUsers, map[string]any{
+					"id":              u.ID,
+					"firstName":       u.FirstName.String,
+					"lastName":        u.LastName.String,
+					"email":           u.Email.String,
+					"roles":           roles,
+					"source":          "qs",
+					"serviceCategory": "LS",
+					"updatedAt":       u.ModifiedOn.Format(time.RFC3339),
+				})
+			}
+			_ = total // used when source-specific pagination implemented
+		}
+	}
+
+	// IRIS users
+	if (source == "" || source == "iris") && h.irisUserRepo != nil {
+		users, total, err := h.irisUserRepo.List(ctx, page, pageSize, nil, search)
+		if err != nil {
+			slog.ErrorContext(ctx, "list IRIS users failed", "error", err)
+		} else {
+			for _, u := range users {
+				lastLogin := ""
+				if u.LastLogin.Valid {
+					lastLogin = u.LastLogin.Time.Format(time.RFC3339)
+				}
+				allUsers = append(allUsers, map[string]any{
+					"id":              u.ID,
+					"firstName":       u.FirstName,
+					"lastName":        u.LastName,
+					"email":           u.Email.String,
+					"roles":           strings.Split(u.RoleNames, ","),
+					"source":          "iris",
+					"serviceCategory": "MRA",
+					"lastLogin":       lastLogin,
+					"registeredAt":    u.RegistrationDate.Format(time.RFC3339),
+				})
+			}
+			_ = total
+		}
+	}
+
+	successList(w, map[string]any{"users": allUsers}, len(allUsers))
 }
 
 func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
+	// User creation requires Cognito coordination — stub for now
 	created(w, map[string]any{
-		"id": 12347, "email": "newuser@konovo.com",
+		"id": 0, "message": "user creation requires Cognito coordination, not yet implemented",
 	})
 }
