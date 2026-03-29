@@ -31,10 +31,14 @@ type Handler struct {
 	qsTimeSlotRepo  *qs.TimeSlotRepo
 	qsRespondentRepo *qs.RespondentRepo
 	qsSurveyRepo    *qs.SurveyRepo
+	// Phase 6 — Legacy API repos
+	irisSurveyRepo   *iris.SurveyRepo
+	qsConferenceRepo *qs.ConferenceRepo
+	qsAnswerRepo     *qs.AnswerRepo
 }
 
-func New(cfg *config.Config, db *config.DBPair, irisRepo *iris.ProjectRepo, qsRepo *qs.ProjectRepo, irisUserRepo *iris.UserRepo, qsUserRepo *qs.UserRepo, qsTimeSlotRepo *qs.TimeSlotRepo, qsRespondentRepo *qs.RespondentRepo, qsSurveyRepo *qs.SurveyRepo) *Handler {
-	return &Handler{cfg: cfg, db: db, irisProjectRepo: irisRepo, qsProjectRepo: qsRepo, irisUserRepo: irisUserRepo, qsUserRepo: qsUserRepo, qsTimeSlotRepo: qsTimeSlotRepo, qsRespondentRepo: qsRespondentRepo, qsSurveyRepo: qsSurveyRepo}
+func New(cfg *config.Config, db *config.DBPair, irisRepo *iris.ProjectRepo, qsRepo *qs.ProjectRepo, irisUserRepo *iris.UserRepo, qsUserRepo *qs.UserRepo, qsTimeSlotRepo *qs.TimeSlotRepo, qsRespondentRepo *qs.RespondentRepo, qsSurveyRepo *qs.SurveyRepo, irisSurveyRepo *iris.SurveyRepo, qsConferenceRepo *qs.ConferenceRepo, qsAnswerRepo *qs.AnswerRepo) *Handler {
+	return &Handler{cfg: cfg, db: db, irisProjectRepo: irisRepo, qsProjectRepo: qsRepo, irisUserRepo: irisUserRepo, qsUserRepo: qsUserRepo, qsTimeSlotRepo: qsTimeSlotRepo, qsRespondentRepo: qsRespondentRepo, qsSurveyRepo: qsSurveyRepo, irisSurveyRepo: irisSurveyRepo, qsConferenceRepo: qsConferenceRepo, qsAnswerRepo: qsAnswerRepo}
 }
 
 // ──────────────────────────────────────────────

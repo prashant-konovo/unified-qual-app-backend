@@ -1,0 +1,923 @@
+package iris
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"time"
+)
+
+// ICSurvey maps core columns from the IRIS survey table.
+type ICSurvey struct {
+	ID                 int64          `json:"id"`
+	SubscriptionID     sql.NullInt64  `json:"subscriptionId"`
+	SurveyTypeID       int            `json:"surveyTypeId"`
+	NamePublic         string         `json:"namePublic"`
+	NamePrivate        sql.NullString `json:"namePrivate"`
+	TopicName          sql.NullString `json:"topicName"`
+	ProjectID          int64          `json:"projectId"`
+	Status             int            `json:"status"`
+	CompletionsNeeded  int            `json:"completionsNeeded"`
+	CreatedBy          int64          `json:"createdBy"`
+	CreatedOn          time.Time      `json:"createdOn"`
+	ModifiedOn         sql.NullTime   `json:"modifiedOn"`
+	FieldedOn          sql.NullTime   `json:"fieldedOn"`
+	ClosedOn           sql.NullTime   `json:"closedOn"`
+	IsArchived         bool           `json:"isArchived"`
+	LanguageID         int            `json:"languageId"`
+	SalesforceProjectID sql.NullString `json:"salesforceProjectId"`
+	LengthOfInterview  sql.NullInt64  `json:"lengthOfInterview"`
+}
+
+// ICSurveyCrowd maps the survey_crowd join table.
+type ICSurveyCrowd struct {
+	ID             int64  `json:"id"`
+	SurveyID       int64  `json:"surveyId"`
+	CrowdID        int64  `json:"crowdId"`
+	AnswerRequest  int    `json:"answerRequest"`
+	QualHonorarium sql.NullInt64 `json:"qualHonorarium"`
+	Excluded       bool   `json:"excluded"`
+}
+
+// ICCrowd maps core columns from the IRIS crowd table.
+type ICCrowd struct {
+	ID             int64          `json:"id"`
+	Name           string         `json:"name"`
+	Description    sql.NullString `json:"description"`
+	SubscriptionID int64          `json:"subscriptionId"`
+	TypeID         int            `json:"typeId"`
+	MarketID       int64          `json:"marketId"`
+	BrandID        int            `json:"brandId"`
+	Deleted        bool           `json:"deleted"`
+	IsArchived     bool           `json:"isArchived"`
+	MembersCount   sql.NullInt64  `json:"membersCount"`
+	CreatedOn      time.Time      `json:"createdOn"`
+	ModifiedOn     time.Time      `json:"modifiedOn"`
+}
+
+// ICMarket maps the IRIS market table.
+type ICMarket struct {
+	ID             int64  `json:"id"`
+	Name           string `json:"name"`
+	CanRegister    bool   `json:"canRegister"`
+	CanInterview   bool   `json:"canInterview"`
+	IsActive       bool   `json:"isActive"`
+}
+
+// ICObserver maps the IRIS observer table.
+type ICObserver struct {
+	ID         int64          `json:"id"`
+	ProjectID  int64          `json:"projectId"`
+	Email      string         `json:"email"`
+	TimeSlotID sql.NullInt64  `json:"timeSlotId"`
+}
+
+// ICInterviewMedia maps the IRIS interview_media table.
+type ICInterviewMedia struct {
+	ID             int64          `json:"id"`
+	Name           string         `json:"name"`
+	Description    string         `json:"description"`
+	ProjectID      int64          `json:"projectId"`
+	S3Key          sql.NullString `json:"s3Key"`
+	Hash           sql.NullString `json:"hash"`
+	Status         string         `json:"status"`
+	CreatedOn      time.Time      `json:"createdOn"`
+	CreatedBy      int64          `json:"createdBy"`
+	PageCount      int            `json:"pageCount"`
+	PagesProcessed int            `json:"pagesProcessed"`
+	Shared         bool           `json:"shared"`
+}
+
+// ICModeratorAvailability maps IRIS moderator_availability.
+type ICModeratorAvailability struct {
+	ID             int64     `json:"id"`
+	ModeratorID    int64     `json:"moderatorId"`
+	SubscriptionID int64     `json:"subscriptionId"`
+	StartTime      time.Time `json:"startTime"`
+	EndTime        time.Time `json:"endTime"`
+}
+
+// ICModeratorTimeSlot maps IRIS moderator_time_slot junction.
+type ICModeratorTimeSlot struct {
+	ID          int64 `json:"id"`
+	ModeratorID int64 `json:"moderatorId"`
+	TimeSlotID  int64 `json:"timeSlotId"`
+	IsHost      bool  `json:"isHost"`
+}
+
+// ICUserProject maps IRIS user_project.
+type ICUserProject struct {
+	ID        int64 `json:"id"`
+	UserID    int64 `json:"userId"`
+	ProjectID int64 `json:"projectId"`
+	CanWrite  bool  `json:"canWrite"`
+	CanRead   bool  `json:"canRead"`
+}
+
+// ICSalesforceProject maps the IRIS salesforce_project table.
+type ICSalesforceProject struct {
+	ID                   int64          `json:"id"`
+	SalesforceProjectID  string         `json:"salesforceProjectId"`
+	Name                 string         `json:"name"`
+	Number               sql.NullString `json:"number"`
+	SalesforceAccountID  sql.NullString `json:"salesforceAccountId"`
+	SubscriptionID       sql.NullInt64  `json:"subscriptionId"`
+	IsDeleted            bool           `json:"isDeleted"`
+	OwnerName            sql.NullString `json:"ownerName"`
+	ProjectManagerName   sql.NullString `json:"projectManagerName"`
+}
+
+// ICProjectInquiry maps the IRIS project_inquiry table.
+type ICProjectInquiry struct {
+	ID                     int64          `json:"id"`
+	Description            string         `json:"description"`
+	Notes                  sql.NullString `json:"notes"`
+	SubscriptionID         int64          `json:"subscriptionId"`
+	ProjectID              int64          `json:"projectId"`
+	InquiryTypeID          int            `json:"inquiryTypeId"`
+	InterviewLength        int            `json:"interviewLength"`
+	RequiredCompletionDate time.Time      `json:"requiredCompletionDate"`
+	CreatedOn              time.Time      `json:"createdOn"`
+	CreatedBy              int64          `json:"createdBy"`
+	UnderReview            bool           `json:"underReview"`
+	TranscriptsRequested   bool           `json:"transcriptsRequested"`
+	RequiresStimuli        bool           `json:"requiresStimuli"`
+}
+
+// SurveyRepo handles IRIS survey/crowd/market/observer queries.
+type SurveyRepo struct {
+	db   *sql.DB
+	dbRO *sql.DB
+}
+
+// NewSurveyRepo creates a new IRIS survey repository.
+func NewSurveyRepo(db, dbRO *sql.DB) *SurveyRepo {
+	return &SurveyRepo{db: db, dbRO: dbRO}
+}
+
+func (r *SurveyRepo) ro() *sql.DB {
+	if r.dbRO != nil {
+		return r.dbRO
+	}
+	return r.db
+}
+
+// ListSurveysForProject returns surveys for a given project.
+func (r *SurveyRepo) ListSurveysForProject(ctx context.Context, projectID int64) ([]ICSurvey, error) {
+	q := `SELECT id, subscription_id, survey_type_id, name_public, name_private, topic_name,
+	       project_id, status, completions_needed, created_by, created_on, modified_on,
+	       fielded_on, closed_on, is_archived, language_id, salesforce_project_id, length_of_interview
+	      FROM survey WHERE project_id = ? AND is_archived = 0 ORDER BY created_on DESC`
+	return r.scanSurveys(ctx, q, projectID)
+}
+
+// ListSurveysForSubscription returns surveys for a subscription.
+func (r *SurveyRepo) ListSurveysForSubscription(ctx context.Context, subscriptionID int64) ([]ICSurvey, error) {
+	q := `SELECT id, subscription_id, survey_type_id, name_public, name_private, topic_name,
+	       project_id, status, completions_needed, created_by, created_on, modified_on,
+	       fielded_on, closed_on, is_archived, language_id, salesforce_project_id, length_of_interview
+	      FROM survey WHERE subscription_id = ? AND is_archived = 0 ORDER BY created_on DESC`
+	return r.scanSurveys(ctx, q, subscriptionID)
+}
+
+// GetSurvey returns a single survey by ID.
+func (r *SurveyRepo) GetSurvey(ctx context.Context, id int64) (*ICSurvey, error) {
+	q := `SELECT id, subscription_id, survey_type_id, name_public, name_private, topic_name,
+	       project_id, status, completions_needed, created_by, created_on, modified_on,
+	       fielded_on, closed_on, is_archived, language_id, salesforce_project_id, length_of_interview
+	      FROM survey WHERE id = ?`
+	rows, err := r.scanSurveys(ctx, q, id)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return &rows[0], nil
+}
+
+func (r *SurveyRepo) scanSurveys(ctx context.Context, q string, args ...any) ([]ICSurvey, error) {
+	rows, err := r.ro().QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query surveys: %w", err)
+	}
+	defer rows.Close()
+	var result []ICSurvey
+	for rows.Next() {
+		var s ICSurvey
+		if err := rows.Scan(&s.ID, &s.SubscriptionID, &s.SurveyTypeID, &s.NamePublic, &s.NamePrivate,
+			&s.TopicName, &s.ProjectID, &s.Status, &s.CompletionsNeeded, &s.CreatedBy, &s.CreatedOn,
+			&s.ModifiedOn, &s.FieldedOn, &s.ClosedOn, &s.IsArchived, &s.LanguageID,
+			&s.SalesforceProjectID, &s.LengthOfInterview); err != nil {
+			return nil, fmt.Errorf("scan survey: %w", err)
+		}
+		result = append(result, s)
+	}
+	return result, rows.Err()
+}
+
+// CloseSurvey sets survey status to closed (5) and sets closed_on.
+func (r *SurveyRepo) CloseSurvey(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE survey SET status = 5, closed_on = NOW() WHERE id = ?", id)
+	return err
+}
+
+// ToggleFavorite creates or removes a user_survey_favorite row.
+func (r *SurveyRepo) ToggleFavorite(ctx context.Context, surveyID, userID int64, favorite bool) error {
+	if favorite {
+		_, err := r.db.ExecContext(ctx,
+			"INSERT IGNORE INTO user_survey_favorite (user_id, survey_id) VALUES (?, ?)", userID, surveyID)
+		return err
+	}
+	_, err := r.db.ExecContext(ctx,
+		"DELETE FROM user_survey_favorite WHERE user_id = ? AND survey_id = ?", userID, surveyID)
+	return err
+}
+
+// ValidateSurvey checks if a survey can be fielded — returns validation errors.
+func (r *SurveyRepo) ValidateSurvey(ctx context.Context, id int64) ([]string, error) {
+	s, err := r.GetSurvey(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if s == nil {
+		return []string{"survey not found"}, nil
+	}
+	var errors []string
+	if s.NamePublic == "" {
+		errors = append(errors, "survey name is required")
+	}
+	// Check if has crowds
+	var crowdCount int
+	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM survey_crowd WHERE survey_id = ? AND excluded = 0", id).Scan(&crowdCount)
+	if crowdCount == 0 {
+		errors = append(errors, "survey must have at least one crowd assigned")
+	}
+	return errors, nil
+}
+
+// GetSurveyCrowds returns crowds assigned to a survey.
+func (r *SurveyRepo) GetSurveyCrowds(ctx context.Context, surveyID int64) ([]map[string]any, error) {
+	q := `SELECT sc.id, sc.survey_id, sc.crowd_id, sc.answer_request, sc.qual_honorarium, sc.excluded,
+	       c.name, c.subscription_id, c.type_id, c.market_id
+	      FROM survey_crowd sc
+	      JOIN crowd c ON c.id = sc.crowd_id
+	      WHERE sc.survey_id = ? ORDER BY c.name`
+	rows, err := r.ro().QueryContext(ctx, q, surveyID)
+	if err != nil {
+		return nil, fmt.Errorf("get survey crowds: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var scID, survID, crowdID int64
+		var ansReq int
+		var qualHono sql.NullInt64
+		var excluded bool
+		var cName string
+		var cSubID int64
+		var cTypeID, cMarketID int
+		if err := rows.Scan(&scID, &survID, &crowdID, &ansReq, &qualHono, &excluded,
+			&cName, &cSubID, &cTypeID, &cMarketID); err != nil {
+			return nil, fmt.Errorf("scan survey crowd: %w", err)
+		}
+		m := map[string]any{
+			"id": scID, "surveyId": survID, "crowdId": crowdID,
+			"answerRequest": ansReq, "excluded": excluded,
+			"crowdName": cName, "subscriptionId": cSubID,
+			"crowdTypeId": cTypeID, "marketId": cMarketID,
+		}
+		if qualHono.Valid {
+			m["qualHonorarium"] = qualHono.Int64
+		}
+		result = append(result, m)
+	}
+	return result, rows.Err()
+}
+
+// ListCrowdsForSubscription returns crowds for a subscription.
+func (r *SurveyRepo) ListCrowdsForSubscription(ctx context.Context, subscriptionID int64) ([]ICCrowd, error) {
+	q := `SELECT id, name, description, subscription_id, type_id, market_id, brand_id,
+	       deleted, is_archived, crowd_members_count, created_on, modified_on
+	      FROM crowd WHERE subscription_id = ? AND deleted = 0 AND is_archived = 0
+	      ORDER BY name`
+	rows, err := r.ro().QueryContext(ctx, q, subscriptionID)
+	if err != nil {
+		return nil, fmt.Errorf("list crowds: %w", err)
+	}
+	defer rows.Close()
+	var result []ICCrowd
+	for rows.Next() {
+		var c ICCrowd
+		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.SubscriptionID, &c.TypeID,
+			&c.MarketID, &c.BrandID, &c.Deleted, &c.IsArchived, &c.MembersCount,
+			&c.CreatedOn, &c.ModifiedOn); err != nil {
+			return nil, fmt.Errorf("scan crowd: %w", err)
+		}
+		result = append(result, c)
+	}
+	return result, rows.Err()
+}
+
+// ListMarkets returns all active markets.
+func (r *SurveyRepo) ListMarkets(ctx context.Context) ([]ICMarket, error) {
+	q := `SELECT id, name, can_register, can_interview, is_active FROM market WHERE is_active = 1 ORDER BY name`
+	rows, err := r.ro().QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("list markets: %w", err)
+	}
+	defer rows.Close()
+	var result []ICMarket
+	for rows.Next() {
+		var m ICMarket
+		if err := rows.Scan(&m.ID, &m.Name, &m.CanRegister, &m.CanInterview, &m.IsActive); err != nil {
+			return nil, fmt.Errorf("scan market: %w", err)
+		}
+		result = append(result, m)
+	}
+	return result, rows.Err()
+}
+
+// ListMarketsWithNPI returns markets that have can_interview and NPI association.
+func (r *SurveyRepo) ListMarketsWithNPI(ctx context.Context) ([]ICMarket, error) {
+	q := `SELECT id, name, can_register, can_interview, is_active FROM market
+	      WHERE is_active = 1 AND can_interview = 1 ORDER BY name`
+	rows, err := r.ro().QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("list npi markets: %w", err)
+	}
+	defer rows.Close()
+	var result []ICMarket
+	for rows.Next() {
+		var m ICMarket
+		if err := rows.Scan(&m.ID, &m.Name, &m.CanRegister, &m.CanInterview, &m.IsActive); err != nil {
+			return nil, fmt.Errorf("scan market: %w", err)
+		}
+		result = append(result, m)
+	}
+	return result, rows.Err()
+}
+
+// GetCrowdableAttributes returns crowdable attributes for a market.
+func (r *SurveyRepo) GetCrowdableAttributes(ctx context.Context, marketID int64) ([]map[string]any, error) {
+	q := `SELECT ma.id, ma.market_id, a.id AS attr_id, a.label, a.type, a.is_crowdable
+	      FROM market_attribute ma
+	      JOIN attribute a ON a.id = ma.attribute_id
+	      WHERE ma.market_id = ? AND a.is_crowdable = 1
+	      ORDER BY a.label`
+	rows, err := r.ro().QueryContext(ctx, q, marketID)
+	if err != nil {
+		return nil, fmt.Errorf("get crowdable attrs: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var maID, mktID, attrID int64
+		var label, attrType string
+		var isCrowdable bool
+		if err := rows.Scan(&maID, &mktID, &attrID, &label, &attrType, &isCrowdable); err != nil {
+			return nil, fmt.Errorf("scan crowdable attr: %w", err)
+		}
+		result = append(result, map[string]any{
+			"id": maID, "marketId": mktID, "attributeId": attrID,
+			"label": label, "type": attrType, "isCrowdable": isCrowdable,
+		})
+	}
+	return result, rows.Err()
+}
+
+// ListObserversForProject returns observers for a project.
+func (r *SurveyRepo) ListObserversForProject(ctx context.Context, projectID int64) ([]ICObserver, error) {
+	q := `SELECT id, project_id, email, time_slot_id FROM observer WHERE project_id = ?`
+	rows, err := r.ro().QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list observers: %w", err)
+	}
+	defer rows.Close()
+	var result []ICObserver
+	for rows.Next() {
+		var o ICObserver
+		if err := rows.Scan(&o.ID, &o.ProjectID, &o.Email, &o.TimeSlotID); err != nil {
+			return nil, fmt.Errorf("scan observer: %w", err)
+		}
+		result = append(result, o)
+	}
+	return result, rows.Err()
+}
+
+// ListObserversForTimeSlot returns observers for a specific timeslot.
+func (r *SurveyRepo) ListObserversForTimeSlot(ctx context.Context, timeSlotID int64) ([]ICObserver, error) {
+	q := `SELECT id, project_id, email, time_slot_id FROM observer WHERE time_slot_id = ?`
+	rows, err := r.ro().QueryContext(ctx, q, timeSlotID)
+	if err != nil {
+		return nil, fmt.Errorf("list timeslot observers: %w", err)
+	}
+	defer rows.Close()
+	var result []ICObserver
+	for rows.Next() {
+		var o ICObserver
+		if err := rows.Scan(&o.ID, &o.ProjectID, &o.Email, &o.TimeSlotID); err != nil {
+			return nil, fmt.Errorf("scan observer: %w", err)
+		}
+		result = append(result, o)
+	}
+	return result, rows.Err()
+}
+
+// PutObserversForTimeSlot adds/removes observers by email.
+func (r *SurveyRepo) PutObserversForTimeSlot(ctx context.Context, projectID, timeSlotID int64, toAdd, toDelete []string) error {
+	for _, email := range toDelete {
+		_, _ = r.db.ExecContext(ctx, "DELETE FROM observer WHERE project_id = ? AND time_slot_id = ? AND email = ?",
+			projectID, timeSlotID, email)
+	}
+	for _, email := range toAdd {
+		_, _ = r.db.ExecContext(ctx, "INSERT INTO observer (project_id, email, time_slot_id) VALUES (?, ?, ?)",
+			projectID, email, timeSlotID)
+	}
+	return nil
+}
+
+// ListMediaForProject returns interview media for a project.
+func (r *SurveyRepo) ListMediaForProject(ctx context.Context, projectID int64) ([]ICInterviewMedia, error) {
+	q := `SELECT id, name, description, project_id, s3_key, hash, status, created_on, created_by,
+	       page_count, pages_processed, shared
+	      FROM interview_media WHERE project_id = ? ORDER BY created_on DESC`
+	rows, err := r.ro().QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list media: %w", err)
+	}
+	defer rows.Close()
+	var result []ICInterviewMedia
+	for rows.Next() {
+		var m ICInterviewMedia
+		if err := rows.Scan(&m.ID, &m.Name, &m.Description, &m.ProjectID, &m.S3Key, &m.Hash,
+			&m.Status, &m.CreatedOn, &m.CreatedBy, &m.PageCount, &m.PagesProcessed, &m.Shared); err != nil {
+			return nil, fmt.Errorf("scan media: %w", err)
+		}
+		result = append(result, m)
+	}
+	return result, rows.Err()
+}
+
+// GetMediaByID returns a single interview media item.
+func (r *SurveyRepo) GetMediaByID(ctx context.Context, projectID, mediaID int64) (*ICInterviewMedia, error) {
+	q := `SELECT id, name, description, project_id, s3_key, hash, status, created_on, created_by,
+	       page_count, pages_processed, shared
+	      FROM interview_media WHERE id = ? AND project_id = ?`
+	var m ICInterviewMedia
+	err := r.ro().QueryRowContext(ctx, q, mediaID, projectID).Scan(
+		&m.ID, &m.Name, &m.Description, &m.ProjectID, &m.S3Key, &m.Hash,
+		&m.Status, &m.CreatedOn, &m.CreatedBy, &m.PageCount, &m.PagesProcessed, &m.Shared)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get media %d: %w", mediaID, err)
+	}
+	return &m, nil
+}
+
+// DeleteMedia soft-deletes interview media.
+func (r *SurveyRepo) DeleteMedia(ctx context.Context, projectID, mediaID int64) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM interview_media WHERE id = ? AND project_id = ?", mediaID, projectID)
+	return err
+}
+
+// ListModeratorAvailability returns IRIS moderator availability for a subscription.
+func (r *SurveyRepo) ListModeratorAvailability(ctx context.Context, moderatorID, subscriptionID int64) ([]ICModeratorAvailability, error) {
+	q := `SELECT id, moderator_id, subscription_id, start_time, end_time
+	      FROM moderator_availability WHERE moderator_id = ? AND subscription_id = ?
+	      ORDER BY start_time`
+	rows, err := r.ro().QueryContext(ctx, q, moderatorID, subscriptionID)
+	if err != nil {
+		return nil, fmt.Errorf("list iris avail: %w", err)
+	}
+	defer rows.Close()
+	var result []ICModeratorAvailability
+	for rows.Next() {
+		var a ICModeratorAvailability
+		if err := rows.Scan(&a.ID, &a.ModeratorID, &a.SubscriptionID, &a.StartTime, &a.EndTime); err != nil {
+			return nil, fmt.Errorf("scan iris avail: %w", err)
+		}
+		result = append(result, a)
+	}
+	return result, rows.Err()
+}
+
+// CreateModeratorAvailability inserts IRIS moderator availability.
+func (r *SurveyRepo) CreateModeratorAvailability(ctx context.Context, moderatorID, subscriptionID int64, startTime, endTime time.Time) (int64, error) {
+	res, err := r.db.ExecContext(ctx, "INSERT INTO moderator_availability (moderator_id, subscription_id, start_time, end_time) VALUES (?, ?, ?, ?)",
+		moderatorID, subscriptionID, startTime, endTime)
+	if err != nil {
+		return 0, fmt.Errorf("create iris avail: %w", err)
+	}
+	return res.LastInsertId()
+}
+
+// UpdateModeratorAvailability updates an IRIS moderator availability slot.
+func (r *SurveyRepo) UpdateModeratorAvailability(ctx context.Context, id int64, startTime, endTime time.Time) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE moderator_availability SET start_time = ?, end_time = ? WHERE id = ?",
+		startTime, endTime, id)
+	return err
+}
+
+// DeleteModeratorAvailability deletes an IRIS moderator availability slot.
+func (r *SurveyRepo) DeleteModeratorAvailability(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM moderator_availability WHERE id = ?", id)
+	return err
+}
+
+// GetModeratorsForTimeSlot returns moderators assigned to a timeslot (IRIS).
+func (r *SurveyRepo) GetModeratorsForTimeSlot(ctx context.Context, timeSlotID int64) ([]map[string]any, error) {
+	q := `SELECT mts.id, mts.moderator_id, mts.time_slot_id, mts.is_host,
+	       CONCAT(u.first_name, ' ', u.last_name) AS label, u.email
+	      FROM moderator_time_slot mts
+	      JOIN user u ON u.id = mts.moderator_id
+	      WHERE mts.time_slot_id = ?`
+	rows, err := r.ro().QueryContext(ctx, q, timeSlotID)
+	if err != nil {
+		return nil, fmt.Errorf("get mods for timeslot: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id, modID, tsID int64
+		var isHost bool
+		var label, email string
+		if err := rows.Scan(&id, &modID, &tsID, &isHost, &label, &email); err != nil {
+			return nil, fmt.Errorf("scan mod timeslot: %w", err)
+		}
+		result = append(result, map[string]any{
+			"id": id, "moderatorId": modID, "timeSlotId": tsID,
+			"isHost": isHost, "label": label, "email": email,
+		})
+	}
+	return result, rows.Err()
+}
+
+// AssignModeratorToTimeSlot inserts a moderator_time_slot row.
+func (r *SurveyRepo) AssignModeratorToTimeSlot(ctx context.Context, timeSlotID, moderatorID int64, isHost bool) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		"INSERT INTO moderator_time_slot (moderator_id, time_slot_id, is_host) VALUES (?, ?, ?)",
+		moderatorID, timeSlotID, isHost)
+	if err != nil {
+		return 0, fmt.Errorf("assign mod to timeslot: %w", err)
+	}
+	return res.LastInsertId()
+}
+
+// RemoveModeratorFromTimeSlot removes a moderator_time_slot row.
+func (r *SurveyRepo) RemoveModeratorFromTimeSlot(ctx context.Context, timeSlotID, moderatorID int64) error {
+	_, err := r.db.ExecContext(ctx,
+		"DELETE FROM moderator_time_slot WHERE time_slot_id = ? AND moderator_id = ?",
+		timeSlotID, moderatorID)
+	return err
+}
+
+// ListUserProjects returns users assigned to a project.
+func (r *SurveyRepo) ListUserProjects(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	q := `SELECT up.id, up.user_id, up.project_id, up.can_write, up.can_read,
+	       u.first_name, u.last_name, u.email
+	      FROM user_project up
+	      JOIN user u ON u.id = up.user_id
+	      WHERE up.project_id = ?`
+	rows, err := r.ro().QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list project users: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id, uid, pid int64
+		var canWrite, canRead bool
+		var fn, ln, email string
+		if err := rows.Scan(&id, &uid, &pid, &canWrite, &canRead, &fn, &ln, &email); err != nil {
+			return nil, fmt.Errorf("scan user project: %w", err)
+		}
+		result = append(result, map[string]any{
+			"id": id, "userId": uid, "projectId": pid,
+			"canWrite": canWrite, "canRead": canRead,
+			"firstName": fn, "lastName": ln, "email": email,
+		})
+	}
+	return result, rows.Err()
+}
+
+// ListSalesforceProjects returns salesforce projects.
+func (r *SurveyRepo) ListSalesforceProjects(ctx context.Context) ([]ICSalesforceProject, error) {
+	q := `SELECT id, salesforce_project_id, name, number, salesforce_account_id, subscription_id,
+	       is_deleted, owner_name, project_manager_name
+	      FROM salesforce_project WHERE is_deleted = 0 ORDER BY name LIMIT 500`
+	rows, err := r.ro().QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("list sf projects: %w", err)
+	}
+	defer rows.Close()
+	var result []ICSalesforceProject
+	for rows.Next() {
+		var s ICSalesforceProject
+		if err := rows.Scan(&s.ID, &s.SalesforceProjectID, &s.Name, &s.Number,
+			&s.SalesforceAccountID, &s.SubscriptionID, &s.IsDeleted,
+			&s.OwnerName, &s.ProjectManagerName); err != nil {
+			return nil, fmt.Errorf("scan sf project: %w", err)
+		}
+		result = append(result, s)
+	}
+	return result, rows.Err()
+}
+
+// ListProjectInquiries returns inquiries for a subscription.
+func (r *SurveyRepo) ListProjectInquiries(ctx context.Context, subscriptionID int64) ([]ICProjectInquiry, error) {
+	q := `SELECT id, description, notes, subscription_id, project_id, inquiry_type_id,
+	       interview_length, required_completion_date, created_on, created_by,
+	       under_review, transcripts_requested, requires_stimuli
+	      FROM project_inquiry WHERE subscription_id = ? ORDER BY created_on DESC`
+	rows, err := r.ro().QueryContext(ctx, q, subscriptionID)
+	if err != nil {
+		return nil, fmt.Errorf("list inquiries: %w", err)
+	}
+	defer rows.Close()
+	var result []ICProjectInquiry
+	for rows.Next() {
+		var pi ICProjectInquiry
+		if err := rows.Scan(&pi.ID, &pi.Description, &pi.Notes, &pi.SubscriptionID, &pi.ProjectID,
+			&pi.InquiryTypeID, &pi.InterviewLength, &pi.RequiredCompletionDate, &pi.CreatedOn,
+			&pi.CreatedBy, &pi.UnderReview, &pi.TranscriptsRequested, &pi.RequiresStimuli); err != nil {
+			return nil, fmt.Errorf("scan inquiry: %w", err)
+		}
+		result = append(result, pi)
+	}
+	return result, rows.Err()
+}
+
+// GetProjectInquiry returns a single project inquiry.
+func (r *SurveyRepo) GetProjectInquiry(ctx context.Context, subscriptionID, projectID int64) (*ICProjectInquiry, error) {
+	q := `SELECT id, description, notes, subscription_id, project_id, inquiry_type_id,
+	       interview_length, required_completion_date, created_on, created_by,
+	       under_review, transcripts_requested, requires_stimuli
+	      FROM project_inquiry WHERE subscription_id = ? AND project_id = ? LIMIT 1`
+	var pi ICProjectInquiry
+	err := r.ro().QueryRowContext(ctx, q, subscriptionID, projectID).Scan(
+		&pi.ID, &pi.Description, &pi.Notes, &pi.SubscriptionID, &pi.ProjectID,
+		&pi.InquiryTypeID, &pi.InterviewLength, &pi.RequiredCompletionDate, &pi.CreatedOn,
+		&pi.CreatedBy, &pi.UnderReview, &pi.TranscriptsRequested, &pi.RequiresStimuli)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get inquiry: %w", err)
+	}
+	return &pi, nil
+}
+
+// GetAvailabilityAndTimeslotsForProject returns combined data for project dashboard.
+func (r *SurveyRepo) GetAvailabilityAndTimeslotsForProject(ctx context.Context, projectID int64) (map[string]any, error) {
+	// Time slots for this project
+	var totalSlots, openSlots, bookedSlots int
+	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND soft_deleted = 0", projectID).Scan(&totalSlots)
+	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND soft_deleted = 0 AND status_id = 1", projectID).Scan(&openSlots)
+	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND soft_deleted = 0 AND status_id IN (2,3,4,7,8,9)", projectID).Scan(&bookedSlots)
+
+	// Moderator availability — get moderators assigned to this project
+	avails := []map[string]any{}
+	q := `SELECT ma.id, ma.moderator_id, ma.start_time, ma.end_time,
+	       CONCAT(u.first_name, ' ', u.last_name) AS moderator_name
+	      FROM moderator_availability ma
+	      JOIN project_moderator pm ON pm.moderator_id = ma.moderator_id AND pm.project_id = ?
+	      JOIN user u ON u.id = ma.moderator_id
+	      ORDER BY ma.start_time`
+	rows, err := r.ro().QueryContext(ctx, q, projectID)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var id, modID int64
+			var st, et time.Time
+			var mName string
+			if rows.Scan(&id, &modID, &st, &et, &mName) == nil {
+				avails = append(avails, map[string]any{
+					"id": id, "moderatorId": modID, "startTime": st.Format(time.RFC3339),
+					"endTime": et.Format(time.RFC3339), "moderatorName": mName,
+				})
+			}
+		}
+	}
+
+	return map[string]any{
+		"totalSlots":    totalSlots,
+		"openSlots":     openSlots,
+		"bookedSlots":   bookedSlots,
+		"availabilities": avails,
+	}, nil
+}
+
+// GetSchedulerModerators returns moderators + their timeslots for project scheduler.
+func (r *SurveyRepo) GetSchedulerModerators(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	q := `SELECT DISTINCT mts.moderator_id, CONCAT(u.first_name, ' ', u.last_name) AS name, u.email
+	      FROM moderator_time_slot mts
+	      JOIN time_slot ts ON ts.id = mts.time_slot_id AND ts.project_id = ?
+	      JOIN user u ON u.id = mts.moderator_id
+	      ORDER BY name`
+	rows, err := r.ro().QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get scheduler mods: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var modID int64
+		var name, email string
+		if err := rows.Scan(&modID, &name, &email); err != nil {
+			return nil, fmt.Errorf("scan scheduler mod: %w", err)
+		}
+		result = append(result, map[string]any{
+			"moderatorId": modID, "name": name, "email": email,
+		})
+	}
+	return result, rows.Err()
+}
+
+// GetProjectAvailability returns moderator availability for a project's subscription.
+func (r *SurveyRepo) GetProjectAvailability(ctx context.Context, projectID int64) ([]ICModeratorAvailability, error) {
+	q := `SELECT ma.id, ma.moderator_id, ma.subscription_id, ma.start_time, ma.end_time
+	      FROM moderator_availability ma
+	      JOIN project p ON p.subscription_id = ma.subscription_id AND p.id = ?
+	      ORDER BY ma.start_time`
+	rows, err := r.ro().QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get project avail: %w", err)
+	}
+	defer rows.Close()
+	var result []ICModeratorAvailability
+	for rows.Next() {
+		var a ICModeratorAvailability
+		if err := rows.Scan(&a.ID, &a.ModeratorID, &a.SubscriptionID, &a.StartTime, &a.EndTime); err != nil {
+			return nil, fmt.Errorf("scan avail: %w", err)
+		}
+		result = append(result, a)
+	}
+	return result, rows.Err()
+}
+
+// GetSubscriptionInterviews returns all interviews for a subscription.
+func (r *SurveyRepo) GetSubscriptionInterviews(ctx context.Context, subscriptionID int64) ([]map[string]any, error) {
+	q := `SELECT ts.id, ts.project_id, p.name AS project_name,
+	       ts.start_time, ts.end_time, ts.duration, ts.status_id,
+	       ts.conference_hash, ts.interviewee_id,
+	       CONCAT(u.first_name, ' ', u.last_name) AS interviewee_name
+	      FROM time_slot ts
+	      JOIN project p ON p.id = ts.project_id AND p.subscription_id = ?
+	      LEFT JOIN user u ON u.id = ts.interviewee_id
+	      WHERE ts.soft_deleted = 0
+	      ORDER BY ts.start_time DESC LIMIT 500`
+	rows, err := r.ro().QueryContext(ctx, q, subscriptionID)
+	if err != nil {
+		return nil, fmt.Errorf("get sub interviews: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var tsID, projectID int64
+		var projectName string
+		var startTime, endTime time.Time
+		var duration, statusID int
+		var confHash sql.NullString
+		var intervieweeID sql.NullInt64
+		var intervieweeName sql.NullString
+		if err := rows.Scan(&tsID, &projectID, &projectName, &startTime, &endTime, &duration,
+			&statusID, &confHash, &intervieweeID, &intervieweeName); err != nil {
+			return nil, fmt.Errorf("scan sub interview: %w", err)
+		}
+		m := map[string]any{
+			"id": tsID, "projectId": projectID, "projectName": projectName,
+			"startTime": startTime.Format(time.RFC3339), "endTime": endTime.Format(time.RFC3339),
+			"duration": duration, "statusId": statusID,
+		}
+		if confHash.Valid {
+			m["conferenceHash"] = confHash.String
+		}
+		if intervieweeID.Valid {
+			m["intervieweeId"] = intervieweeID.Int64
+		}
+		if intervieweeName.Valid {
+			m["intervieweeName"] = intervieweeName.String
+		}
+		result = append(result, m)
+	}
+	return result, rows.Err()
+}
+
+// GetSubscriptionQuestionTypes returns question types for a subscription.
+func (r *SurveyRepo) GetSubscriptionQuestionTypes(ctx context.Context, subscriptionID int64) ([]map[string]any, error) {
+	q := `SELECT DISTINCT st.id, st.name
+	      FROM survey_type st
+	      JOIN survey s ON s.survey_type_id = st.id AND s.subscription_id = ?
+	      ORDER BY st.name`
+	rows, err := r.ro().QueryContext(ctx, q, subscriptionID)
+	if err != nil {
+		return nil, fmt.Errorf("get question types: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, fmt.Errorf("scan question type: %w", err)
+		}
+		result = append(result, map[string]any{"id": id, "name": name})
+	}
+	return result, rows.Err()
+}
+
+// GetQualRescheduleBody returns the qual reschedule email template body for a project.
+func (r *SurveyRepo) GetQualRescheduleBody(ctx context.Context, projectID int64) (string, error) {
+	var body sql.NullString
+	err := r.ro().QueryRowContext(ctx,
+		`SELECT ct.body FROM communication_template ct
+		 JOIN survey s ON s.invite_template_id = ct.id
+		 WHERE s.project_id = ? LIMIT 1`, projectID).Scan(&body)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return body.String, nil
+}
+
+// GetNoShowCheck returns the latest timeslot that could be a no-show.
+func (r *SurveyRepo) GetNoShowCheck(ctx context.Context) (map[string]any, error) {
+	q := `SELECT ts.id, ts.project_id, ts.start_time, ts.end_time, ts.status_id,
+	       ts.interviewee_id, CONCAT(u.first_name, ' ', u.last_name) AS name
+	      FROM time_slot ts
+	      LEFT JOIN user u ON u.id = ts.interviewee_id
+	      WHERE ts.status_id IN (2, 7, 8) AND ts.start_time < NOW() AND ts.soft_deleted = 0
+	      ORDER BY ts.start_time DESC LIMIT 1`
+	var tsID, projectID int64
+	var startTime, endTime time.Time
+	var statusID int
+	var intervieweeID sql.NullInt64
+	var name sql.NullString
+	err := r.ro().QueryRowContext(ctx, q).Scan(&tsID, &projectID, &startTime, &endTime, &statusID, &intervieweeID, &name)
+	if err == sql.ErrNoRows {
+		return map[string]any{"timeSlot": nil, "interviewee": nil}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"timeSlot": map[string]any{
+			"id": tsID, "projectId": projectID, "startTime": startTime.Format(time.RFC3339),
+			"endTime": endTime.Format(time.RFC3339), "statusId": statusID,
+		},
+		"interviewee": map[string]any{
+			"id": intervieweeID.Int64, "name": name.String,
+		},
+	}, nil
+}
+
+// MarkNoShow marks a timeslot as no-show and stops payment.
+func (r *SurveyRepo) MarkNoShow(ctx context.Context, projectID, timeSlotID int64) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE time_slot SET status_id = 10, stop_payment = 1 WHERE id = ? AND project_id = ?",
+		timeSlotID, projectID)
+	return err
+}
+
+// GetPossibleModeratorsForTimeSlot returns moderators who could be assigned to a slot.
+func (r *SurveyRepo) GetPossibleModeratorsForTimeSlot(ctx context.Context, timeSlotID int64) ([]map[string]any, error) {
+	// Get the timeslot's project and time
+	var projectID int64
+	var startTime, endTime time.Time
+	err := r.ro().QueryRowContext(ctx, "SELECT project_id, start_time, end_time FROM time_slot WHERE id = ?", timeSlotID).
+		Scan(&projectID, &startTime, &endTime)
+	if err != nil {
+		return nil, fmt.Errorf("get timeslot for mod options: %w", err)
+	}
+
+	// Find moderators who: (1) are assigned to this project, (2) have availability covering this slot
+	q := `SELECT DISTINCT u.id, CONCAT(u.first_name, ' ', u.last_name) AS name, u.email
+	      FROM user u
+	      JOIN user_project up ON up.user_id = u.id AND up.project_id = ?
+	      JOIN moderator_availability ma ON ma.moderator_id = u.id
+	        AND ma.start_time <= ? AND ma.end_time >= ?
+	      WHERE u.id NOT IN (
+	        SELECT mts.moderator_id FROM moderator_time_slot mts WHERE mts.time_slot_id = ?
+	      )
+	      ORDER BY name`
+	rows, err := r.ro().QueryContext(ctx, q, projectID, startTime, endTime, timeSlotID)
+	if err != nil {
+		return nil, fmt.Errorf("get possible mods: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id int64
+		var name, email string
+		if err := rows.Scan(&id, &name, &email); err != nil {
+			return nil, fmt.Errorf("scan possible mod: %w", err)
+		}
+		result = append(result, map[string]any{"id": id, "name": name, "email": email})
+	}
+	return result, rows.Err()
+}

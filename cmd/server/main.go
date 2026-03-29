@@ -31,28 +31,34 @@ func main() {
 	// Repository layer
 	var irisProjectRepo *iris.ProjectRepo
 	var irisUserRepo *iris.UserRepo
+	var irisSurveyRepo *iris.SurveyRepo
 	if db.IRIS != nil {
 		irisProjectRepo = iris.NewProjectRepo(db.IRIS, db.IRISReadOnly)
 		irisUserRepo = iris.NewUserRepo(db.IRIS, db.IRISReadOnly)
+		irisSurveyRepo = iris.NewSurveyRepo(db.IRIS, db.IRISReadOnly)
 	}
 	var qsProjectRepo *qs.ProjectRepo
 	var qsUserRepo *qs.UserRepo
 	var qsTimeSlotRepo *qs.TimeSlotRepo
 	var qsRespondentRepo *qs.RespondentRepo
 	var qsSurveyRepo *qs.SurveyRepo
+	var qsConferenceRepo *qs.ConferenceRepo
+	var qsAnswerRepo *qs.AnswerRepo
 	if db.QS != nil {
 		qsProjectRepo = qs.NewProjectRepo(db.QS)
 		qsUserRepo = qs.NewUserRepo(db.QS)
 		qsTimeSlotRepo = qs.NewTimeSlotRepo(db.QS)
 		qsRespondentRepo = qs.NewRespondentRepo(db.QS)
 		qsSurveyRepo = qs.NewSurveyRepo(db.QS)
+		qsConferenceRepo = qs.NewConferenceRepo(db.QS)
+		qsAnswerRepo = qs.NewAnswerRepo(db.QS)
 		// Ensure survey table exists
 		if err := qsSurveyRepo.EnsureTable(context.Background()); err != nil {
 			slog.Warn("failed to ensure survey table", "error", err)
 		}
 	}
 
-	h := handler.New(cfg, db, irisProjectRepo, qsProjectRepo, irisUserRepo, qsUserRepo, qsTimeSlotRepo, qsRespondentRepo, qsSurveyRepo)
+	h := handler.New(cfg, db, irisProjectRepo, qsProjectRepo, irisUserRepo, qsUserRepo, qsTimeSlotRepo, qsRespondentRepo, qsSurveyRepo, irisSurveyRepo, qsConferenceRepo, qsAnswerRepo)
 	r := router.New(h, jwtAuth)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)

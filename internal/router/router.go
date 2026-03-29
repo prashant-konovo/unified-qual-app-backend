@@ -44,6 +44,10 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 		r.Get("/survey/{userId}", h.GetParticipantSurveyResponse)
 		r.Get("/slots", h.GetAvailableSlots)
 
+		// ── Public: Conference login (no JWT) ──
+		r.Post("/conf/{confId}/login", h.ConferenceLogin)
+		r.Get("/conf/{confId}/participants", h.GetConferenceParticipants)
+
 		// ── Protected: All remaining routes require valid JWT ──
 		r.Group(func(r chi.Router) {
 			r.Use(jwtAuth.Middleware)
@@ -60,6 +64,18 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)
+				// Phase 6: Project sub-resources
+				r.Get("/project/{id}/surveys", h.GetProjectSurveys)
+				r.Get("/project/{id}/time_slots", h.GetProjectTimeSlots)
+				r.Get("/project/{id}/users", h.GetProjectUsers)
+				r.Get("/project/{pid}/observers", h.GetProjectObservers)
+				r.Get("/project/{pid}/qual_resched_body", h.GetProjectQualReschedBody)
+				r.Get("/project/{pid}/availability", h.GetProjectAvailability)
+				r.Get("/project/{pid}/scheduler_moderators", h.GetProjectSchedulerModerators)
+				r.Get("/project/{pid}/dashboard/availability_and_time_slots", h.GetProjectDashboard)
+				r.Get("/project/{pid}/interview_media", h.GetProjectMedia)
+				r.Get("/project/{pid}/interview_media/{mediaId}", h.GetProjectMediaDetail)
+				r.Delete("/interview_media/{pid}/{mediaId}", h.DeleteProjectMedia)
 			})
 
 			// ── Surveys (admin + manager) ──
@@ -69,6 +85,12 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Post("/survey", h.CreateSurvey)
 				r.Put("/survey/{id}", h.UpdateSurvey)
 				r.Delete("/survey/{id}", h.DeleteSurvey)
+				// Phase 6: Survey extended
+				r.Get("/survey/{id}/detail", h.GetSurveyDetail)
+				r.Get("/survey/{id}/validate", h.ValidateSurvey)
+				r.Get("/survey/{id}/crowds", h.GetSurveyCrowds)
+				r.Put("/survey/{id}/close", h.CloseSurvey)
+				r.Put("/survey/{id}/favorite", h.ToggleSurveyFavorite)
 			})
 
 			// ── Survey Responses (any authenticated user) ──
@@ -146,6 +168,13 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Get("/subscription/{id}", h.GetSubscription)
 				r.Put("/subscription/{id}", h.UpdateSubscription)
 				r.Delete("/subscription/{id}", h.DeleteSubscription)
+				// Phase 6: Subscription sub-resources
+				r.Get("/subscription/{id}/interviews", h.GetSubscriptionInterviews)
+				r.Get("/subscription/{id}/crowds", h.GetSubscriptionCrowds)
+				r.Get("/subscription/{id}/question_types", h.GetSubscriptionQuestionTypes)
+				r.Get("/subscription/{subId}/inquiries", h.GetSubscriptionInquiries)
+				r.Get("/subscription/{subId}/project/{pid}/inquiry", h.GetSubscriptionProjectInquiry)
+				r.Get("/subscription/{subId}/project_surveys", h.GetSubscriptionProjectSurveys)
 			})
 
 			// ── Waiting Queue (admin + manager) ──
@@ -162,20 +191,25 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Use(middleware.RequireRoles("admin", "manager", "moderator"))
 				r.Post("/meetings/{meetingId}/action/{action}", h.MeetingAction)
 				r.Post("/meeting/{meetingId}/universal", h.MeetingUniversalJoin)
+				// Phase 6: Meeting extended
+				r.Get("/meeting/metadata", h.GetMeetingMetadata)
+				r.Put("/meeting/join/{joinId}", h.MeetingJoin)
+				r.Get("/meeting/get_attendees_by_meeting_id/{meetingId}", h.GetAttendeesByMeetingID)
+				r.Get("/meeting/recording_status/{meetingId}", h.GetRecordingStatus)
 			})
 
 			// ── Payments (admin + manager) ──
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRoles("admin", "manager"))
-				r.Post("/payments/timeslot", h.CreatePayment)
-				r.Post("/payments/custom-honorarium", h.CreateCustomHonorarium)
-				r.Get("/payments/status-list", h.GetPaymentStatusList)
+				r.Post("/payments/timeslot", h.CreatePaymentReal)
+				r.Post("/payments/custom-honorarium", h.CreateCustomHonorariumReal)
+				r.Get("/payments/status-list", h.GetPaymentStatusListReal)
 			})
 
 			// ── Translations (admin + manager) ──
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRoles("admin", "manager"))
-				r.Get("/translations/locales", h.GetLocales)
+				r.Get("/translations/locales", h.GetLocalesReal)
 				r.Put("/projects/{projectId}/topics/translations", h.UpdateTopicTranslations)
 			})
 
@@ -191,6 +225,59 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Use(middleware.RequireRoles("admin"))
 				r.Get("/admin/users", h.ListAdminUsers)
 				r.Post("/admin/users", h.CreateAdminUser)
+			})
+
+			// ══════════════════════════════════════════
+			// Phase 6 — Legacy API Routes
+			// ══════════════════════════════════════════
+
+			// ── Markets (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/markets", h.ListMarkets)
+				r.Get("/markets/npi", h.ListMarketsNPI)
+				r.Get("/market/{id}/crowdable_attributes", h.GetCrowdableAttributes)
+			})
+
+			// ── Timeslot Sub-resources (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/time_slot/{tsId}/moderators", h.GetTimeslotModerators)
+				r.Get("/time_slot/{tsId}/moderators/options", h.GetTimeslotModeratorOptionsExt)
+				r.Post("/time_slot/{tsId}/moderator", h.AssignTimeslotModerator)
+				r.Delete("/time_slot/{tsId}/moderator/{modId}", h.UnassignTimeslotModerator)
+				r.Get("/time_slot/{tsId}/observers", h.GetTimeslotObservers)
+				r.Put("/time_slot/{tsId}/observers", h.UpdateTimeslotObservers)
+			})
+
+			// ── Moderator Availability by subscription (admin + manager + moderator) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager", "moderator"))
+				r.Get("/moderator/{modId}/availability/{subId}", h.GetModeratorAvailabilityBySub)
+				r.Post("/moderator/{modId}/availability/{subId}", h.PostModeratorAvailabilityBySub)
+				r.Put("/moderator/availability/{maId}", h.UpdateModeratorAvailabilityExt)
+				r.Delete("/moderator/availability/{maId}", h.DeleteModeratorAvailabilityExt)
+			})
+
+			// ── Self-Service (admin + manager + moderator) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager", "moderator"))
+				r.Get("/selfservice/noshow", h.GetNoShowCheck)
+				r.Put("/selfservice/project/{pid}/timeslot/{tid}", h.MarkNoShow)
+			})
+
+			// ── User (authenticated) ──
+			r.Get("/user/{id}", h.GetUser)
+			r.Put("/user/{id}", h.UpdateUser)
+			r.Put("/user/password_matches", h.CheckPasswordMatches)
+
+			// ── Event Logs (any authenticated) ──
+			r.Post("/EventLogs", h.CreateEventLog)
+
+			// ── Salesforce Projects (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Get("/salesforceprojects", h.ListSalesforceProjects)
 			})
 		})
 	})
