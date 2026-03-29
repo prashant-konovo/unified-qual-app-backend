@@ -16,7 +16,7 @@ type ICUser struct {
 	FirstName        string         `json:"firstName"`
 	LastName         string         `json:"lastName"`
 	RegistrationDate time.Time      `json:"registrationDate"`
-	OptedOut         bool           `json:"optedOut"`
+	OptedOut         int            `json:"optedOut"`
 	TimeZone         sql.NullString `json:"timeZone"`
 	ResponderTypeID  int            `json:"responderTypeId"`
 	ModifiedOn       sql.NullTime   `json:"modifiedOn"`
@@ -30,7 +30,7 @@ type ICUserListRow struct {
 	LastName         string         `json:"lastName"`
 	Email            sql.NullString `json:"email"`
 	RegistrationDate time.Time      `json:"registrationDate"`
-	OptedOut         bool           `json:"optedOut"`
+	OptedOut         int            `json:"optedOut"`
 	TimeZone         sql.NullString `json:"timeZone"`
 	ModifiedOn       sql.NullTime   `json:"modifiedOn"`
 	LastLogin        sql.NullTime   `json:"lastLogin"`
@@ -63,7 +63,7 @@ func NewUserRepo(rw, ro *sql.DB) *UserRepo {
 const irisUserListQuery = `
 SELECT u.id, u.first_name, u.last_name,
        uca.address AS email,
-       u.registration_date, u.opted_out, u.time_zone, u.modified_on, u.last_login,
+       u.registration_date, CAST(u.opted_out AS UNSIGNED) AS opted_out, u.time_zone, u.modified_on, u.last_login,
        COALESCE(GROUP_CONCAT(DISTINCT usr.security_role_id ORDER BY usr.security_role_id), '') AS role_ids,
        COALESCE(GROUP_CONCAT(DISTINCT sr.role_name ORDER BY sr.role_name), '') AS role_names
 FROM ic_user u
@@ -128,7 +128,7 @@ func (r *UserRepo) List(ctx context.Context, page, pageSize int, roleID *int64, 
 // GetByID returns a single IRIS user with their roles and email.
 func (r *UserRepo) GetByID(ctx context.Context, id int64) (*ICUserWithRoles, error) {
 	q := `SELECT u.id, u.market_id, u.first_name, u.last_name, u.registration_date,
-	             u.opted_out, u.time_zone, u.responder_type_id, u.modified_on, u.last_login,
+	             CAST(u.opted_out AS UNSIGNED) AS opted_out, u.time_zone, u.responder_type_id, u.modified_on, u.last_login,
 	             uca.address AS email
 	      FROM ic_user u
 	      LEFT JOIN user_communication_address uca ON uca.user_id = u.id AND uca.transport_type_id = 1
