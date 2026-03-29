@@ -337,3 +337,39 @@ func (repo *TimeSlotRepo) ListStatuses(ctx context.Context) ([]TimeSlotStatus, e
 	}
 	return result, rows.Err()
 }
+
+// BookingReward represents reward tracking for a timeslot/booking.
+type BookingReward struct {
+	TimeSlotID   int64  `json:"timeSlotId"`
+	RewardPoints int    `json:"rewardPoints"`
+	RewardStatus string `json:"rewardStatus"`
+}
+
+// GetReward returns reward info for a timeslot.
+func (repo *TimeSlotRepo) GetReward(ctx context.Context, timeSlotID int64) (*BookingReward, error) {
+	var br BookingReward
+	err := repo.db.QueryRowContext(ctx,
+		"SELECT time_slot_id, reward_points, reward_status FROM booking_reward WHERE time_slot_id = ?",
+		timeSlotID,
+	).Scan(&br.TimeSlotID, &br.RewardPoints, &br.RewardStatus)
+	if err == sql.ErrNoRows {
+		return &BookingReward{TimeSlotID: timeSlotID, RewardStatus: "not_credited"}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get reward %d: %w", timeSlotID, err)
+	}
+	return &br, nil
+}
+
+// UpsertReward inserts or updates reward info for a timeslot.
+func (repo *TimeSlotRepo) UpsertReward(ctx context.Context, timeSlotID int64, points int, status string) error {
+	q := `INSERT INTO booking_reward (time_slot_id, reward_points, reward_status)
+	      VALUES (?, ?, ?)
+	      ON DUPLICATE KEY UPDATE reward_points = VALUES(reward_points), reward_status = VALUES(reward_status)`
+	_, err := repo.db.ExecContext(ctx, q, timeSlotID, points, status)
+	if err != nil {
+		return fmt.Errorf("upsert reward %d: %w", timeSlotID, err)
+	}
+	slog.InfoContext(ctx, "upserted booking reward", "timeSlotId", timeSlotID, "points", points, "status", status)
+	return nil
+}

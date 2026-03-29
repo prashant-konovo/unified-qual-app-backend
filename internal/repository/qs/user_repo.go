@@ -295,3 +295,31 @@ func (r *UserRepo) UpdateModeratorBuffer(ctx context.Context, id int64, buffer i
 	slog.InfoContext(ctx, "updated QS moderator buffer", "id", id, "buffer", buffer)
 	return nil
 }
+
+// Create inserts a new user and assigns the given role IDs.
+func (r *UserRepo) Create(ctx context.Context, firstName, lastName, email, timeZone string, roleIDs []int) (int64, error) {
+	q := `INSERT INTO user (first_name, last_name, email, deleted, terms_accepted, time_zone) VALUES (?, ?, ?, 0, 0, ?)`
+	res, err := r.db.ExecContext(ctx, q, firstName, lastName, email, timeZone)
+	if err != nil {
+		return 0, fmt.Errorf("create qs user: %w", err)
+	}
+	uid, _ := res.LastInsertId()
+	for _, rid := range roleIDs {
+		_, err := r.db.ExecContext(ctx, "INSERT INTO user_role (user_id, role_id) VALUES (?, ?)", uid, rid)
+		if err != nil {
+			slog.WarnContext(ctx, "failed to assign role", "userId", uid, "roleId", rid, "error", err)
+		}
+	}
+	slog.InfoContext(ctx, "created QS user", "id", uid, "email", email, "roles", roleIDs)
+	return uid, nil
+}
+
+// SoftDelete marks a user as deleted.
+func (r *UserRepo) SoftDelete(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE user SET deleted = 1 WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("soft-delete qs user %d: %w", id, err)
+	}
+	slog.InfoContext(ctx, "soft-deleted QS user", "id", id)
+	return nil
+}

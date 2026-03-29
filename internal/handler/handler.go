@@ -30,10 +30,11 @@ type Handler struct {
 	qsUserRepo      *qs.UserRepo
 	qsTimeSlotRepo  *qs.TimeSlotRepo
 	qsRespondentRepo *qs.RespondentRepo
+	qsSurveyRepo    *qs.SurveyRepo
 }
 
-func New(cfg *config.Config, db *config.DBPair, irisRepo *iris.ProjectRepo, qsRepo *qs.ProjectRepo, irisUserRepo *iris.UserRepo, qsUserRepo *qs.UserRepo, qsTimeSlotRepo *qs.TimeSlotRepo, qsRespondentRepo *qs.RespondentRepo) *Handler {
-	return &Handler{cfg: cfg, db: db, irisProjectRepo: irisRepo, qsProjectRepo: qsRepo, irisUserRepo: irisUserRepo, qsUserRepo: qsUserRepo, qsTimeSlotRepo: qsTimeSlotRepo, qsRespondentRepo: qsRespondentRepo}
+func New(cfg *config.Config, db *config.DBPair, irisRepo *iris.ProjectRepo, qsRepo *qs.ProjectRepo, irisUserRepo *iris.UserRepo, qsUserRepo *qs.UserRepo, qsTimeSlotRepo *qs.TimeSlotRepo, qsRespondentRepo *qs.RespondentRepo, qsSurveyRepo *qs.SurveyRepo) *Handler {
+	return &Handler{cfg: cfg, db: db, irisProjectRepo: irisRepo, qsProjectRepo: qsRepo, irisUserRepo: irisUserRepo, qsUserRepo: qsUserRepo, qsTimeSlotRepo: qsTimeSlotRepo, qsRespondentRepo: qsRespondentRepo, qsSurveyRepo: qsSurveyRepo}
 }
 
 // ──────────────────────────────────────────────
@@ -999,57 +1000,185 @@ func toNullInt64(n int64) sql.NullInt64 {
 // Surveys
 // ──────────────────────────────────────────────
 
-func dummySurvey(sid string) map[string]any {
-	return map[string]any{
-		"id":          sid,
-		"title":       "Screening Survey - Cardiology",
-		"description": "Pre-screening questionnaire for cardiology study",
-		"status":      "active",
-		"questions":   []map[string]any{},
-		"rules":       []map[string]any{},
-		"createdAt":   "2026-03-01T10:00:00Z",
+func surveyToMap(s *qs.SurveyRow) map[string]any {
+	var questions []any
+	var rules []any
+	_ = json.Unmarshal([]byte(s.Questions), &questions)
+	_ = json.Unmarshal([]byte(s.Rules), &rules)
+	if questions == nil {
+		questions = []any{}
 	}
+	if rules == nil {
+		rules = []any{}
+	}
+	m := map[string]any{
+		"id":          fmt.Sprintf("%d", s.ID),
+		"title":       s.Title,
+		"status":      s.Status,
+		"questions":   questions,
+		"rules":       rules,
+		"crowdId":     "",
+		"crowdName":   "",
+		"createdAt":   s.CreatedOn.Format(time.RFC3339),
+		"updatedAt":   s.ModifiedOn.Format(time.RFC3339),
+	}
+	if s.ProjectID.Valid {
+		m["projectId"] = fmt.Sprintf("%d", s.ProjectID.Int64)
+	} else {
+		m["projectId"] = ""
+	}
+	if s.ProjectName.Valid {
+		m["projectName"] = s.ProjectName.String
+	} else {
+		m["projectName"] = ""
+	}
+	return m
 }
 
 func (h *Handler) ListSurveys(w http.ResponseWriter, r *http.Request) {
-	surveys := []map[string]any{
-		dummySurvey("surv-1"),
-		dummySurvey("surv-2"),
+	ctx := r.Context()
+	if h.qsSurveyRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
 	}
-	surveys[1]["title"] = "Screening Survey - Oncology"
-	writeJSON(w, http.StatusOK, surveys)
+	search := r.URL.Query().Get("search")
+	rows, err := h.qsSurveyRepo.List(ctx, search)
+	if err != nil {
+		slog.Error("list surveys", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list surveys"})
+		return
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, surveyToMap(&row))
+	}
+	successList(w, out, len(out))
+}
+
+type createSurveyRequest struct {
+	Title     string          `json:"title"`
+	ProjectID *int64          `json:"projectId,omitempty"`
+	Status    string          `json:"status"`
+	Questions json.RawMessage `json:"questions"`
+	Rules     json.RawMessage `json:"rules"`
 }
 
 func (h *Handler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
-	s := dummySurvey("surv-" + id()[:8])
-	s["createdAt"] = now()
-	created(w, s)
+	ctx := r.Context()
+	if h.qsSurveyRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+	var req createSurveyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+	if req.Title == "" {
+		req.Title = "Untitled Survey"
+	}
+	if req.Status == "" {
+		req.Status = "draft"
+	}
+	if req.Questions == nil {
+		req.Questions = json.RawMessage("[]")
+	}
+	if req.Rules == nil {
+		req.Rules = json.RawMessage("[]")
+	}
+	newID, err := h.qsSurveyRepo.Create(ctx, req.ProjectID, req.Title, req.Status, req.Questions, req.Rules)
+	if err != nil {
+		slog.Error("create survey", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create survey"})
+		return
+	}
+	row, err := h.qsSurveyRepo.GetByID(ctx, newID)
+	if err != nil || row == nil {
+		created(w, map[string]any{"id": fmt.Sprintf("%d", newID)})
+		return
+	}
+	created(w, surveyToMap(row))
 }
 
 func (h *Handler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.qsSurveyRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
 	sid := chi.URLParam(r, "id")
-	s := dummySurvey(sid)
-	s["updatedAt"] = now()
-	writeJSON(w, http.StatusOK, s)
+	surveyID, err := strconv.ParseInt(sid, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid survey id"})
+		return
+	}
+	var req createSurveyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+	if req.Questions == nil {
+		req.Questions = json.RawMessage("[]")
+	}
+	if req.Rules == nil {
+		req.Rules = json.RawMessage("[]")
+	}
+	if err := h.qsSurveyRepo.Update(ctx, surveyID, req.Title, req.Status, req.Questions, req.Rules); err != nil {
+		slog.Error("update survey", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to update survey"})
+		return
+	}
+	row, err := h.qsSurveyRepo.GetByID(ctx, surveyID)
+	if err != nil || row == nil {
+		success(w, map[string]any{"id": sid, "updatedAt": now()})
+		return
+	}
+	success(w, surveyToMap(row))
 }
 
 func (h *Handler) DeleteSurvey(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.qsSurveyRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+	sid := chi.URLParam(r, "id")
+	surveyID, err := strconv.ParseInt(sid, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid survey id"})
+		return
+	}
+	if err := h.qsSurveyRepo.Delete(ctx, surveyID); err != nil {
+		slog.Error("delete survey", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete survey"})
+		return
+	}
 	success(w, map[string]any{"deleted": true})
 }
 
 func (h *Handler) GetPublicSurvey(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.qsSurveyRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
 	sid := chi.URLParam(r, "surveyId")
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":          sid,
-		"projectId":   "proj-101",
-		"projectName": "Cardiology Study Q1",
-		"questions": []map[string]any{
-			{"id": "q1", "type": "single_choice", "text": "What is your specialty?",
-				"choices": []string{"Cardiology", "Oncology", "Neurology", "Other"}},
-			{"id": "q2", "type": "text", "text": "Years of experience?"},
-		},
-		"rules": []map[string]any{},
-	})
+	surveyID, err := strconv.ParseInt(sid, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid survey id"})
+		return
+	}
+	row, err := h.qsSurveyRepo.GetByID(ctx, surveyID)
+	if err != nil {
+		slog.Error("get public survey", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get survey"})
+		return
+	}
+	if row == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+		return
+	}
+	success(w, surveyToMap(row))
 }
 
 // ──────────────────────────────────────────────
@@ -1565,16 +1694,44 @@ func (h *Handler) ListModerators(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateModerator(w http.ResponseWriter, r *http.Request) {
-	// Create moderator is still a stub — user creation requires Cognito + DB coordination
-	m := map[string]any{
-		"id":        "mod-" + id()[:8],
-		"name":      "New Moderator",
-		"email":     "new@konovo.com",
+	ctx := r.Context()
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+	var req struct {
+		FirstName string `json:"firstName"`
+		LastName  string `json:"lastName"`
+		Email     string `json:"email"`
+		TimeZone  string `json:"timeZone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+	if req.Email == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "email is required"})
+		return
+	}
+	if req.TimeZone == "" {
+		req.TimeZone = "America/New_York"
+	}
+	// Role 1 = Moderator
+	uid, err := h.qsUserRepo.Create(ctx, req.FirstName, req.LastName, req.Email, req.TimeZone, []int{1})
+	if err != nil {
+		slog.Error("create moderator", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create moderator"})
+		return
+	}
+	created(w, map[string]any{
+		"id":        uid,
+		"firstName": req.FirstName,
+		"lastName":  req.LastName,
+		"email":     req.Email,
 		"role":      "moderator",
 		"status":    "active",
 		"createdAt": now(),
-	}
-	created(w, m)
+	})
 }
 
 func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
@@ -1702,7 +1859,22 @@ func (h *Handler) UpdateModerator(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{"deleted": true})
+	ctx := r.Context()
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+	modID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator id"})
+		return
+	}
+	if err := h.qsUserRepo.SoftDelete(ctx, modID); err != nil {
+		slog.Error("delete moderator", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete moderator"})
+		return
+	}
+	success(w, map[string]any{"deleted": true, "id": modID})
 }
 
 func (h *Handler) BulkUploadModerators(w http.ResponseWriter, r *http.Request) {
@@ -2102,8 +2274,38 @@ func (h *Handler) UpdateBooking(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateBookingReward(w http.ResponseWriter, r *http.Request) {
-	// Custom honorarium — still a stub as it involves external payment systems
-	success(w, map[string]any{"updated": true, "message": "honorarium tracking not yet implemented"})
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+	bookingID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid booking id"})
+		return
+	}
+	var req struct {
+		RewardPoints int    `json:"rewardPoints"`
+		RewardStatus string `json:"rewardStatus"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+	if req.RewardStatus == "" {
+		req.RewardStatus = "not_credited"
+	}
+	if err := h.qsTimeSlotRepo.UpsertReward(ctx, bookingID, req.RewardPoints, req.RewardStatus); err != nil {
+		slog.Error("update booking reward", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to update reward"})
+		return
+	}
+	success(w, map[string]any{
+		"id":           bookingID,
+		"rewardPoints": req.RewardPoints,
+		"rewardStatus": req.RewardStatus,
+		"updated":      true,
+	})
 }
 
 // ──────────────────────────────────────────────

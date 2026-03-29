@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -38,14 +39,20 @@ func main() {
 	var qsUserRepo *qs.UserRepo
 	var qsTimeSlotRepo *qs.TimeSlotRepo
 	var qsRespondentRepo *qs.RespondentRepo
+	var qsSurveyRepo *qs.SurveyRepo
 	if db.QS != nil {
 		qsProjectRepo = qs.NewProjectRepo(db.QS)
 		qsUserRepo = qs.NewUserRepo(db.QS)
 		qsTimeSlotRepo = qs.NewTimeSlotRepo(db.QS)
 		qsRespondentRepo = qs.NewRespondentRepo(db.QS)
+		qsSurveyRepo = qs.NewSurveyRepo(db.QS)
+		// Ensure survey table exists
+		if err := qsSurveyRepo.EnsureTable(context.Background()); err != nil {
+			slog.Warn("failed to ensure survey table", "error", err)
+		}
 	}
 
-	h := handler.New(cfg, db, irisProjectRepo, qsProjectRepo, irisUserRepo, qsUserRepo, qsTimeSlotRepo, qsRespondentRepo)
+	h := handler.New(cfg, db, irisProjectRepo, qsProjectRepo, irisUserRepo, qsUserRepo, qsTimeSlotRepo, qsRespondentRepo, qsSurveyRepo)
 	r := router.New(h, jwtAuth)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
