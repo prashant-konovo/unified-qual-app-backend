@@ -48,9 +48,8 @@ type ICCrowd struct {
 	TypeID         int            `json:"typeId"`
 	MarketID       int64          `json:"marketId"`
 	BrandID        int            `json:"brandId"`
-	Deleted        bool           `json:"deleted"`
+	Deleted        int            `json:"deleted"`
 	IsArchived     bool           `json:"isArchived"`
-	MembersCount   sql.NullInt64  `json:"membersCount"`
 	CreatedOn      time.Time      `json:"createdOn"`
 	ModifiedOn     time.Time      `json:"modifiedOn"`
 }
@@ -298,8 +297,8 @@ func (r *SurveyRepo) GetSurveyCrowds(ctx context.Context, surveyID int64) ([]map
 // ListCrowdsForSubscription returns crowds for a subscription.
 func (r *SurveyRepo) ListCrowdsForSubscription(ctx context.Context, subscriptionID int64) ([]ICCrowd, error) {
 	q := `SELECT id, name, description, subscription_id, type_id, market_id, brand_id,
-	       deleted, is_archived, crowd_members_count, created_on, modified_on
-	      FROM crowd WHERE subscription_id = ? AND deleted = 0 AND is_archived = 0
+	       CAST(deleted AS UNSIGNED), is_archived, created_on, modified_on
+	      FROM crowd WHERE subscription_id = ? AND deleted = b'0' AND is_archived = 0
 	      ORDER BY name`
 	rows, err := r.ro().QueryContext(ctx, q, subscriptionID)
 	if err != nil {
@@ -310,7 +309,7 @@ func (r *SurveyRepo) ListCrowdsForSubscription(ctx context.Context, subscription
 	for rows.Next() {
 		var c ICCrowd
 		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.SubscriptionID, &c.TypeID,
-			&c.MarketID, &c.BrandID, &c.Deleted, &c.IsArchived, &c.MembersCount,
+			&c.MarketID, &c.BrandID, &c.Deleted, &c.IsArchived,
 			&c.CreatedOn, &c.ModifiedOn); err != nil {
 			return nil, fmt.Errorf("scan crowd: %w", err)
 		}

@@ -590,7 +590,6 @@ func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) 
 			result = append(result, map[string]any{
 				"id": c.ID, "name": c.Name, "subscriptionId": c.SubscriptionID,
 				"typeId": c.TypeID, "marketId": c.MarketID,
-				"membersCount": niVal(c.MembersCount),
 			})
 		}
 		success(w, result)
