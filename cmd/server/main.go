@@ -36,12 +36,16 @@ func main() {
 	}
 	var qsProjectRepo *qs.ProjectRepo
 	var qsUserRepo *qs.UserRepo
+	var qsTimeSlotRepo *qs.TimeSlotRepo
+	var qsRespondentRepo *qs.RespondentRepo
 	if db.QS != nil {
 		qsProjectRepo = qs.NewProjectRepo(db.QS)
 		qsUserRepo = qs.NewUserRepo(db.QS)
+		qsTimeSlotRepo = qs.NewTimeSlotRepo(db.QS)
+		qsRespondentRepo = qs.NewRespondentRepo(db.QS)
 	}
 
-	h := handler.New(cfg, db, irisProjectRepo, qsProjectRepo, irisUserRepo, qsUserRepo)
+	h := handler.New(cfg, db, irisProjectRepo, qsProjectRepo, irisUserRepo, qsUserRepo, qsTimeSlotRepo, qsRespondentRepo)
 	r := router.New(h, jwtAuth)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)

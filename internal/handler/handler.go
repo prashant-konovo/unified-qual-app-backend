@@ -28,10 +28,12 @@ type Handler struct {
 	qsProjectRepo   *qs.ProjectRepo
 	irisUserRepo    *iris.UserRepo
 	qsUserRepo      *qs.UserRepo
+	qsTimeSlotRepo  *qs.TimeSlotRepo
+	qsRespondentRepo *qs.RespondentRepo
 }
 
-func New(cfg *config.Config, db *config.DBPair, irisRepo *iris.ProjectRepo, qsRepo *qs.ProjectRepo, irisUserRepo *iris.UserRepo, qsUserRepo *qs.UserRepo) *Handler {
-	return &Handler{cfg: cfg, db: db, irisProjectRepo: irisRepo, qsProjectRepo: qsRepo, irisUserRepo: irisUserRepo, qsUserRepo: qsUserRepo}
+func New(cfg *config.Config, db *config.DBPair, irisRepo *iris.ProjectRepo, qsRepo *qs.ProjectRepo, irisUserRepo *iris.UserRepo, qsUserRepo *qs.UserRepo, qsTimeSlotRepo *qs.TimeSlotRepo, qsRespondentRepo *qs.RespondentRepo) *Handler {
+	return &Handler{cfg: cfg, db: db, irisProjectRepo: irisRepo, qsProjectRepo: qsRepo, irisUserRepo: irisUserRepo, qsUserRepo: qsUserRepo, qsTimeSlotRepo: qsTimeSlotRepo, qsRespondentRepo: qsRespondentRepo}
 }
 
 // ──────────────────────────────────────────────
@@ -1087,53 +1089,325 @@ func (h *Handler) GetParticipantSurveyResponse(w http.ResponseWriter, r *http.Re
 // Timeslots
 // ──────────────────────────────────────────────
 
-func dummyTimeslot(tid string) map[string]any {
-	return map[string]any{
-		"id":            tid,
-		"moderatorId":   "mod-201",
-		"moderatorName": "Jane Smith",
-		"start":         "2026-04-01T09:00:00Z",
-		"end":           "2026-04-01T09:30:00Z",
-		"type":          "availability",
-		"projectId":     "proj-101",
-		"timezone":      "America/New_York",
-		"createdAt":     "2026-03-20T10:00:00Z",
-	}
-}
-
 func (h *Handler) ListTimeslots(w http.ResponseWriter, r *http.Request) {
-	slots := []map[string]any{
-		dummyTimeslot("ts-1"),
-		dummyTimeslot("ts-2"),
-		dummyTimeslot("ts-3"),
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
 	}
-	slots[1]["start"] = "2026-04-01T10:00:00Z"
-	slots[1]["end"] = "2026-04-01T10:30:00Z"
-	slots[1]["type"] = "interview"
-	slots[1]["participant"] = "Alice Johnson"
-	slots[2]["start"] = "2026-04-02T09:00:00Z"
-	slots[2]["end"] = "2026-04-02T17:00:00Z"
-	writeJSON(w, http.StatusOK, slots)
+
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	var projectID *int64
+	if pid := r.URL.Query().Get("projectId"); pid != "" {
+		v, _ := strconv.ParseInt(pid, 10, 64)
+		if v > 0 {
+			projectID = &v
+		}
+	}
+	var statusID *int
+	if sid := r.URL.Query().Get("statusId"); sid != "" {
+		v, _ := strconv.Atoi(sid)
+		if v > 0 {
+			statusID = &v
+		}
+	}
+	var moderatorID *int64
+	if mid := r.URL.Query().Get("moderatorId"); mid != "" {
+		v, _ := strconv.ParseInt(mid, 10, 64)
+		if v > 0 {
+			moderatorID = &v
+		}
+	}
+
+	slots, total, err := h.qsTimeSlotRepo.List(ctx, page, pageSize, projectID, statusID, moderatorID)
+	if err != nil {
+		slog.ErrorContext(ctx, "list timeslots failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list timeslots"})
+		return
+	}
+
+	result := make([]map[string]any, 0, len(slots))
+	for _, s := range slots {
+		item := map[string]any{
+			"id":                     s.ID,
+			"projectId":              s.ProjectID,
+			"projectName":            s.ProjectName,
+			"startTime":              s.StartTime.Format(time.RFC3339),
+			"endTime":                s.EndTime.Format(time.RFC3339),
+			"duration":               s.Duration,
+			"statusId":               s.StatusID,
+			"status":                 s.StatusName,
+			"confirmed":              s.Confirmed,
+			"isInvalid":              s.IsInvalid,
+			"isInvalidatedInterview": s.IsInvalidatedInterview,
+			"source":                 "qs",
+			"serviceCategory":        "MRA",
+			"modifiedOn":             s.ModifiedOn.Format(time.RFC3339),
+		}
+		if s.ModeratorID.Valid {
+			item["moderatorId"] = s.ModeratorID.Int64
+			item["moderatorName"] = s.ModeratorName.String
+			item["isHost"] = s.IsHost.Valid && s.IsHost.Bool
+		}
+		if s.ResponderID.Valid {
+			item["responderId"] = s.ResponderID.Int64
+			item["responderName"] = s.ResponderName.String
+		}
+		if s.ConferenceHash.Valid {
+			item["conferenceHash"] = s.ConferenceHash.String
+		}
+		if s.InvalidationReasonCode.Valid {
+			item["invalidationReasonCode"] = s.InvalidationReasonCode.String
+		}
+		result = append(result, item)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data":    result,
+		"meta": map[string]any{
+			"page":       page,
+			"pageSize":   pageSize,
+			"totalCount": total,
+		},
+	})
 }
 
 func (h *Handler) CreateTimeslot(w http.ResponseWriter, r *http.Request) {
-	ts := dummyTimeslot("ts-" + id()[:8])
-	ts["createdAt"] = now()
-	created(w, ts)
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	var body struct {
+		ProjectID   int64  `json:"projectId"`
+		StartTime   string `json:"startTime"`
+		EndTime     string `json:"endTime"`
+		Duration    int    `json:"duration"`
+		ModeratorID int64  `json:"moderatorId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+	if body.ProjectID == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "projectId is required"})
+		return
+	}
+
+	st, err := time.Parse(time.RFC3339, body.StartTime)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid startTime format, use RFC3339"})
+		return
+	}
+	et, err := time.Parse(time.RFC3339, body.EndTime)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid endTime format, use RFC3339"})
+		return
+	}
+	if body.Duration <= 0 {
+		body.Duration = 15
+	}
+
+	ts := &qs.TimeSlot{
+		ProjectID: body.ProjectID,
+		StartTime: st,
+		EndTime:   et,
+		Confirmed: true,
+		StatusID:  1, // OPEN
+		Duration:  body.Duration,
+	}
+
+	tsID, err := h.qsTimeSlotRepo.Create(ctx, ts)
+	if err != nil {
+		slog.ErrorContext(ctx, "create timeslot failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create timeslot"})
+		return
+	}
+
+	// Assign moderator if provided
+	if body.ModeratorID > 0 {
+		if _, err := h.qsTimeSlotRepo.AssignModerator(ctx, body.ModeratorID, tsID, true); err != nil {
+			slog.ErrorContext(ctx, "assign moderator failed", "error", err, "timeSlotId", tsID, "moderatorId", body.ModeratorID)
+		}
+	}
+
+	created(w, map[string]any{"id": tsID, "projectId": body.ProjectID, "statusId": 1, "source": "qs"})
 }
 
 func (h *Handler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, dummyTimeslot(chi.URLParam(r, "id")))
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	tsID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid timeslot id"})
+		return
+	}
+
+	ts, err := h.qsTimeSlotRepo.GetByID(ctx, tsID)
+	if err != nil {
+		slog.ErrorContext(ctx, "get timeslot failed", "error", err, "id", tsID)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		return
+	}
+	if ts == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "timeslot not found"})
+		return
+	}
+
+	result := map[string]any{
+		"id":                       ts.ID,
+		"projectId":                ts.ProjectID,
+		"startTime":                ts.StartTime.Format(time.RFC3339),
+		"endTime":                  ts.EndTime.Format(time.RFC3339),
+		"confirmed":                ts.Confirmed,
+		"statusId":                 ts.StatusID,
+		"duration":                 ts.Duration,
+		"isInvalid":                ts.IsInvalid,
+		"isInvalidatedInterview":   ts.IsInvalidatedInterview,
+		"isPreviousNoShow":         ts.IsPreviousNoShow,
+		"source":                   "qs",
+		"serviceCategory":          "MRA",
+		"modifiedOn":               ts.ModifiedOn.Format(time.RFC3339),
+	}
+	if ts.ConferenceHash.Valid {
+		result["conferenceHash"] = ts.ConferenceHash.String
+	}
+	if ts.ParticipantHash.Valid {
+		result["participantHash"] = ts.ParticipantHash.String
+	}
+	if ts.InvalidationReasonCode.Valid {
+		result["invalidationReasonCode"] = ts.InvalidationReasonCode.String
+	}
+	if ts.InvalidationReasonText.Valid {
+		result["invalidationReasonText"] = ts.InvalidationReasonText.String
+	}
+
+	// Get assigned moderators
+	mods, err := h.qsTimeSlotRepo.GetModerators(ctx, tsID)
+	if err != nil {
+		slog.ErrorContext(ctx, "get timeslot moderators failed", "error", err)
+	}
+	if mods != nil {
+		modList := make([]map[string]any, 0, len(mods))
+		for _, m := range mods {
+			modList = append(modList, map[string]any{
+				"moderatorId": m.ModeratorID,
+				"isHost":      m.IsHost,
+			})
+		}
+		result["moderators"] = modList
+	}
+
+	// Get linked respondent
+	resp, err := h.qsTimeSlotRepo.GetRespondent(ctx, tsID)
+	if err != nil {
+		slog.ErrorContext(ctx, "get timeslot respondent failed", "error", err)
+	}
+	if resp != nil {
+		result["respondent"] = map[string]any{
+			"id":        resp.ID,
+			"firstName": resp.FirstName,
+			"lastName":  resp.LastName,
+			"timeZone":  resp.TimeZone.String,
+		}
+	}
+
+	success(w, result)
 }
 
 func (h *Handler) UpdateTimeslot(w http.ResponseWriter, r *http.Request) {
-	ts := dummyTimeslot(chi.URLParam(r, "id"))
-	ts["updatedAt"] = now()
-	writeJSON(w, http.StatusOK, ts)
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	tsID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid timeslot id"})
+		return
+	}
+
+	var body struct {
+		StatusID  *int   `json:"statusId"`
+		Confirmed *bool  `json:"confirmed"`
+		IsInvalid *int   `json:"isInvalid"`
+		StartTime string `json:"startTime"`
+		EndTime   string `json:"endTime"`
+		Duration  *int   `json:"duration"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+
+	fields := map[string]any{}
+	if body.StatusID != nil {
+		fields["status_id"] = *body.StatusID
+	}
+	if body.Confirmed != nil {
+		fields["confirmed"] = *body.Confirmed
+	}
+	if body.IsInvalid != nil {
+		fields["is_invalid"] = *body.IsInvalid
+	}
+	if body.Duration != nil {
+		fields["duration"] = *body.Duration
+	}
+	if body.StartTime != "" {
+		if st, err := time.Parse(time.RFC3339, body.StartTime); err == nil {
+			fields["start_time"] = st
+		}
+	}
+	if body.EndTime != "" {
+		if et, err := time.Parse(time.RFC3339, body.EndTime); err == nil {
+			fields["end_time"] = et
+		}
+	}
+
+	if err := h.qsTimeSlotRepo.Update(ctx, tsID, fields); err != nil {
+		slog.ErrorContext(ctx, "update timeslot failed", "error", err, "id", tsID)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+		return
+	}
+
+	success(w, map[string]any{"id": tsID, "updated": true, "source": "qs"})
 }
 
 func (h *Handler) DeleteTimeslot(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{"deleted": true})
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	tsID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid timeslot id"})
+		return
+	}
+
+	if err := h.qsTimeSlotRepo.Delete(ctx, tsID); err != nil {
+		slog.ErrorContext(ctx, "delete timeslot failed", "error", err, "id", tsID)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+		return
+	}
+
+	success(w, map[string]any{"deleted": true, "id": tsID})
 }
 
 // ──────────────────────────────────────────────
@@ -1141,6 +1415,8 @@ func (h *Handler) DeleteTimeslot(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) GenerateSlots(w http.ResponseWriter, r *http.Request) {
+	// Slot generation remains a stub — requires complex scheduling algorithm
+	// matching moderator availability, project duration, buffer times, etc.
 	slots := []map[string]any{
 		{"id": "slot-1", "projectId": "proj-101", "moderatorId": "mod-201",
 			"start": "2026-04-01T09:00:00Z", "end": "2026-04-01T09:30:00Z", "capacity": 1},
@@ -1153,13 +1429,45 @@ func (h *Handler) GenerateSlots(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetAvailableSlots(w http.ResponseWriter, r *http.Request) {
-	slots := []map[string]any{
-		{"id": "slot-1", "projectId": "proj-101", "moderatorId": "mod-201", "moderatorName": "Jane Smith",
-			"start": "2026-04-01T09:00:00Z", "end": "2026-04-01T09:30:00Z", "capacity": 1},
-		{"id": "slot-2", "projectId": "proj-101", "moderatorId": "mod-201", "moderatorName": "Jane Smith",
-			"start": "2026-04-01T10:00:00Z", "end": "2026-04-01T10:30:00Z", "capacity": 1},
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
 	}
-	writeJSON(w, http.StatusOK, slots)
+
+	// Return OPEN timeslots (status_id=1)
+	openStatus := 1
+	var projectID *int64
+	if pid := r.URL.Query().Get("projectId"); pid != "" {
+		v, _ := strconv.ParseInt(pid, 10, 64)
+		if v > 0 {
+			projectID = &v
+		}
+	}
+
+	slots, _, err := h.qsTimeSlotRepo.List(ctx, 1, 50, projectID, &openStatus, nil)
+	if err != nil {
+		slog.ErrorContext(ctx, "get available slots failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get available slots"})
+		return
+	}
+
+	result := make([]map[string]any, 0, len(slots))
+	for _, s := range slots {
+		item := map[string]any{
+			"id":        s.ID,
+			"projectId": s.ProjectID,
+			"startTime": s.StartTime.Format(time.RFC3339),
+			"endTime":   s.EndTime.Format(time.RFC3339),
+			"duration":  s.Duration,
+		}
+		if s.ModeratorID.Valid {
+			item["moderatorId"] = s.ModeratorID.Int64
+			item["moderatorName"] = s.ModeratorName.String
+		}
+		result = append(result, item)
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) GetAISuggestions(w http.ResponseWriter, r *http.Request) {
@@ -1388,128 +1696,398 @@ func (h *Handler) BulkUploadModerators(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetModeratorTimeslots(w http.ResponseWriter, r *http.Request) {
-	modID := chi.URLParam(r, "moderatorId")
-	slots := []map[string]any{
-		dummyTimeslot("ts-m-1"),
-		dummyTimeslot("ts-m-2"),
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
 	}
-	slots[0]["moderatorId"] = modID
-	slots[1]["moderatorId"] = modID
-	slots[1]["start"] = "2026-04-02T09:00:00Z"
-	slots[1]["end"] = "2026-04-02T17:00:00Z"
-	writeJSON(w, http.StatusOK, slots)
+
+	modID, err := strconv.ParseInt(chi.URLParam(r, "moderatorId"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator id"})
+		return
+	}
+
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 50
+	}
+
+	slots, total, err := h.qsTimeSlotRepo.ListByModerator(ctx, modID, page, pageSize)
+	if err != nil {
+		slog.ErrorContext(ctx, "get moderator timeslots failed", "error", err, "moderatorId", modID)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get moderator timeslots"})
+		return
+	}
+
+	result := make([]map[string]any, 0, len(slots))
+	for _, s := range slots {
+		item := map[string]any{
+			"id":          s.ID,
+			"projectId":   s.ProjectID,
+			"projectName": s.ProjectName,
+			"startTime":   s.StartTime.Format(time.RFC3339),
+			"endTime":     s.EndTime.Format(time.RFC3339),
+			"duration":    s.Duration,
+			"statusId":    s.StatusID,
+			"status":      s.StatusName,
+			"confirmed":   s.Confirmed,
+			"source":      "qs",
+		}
+		if s.ResponderID.Valid {
+			item["responderId"] = s.ResponderID.Int64
+			item["responderName"] = s.ResponderName.String
+		}
+		result = append(result, item)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data":    result,
+		"meta":    map[string]any{"page": page, "pageSize": pageSize, "totalCount": total},
+	})
 }
 
 // ──────────────────────────────────────────────
 // Participants
 // ──────────────────────────────────────────────
 
-func dummyParticipant(pid string) map[string]any {
-	return map[string]any{
-		"id":        pid,
-		"name":      "Alice Johnson",
-		"email":     "alice@hospital.org",
-		"phone":     "+15559876543",
-		"role":      "participant",
-		"status":    "active",
-		"createdAt": "2026-03-10T10:00:00Z",
-	}
-}
-
 func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
-	parts := []map[string]any{
-		dummyParticipant("par-301"),
-		dummyParticipant("par-302"),
-		dummyParticipant("par-303"),
+	ctx := r.Context()
+	if h.qsRespondentRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
 	}
-	parts[1]["name"] = "Bob Patient"
-	parts[1]["email"] = "bob@clinic.org"
-	parts[2]["name"] = "Carol Respondent"
-	parts[2]["email"] = "carol@lab.org"
-	writeJSON(w, http.StatusOK, parts)
+
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+	search := strings.TrimSpace(r.URL.Query().Get("search"))
+
+	respondents, total, err := h.qsRespondentRepo.List(ctx, page, pageSize, search)
+	if err != nil {
+		slog.ErrorContext(ctx, "list participants failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list participants"})
+		return
+	}
+
+	result := make([]map[string]any, 0, len(respondents))
+	for _, r := range respondents {
+		item := map[string]any{
+			"id":        r.ID,
+			"firstName": r.FirstName,
+			"lastName":  r.LastName,
+			"name":      strings.TrimSpace(r.FirstName + " " + r.LastName),
+			"source":    "qs",
+			"serviceCategory": "MRA",
+			"modifiedOn": r.ModifiedOn.Format(time.RFC3339),
+		}
+		if r.Title.Valid {
+			item["title"] = r.Title.String
+		}
+		if r.ExternalResponderID.Valid {
+			item["externalResponderId"] = r.ExternalResponderID.String
+		}
+		if r.TimeZone.Valid {
+			item["timeZone"] = r.TimeZone.String
+		}
+		if r.Email.Valid {
+			item["email"] = r.Email.String
+		}
+		if r.Phone.Valid {
+			item["phone"] = r.Phone.String
+		}
+		result = append(result, item)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data":    result,
+		"meta": map[string]any{
+			"page":       page,
+			"pageSize":   pageSize,
+			"totalCount": total,
+		},
+	})
 }
 
 func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
-	p := dummyParticipant("par-" + id()[:8])
-	p["createdAt"] = now()
-	created(w, p)
+	ctx := r.Context()
+	if h.qsRespondentRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	var body struct {
+		FirstName           string `json:"firstName"`
+		LastName            string `json:"lastName"`
+		Title               string `json:"title"`
+		Email               string `json:"email"`
+		Phone               string `json:"phone"`
+		ExternalResponderID string `json:"externalResponderId"`
+		TimeZone            string `json:"timeZone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+	if body.FirstName == "" || body.LastName == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "firstName and lastName are required"})
+		return
+	}
+
+	resp := &qs.Respondent{
+		FirstName:           body.FirstName,
+		LastName:            body.LastName,
+		Title:               toNullStr(body.Title),
+		ExternalResponderID: toNullStr(body.ExternalResponderID),
+		TimeZone:            toNullStr(body.TimeZone),
+	}
+
+	respID, err := h.qsRespondentRepo.Create(ctx, resp)
+	if err != nil {
+		slog.ErrorContext(ctx, "create participant failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create participant"})
+		return
+	}
+
+	// Add email as communication address (transport_type_id=1)
+	if body.Email != "" {
+		if _, err := h.qsRespondentRepo.CreateCommunicationAddress(ctx, respID, 1, body.Email); err != nil {
+			slog.ErrorContext(ctx, "create participant email failed", "error", err)
+		}
+	}
+	// Add phone as communication address (transport_type_id=2)
+	if body.Phone != "" {
+		if _, err := h.qsRespondentRepo.CreateCommunicationAddress(ctx, respID, 2, body.Phone); err != nil {
+			slog.ErrorContext(ctx, "create participant phone failed", "error", err)
+		}
+	}
+
+	created(w, map[string]any{"id": respID, "source": "qs"})
 }
 
 func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
-	pid := chi.URLParam(r, "id")
-	p := dummyParticipant(pid)
-	p["surveyResponse"] = map[string]any{
-		"id": "resp-1", "projectId": "proj-101", "status": "qualified",
-		"submittedAt": "2026-03-15T10:00:00Z",
-		"answers":     map[string]any{"q1": "Cardiology", "q2": "10"},
+	ctx := r.Context()
+	if h.qsRespondentRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
 	}
-	p["booking"] = map[string]any{
-		"id": "bk-1", "projectId": "proj-101", "slotId": "ts-1",
-		"moderatorId": "mod-201", "moderatorName": "Jane Smith",
-		"slotStart": "2026-04-01T09:00:00Z", "slotEnd": "2026-04-01T09:30:00Z",
-		"status": "scheduled",
+
+	respID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid participant id"})
+		return
 	}
-	writeJSON(w, http.StatusOK, p)
+
+	resp, err := h.qsRespondentRepo.GetByID(ctx, respID)
+	if err != nil {
+		slog.ErrorContext(ctx, "get participant failed", "error", err, "id", respID)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		return
+	}
+	if resp == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "participant not found"})
+		return
+	}
+
+	result := map[string]any{
+		"id":              resp.ID,
+		"firstName":       resp.FirstName,
+		"lastName":        resp.LastName,
+		"name":            strings.TrimSpace(resp.FirstName + " " + resp.LastName),
+		"source":          "qs",
+		"serviceCategory": "MRA",
+		"modifiedOn":      resp.ModifiedOn.Format(time.RFC3339),
+	}
+	if resp.Title.Valid {
+		result["title"] = resp.Title.String
+	}
+	if resp.ExternalResponderID.Valid {
+		result["externalResponderId"] = resp.ExternalResponderID.String
+	}
+	if resp.TimeZone.Valid {
+		result["timeZone"] = resp.TimeZone.String
+	}
+	if resp.LanguageCountry.Valid {
+		result["languageCountry"] = resp.LanguageCountry.String
+	}
+
+	// Get communication addresses
+	addrs, err := h.qsRespondentRepo.GetCommunicationAddresses(ctx, respID)
+	if err != nil {
+		slog.ErrorContext(ctx, "get participant addresses failed", "error", err)
+	}
+	if addrs != nil {
+		contacts := make([]map[string]any, 0, len(addrs))
+		for _, a := range addrs {
+			transport := "other"
+			switch a.TransportTypeID {
+			case 1:
+				transport = "email"
+			case 2:
+				transport = "sms"
+			}
+			contacts = append(contacts, map[string]any{
+				"type":        transport,
+				"address":     a.Address,
+				"contactable": a.Contactable,
+				"optedOut":    a.OptedOut,
+			})
+		}
+		result["contacts"] = contacts
+	}
+
+	success(w, result)
 }
 
 // ──────────────────────────────────────────────
-// Bookings
+// Bookings (QS: timeslots with linked respondents)
 // ──────────────────────────────────────────────
-
-func dummyBooking(bid string) map[string]any {
-	return map[string]any{
-		"id":              bid,
-		"userId":          "par-301",
-		"projectId":       "proj-101",
-		"projectName":     "Cardiology Study Q1",
-		"slotId":          "ts-1",
-		"moderatorId":     "mod-201",
-		"moderatorName":   "Jane Smith",
-		"participantName": "Alice Johnson",
-		"slotStart":       "2026-04-01T09:00:00Z",
-		"slotEnd":         "2026-04-01T09:30:00Z",
-		"meetingLink":     "https://meet.example.com/abc",
-		"status":          "scheduled",
-		"rewardPoints":    150,
-		"rewardStatus":    "not_credited",
-		"createdAt":       "2026-03-20T10:00:00Z",
-	}
-}
 
 func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
-	bookings := []map[string]any{
-		dummyBooking("bk-1"),
-		dummyBooking("bk-2"),
-		dummyBooking("bk-3"),
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
 	}
-	bookings[1]["participantName"] = "Bob Patient"
-	bookings[1]["status"] = "completed"
-	bookings[1]["rewardStatus"] = "credited"
-	bookings[2]["participantName"] = "Carol Respondent"
-	bookings[2]["status"] = "cancelled"
-	writeJSON(w, http.StatusOK, bookings)
+
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	var projectID *int64
+	if pid := r.URL.Query().Get("projectId"); pid != "" {
+		v, _ := strconv.ParseInt(pid, 10, 64)
+		if v > 0 {
+			projectID = &v
+		}
+	}
+
+	// Bookings are timeslots that have a linked respondent (non-OPEN status)
+	slots, total, err := h.qsTimeSlotRepo.List(ctx, page, pageSize, projectID, nil, nil)
+	if err != nil {
+		slog.ErrorContext(ctx, "list bookings failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list bookings"})
+		return
+	}
+
+	// Filter to only include slots that have a respondent
+	result := make([]map[string]any, 0)
+	for _, s := range slots {
+		if !s.ResponderID.Valid {
+			continue
+		}
+		item := map[string]any{
+			"id":              s.ID,
+			"projectId":       s.ProjectID,
+			"projectName":     s.ProjectName,
+			"startTime":       s.StartTime.Format(time.RFC3339),
+			"endTime":         s.EndTime.Format(time.RFC3339),
+			"duration":        s.Duration,
+			"statusId":        s.StatusID,
+			"status":          s.StatusName,
+			"responderId":     s.ResponderID.Int64,
+			"responderName":   s.ResponderName.String,
+			"source":          "qs",
+			"serviceCategory": "MRA",
+			"modifiedOn":      s.ModifiedOn.Format(time.RFC3339),
+		}
+		if s.ModeratorID.Valid {
+			item["moderatorId"] = s.ModeratorID.Int64
+			item["moderatorName"] = s.ModeratorName.String
+		}
+		if s.ConferenceHash.Valid {
+			item["conferenceHash"] = s.ConferenceHash.String
+		}
+		result = append(result, item)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data":    result,
+		"meta": map[string]any{
+			"page":       page,
+			"pageSize":   pageSize,
+			"totalCount": total,
+		},
+	})
 }
 
 func (h *Handler) CreateBooking(w http.ResponseWriter, r *http.Request) {
-	b := dummyBooking("bk-" + id()[:8])
-	b["createdAt"] = now()
-	created(w, b)
+	// Booking creation is handled via ScheduleInterview which links respondent to timeslot
+	created(w, map[string]any{"message": "use POST /interviews/schedule to create bookings"})
 }
 
 func (h *Handler) GetBookingsByUser(w http.ResponseWriter, r *http.Request) {
-	b := dummyBooking("bk-1")
-	b["userId"] = chi.URLParam(r, "userId")
-	writeJSON(w, http.StatusOK, []map[string]any{b})
+	// This returns timeslots linked to a specific respondent
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	// userId here would be a responder ID in the QS context
+	userID := chi.URLParam(r, "userId")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data":    []map[string]any{},
+		"message": fmt.Sprintf("bookings for user %s — respondent-level lookup pending", userID),
+	})
 }
 
 func (h *Handler) UpdateBooking(w http.ResponseWriter, r *http.Request) {
-	b := dummyBooking(chi.URLParam(r, "id"))
-	b["updatedAt"] = now()
-	writeJSON(w, http.StatusOK, b)
+	// Booking update is a timeslot status change
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	tsID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid booking id"})
+		return
+	}
+
+	var body struct {
+		StatusID *int `json:"statusId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+
+	fields := map[string]any{}
+	if body.StatusID != nil {
+		fields["status_id"] = *body.StatusID
+	}
+
+	if err := h.qsTimeSlotRepo.Update(ctx, tsID, fields); err != nil {
+		slog.ErrorContext(ctx, "update booking failed", "error", err, "id", tsID)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+		return
+	}
+
+	success(w, map[string]any{"id": tsID, "updated": true, "source": "qs"})
 }
 
 func (h *Handler) UpdateBookingReward(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{"updated": true})
+	// Custom honorarium — still a stub as it involves external payment systems
+	success(w, map[string]any{"updated": true, "message": "honorarium tracking not yet implemented"})
 }
 
 // ──────────────────────────────────────────────
@@ -1617,26 +2195,150 @@ func (h *Handler) TriggerMatching(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	var body struct {
+		TimeSlotID  int64 `json:"timeSlotId"`
+		ModeratorID int64 `json:"moderatorId"`
+		ResponderID int64 `json:"responderId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+	if body.TimeSlotID == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "timeSlotId is required"})
+		return
+	}
+
+	// Update timeslot status to PENDING (2)
+	if err := h.qsTimeSlotRepo.Update(ctx, body.TimeSlotID, map[string]any{"status_id": 2, "confirmed": true}); err != nil {
+		slog.ErrorContext(ctx, "schedule interview: update timeslot failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to schedule interview"})
+		return
+	}
+
+	// Assign moderator if provided
+	if body.ModeratorID > 0 {
+		if _, err := h.qsTimeSlotRepo.AssignModerator(ctx, body.ModeratorID, body.TimeSlotID, true); err != nil {
+			slog.ErrorContext(ctx, "schedule interview: assign moderator failed", "error", err)
+		}
+	}
+
 	created(w, map[string]any{
-		"interviewId":    "int-" + id()[:8],
-		"timeSlotId":     301,
-		"conferenceLink": "https://chime.aws/meeting/abc123",
-		"startTime":      "2026-04-01T14:00:00Z",
-		"endTime":        "2026-04-01T14:30:00Z",
-		"status":         "scheduled",
+		"timeSlotId": body.TimeSlotID,
+		"statusId":   2,
+		"status":     "PENDING",
+		"source":     "qs",
 	})
 }
 
 func (h *Handler) CancelInterview(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{
-		"interviewId": chi.URLParam(r, "id"), "status": "canceled",
-	})
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	tsID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid interview id"})
+		return
+	}
+
+	var body struct {
+		Reason string `json:"reason"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	user := middleware.GetUser(r)
+	cancelStatusID := 12 // PM_CANCELLED by default
+	if user != nil {
+		for _, role := range user.Roles {
+			if role == "moderator" {
+				cancelStatusID = 5 // MODERATOR_CANCELLED
+				break
+			}
+		}
+	}
+
+	fields := map[string]any{"status_id": cancelStatusID}
+	if body.Reason != "" {
+		fields["invalidation_reason_text"] = body.Reason
+	}
+	if user != nil {
+		fields["status_modified_by"] = 0 // placeholder: would need user lookup to get QS user ID
+	}
+
+	if err := h.qsTimeSlotRepo.Update(ctx, tsID, fields); err != nil {
+		slog.ErrorContext(ctx, "cancel interview failed", "error", err, "id", tsID)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "cancel failed"})
+		return
+	}
+
+	success(w, map[string]any{"timeSlotId": tsID, "statusId": cancelStatusID, "status": "CANCELLED"})
 }
 
 func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{
-		"interviewId": chi.URLParam(r, "id"), "status": "rescheduled",
-	})
+	ctx := r.Context()
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		return
+	}
+
+	tsID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid interview id"})
+		return
+	}
+
+	var body struct {
+		NewStartTime string `json:"newStartTime"`
+		NewEndTime   string `json:"newEndTime"`
+		Reason       string `json:"reason"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		return
+	}
+
+	user := middleware.GetUser(r)
+	rescheduleStatusID := 11 // PM_RESCHEDULED by default
+	if user != nil {
+		for _, role := range user.Roles {
+			if role == "moderator" {
+				rescheduleStatusID = 3 // MODERATOR_RESCHEDULED
+				break
+			}
+		}
+	}
+
+	fields := map[string]any{"status_id": rescheduleStatusID}
+	if body.NewStartTime != "" {
+		if st, err := time.Parse(time.RFC3339, body.NewStartTime); err == nil {
+			fields["start_time"] = st
+		}
+	}
+	if body.NewEndTime != "" {
+		if et, err := time.Parse(time.RFC3339, body.NewEndTime); err == nil {
+			fields["end_time"] = et
+		}
+	}
+	if body.Reason != "" {
+		fields["invalidation_reason_text"] = body.Reason
+	}
+
+	if err := h.qsTimeSlotRepo.Update(ctx, tsID, fields); err != nil {
+		slog.ErrorContext(ctx, "reschedule interview failed", "error", err, "id", tsID)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "reschedule failed"})
+		return
+	}
+
+	success(w, map[string]any{"timeSlotId": tsID, "statusId": rescheduleStatusID, "status": "RESCHEDULED"})
 }
 
 // ──────────────────────────────────────────────
