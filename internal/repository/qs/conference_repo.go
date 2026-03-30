@@ -176,3 +176,49 @@ func (r *ConferenceRepo) Login(ctx context.Context, conferenceHash, pin string) 
 	}
 	return meta, nil
 }
+
+// CreateConferenceLink creates a conference invitation link for a timeslot.
+func (r *ConferenceRepo) CreateConferenceLink(ctx context.Context, timeSlotID, projectID int64, conferenceHash string) (int64, error) {
+	q := `INSERT INTO conference_invitation (time_slot_id, conference_hash, created_on) VALUES (?, ?, NOW())`
+	res, err := r.db.ExecContext(ctx, q, timeSlotID, conferenceHash)
+	if err != nil {
+		return 0, fmt.Errorf("create conference link: %w", err)
+	}
+	return res.LastInsertId()
+}
+
+// UpdateConferenceLink updates a conference invitation's hash/pin.
+func (r *ConferenceRepo) UpdateConferenceLink(ctx context.Context, timeSlotID int64, conferenceHash, pin string) error {
+	q := `UPDATE conference_invitation SET conference_hash = ?, pin = ? WHERE time_slot_id = ?`
+	_, err := r.db.ExecContext(ctx, q, conferenceHash, pin, timeSlotID)
+	if err != nil {
+		return fmt.Errorf("update conference link: %w", err)
+	}
+	return nil
+}
+
+// GetConferenceLinkByTimeSlotID returns conference data by timeslot ID.
+func (r *ConferenceRepo) GetConferenceLinkByTimeSlotID(ctx context.Context, timeSlotID int64) (map[string]any, error) {
+	q := `SELECT id, time_slot_id, conference_hash, COALESCE(pin, '') as pin FROM conference_invitation WHERE time_slot_id = ?`
+	var id, tsID int64
+	var hash, pinVal string
+	err := r.db.QueryRowContext(ctx, q, timeSlotID).Scan(&id, &tsID, &hash, &pinVal)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get conf link by ts: %w", err)
+	}
+	return map[string]any{"id": id, "timeSlotId": tsID, "conferenceHash": hash, "pin": pinVal}, nil
+}
+
+// UpdateRecordingStatus updates recording metadata for a conference by meeting/hash ID.
+func (r *ConferenceRepo) UpdateRecordingStatus(ctx context.Context, meetingID, status, bucket, key string) error {
+	q := `UPDATE conference_invitation SET recording_status = ?, recording_bucket = ?, recording_key = ?, modified_on = NOW()
+	      WHERE conference_hash = ?`
+	_, err := r.db.ExecContext(ctx, q, status, bucket, key, meetingID)
+	if err != nil {
+		return fmt.Errorf("update recording status: %w", err)
+	}
+	return nil
+}

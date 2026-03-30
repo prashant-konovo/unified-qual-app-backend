@@ -31,6 +31,38 @@ type Config struct {
 	AuthAPIURL string
 	AuthAPIKey string
 
+	// Conference Service (Chime proxy — API Gateway + Lambda)
+	ConferenceService ConferenceServiceConfig
+
+	// Notification Service (SES-backed email API)
+	NotificationService NotificationServiceConfig
+
+	// Google Calendar integration (service account)
+	GoogleCalendar GoogleCalendarConfig
+
+	// Decipher survey platform
+	Decipher DecipherConfig
+
+	// CastingWords transcription
+	CastingWords CastingWordsConfig
+
+	// Payment gateways
+	Stripe  StripeConfig
+	Tango   TangoConfig
+	PayPal  PayPalConfig
+
+	// SMS (Bandwidth)
+	SMS SMSConfig
+
+	// Event logging service
+	EventLog EventLogConfig
+
+	// Google Sheets integration
+	GoogleSheets GoogleSheetsConfig
+
+	// S3 buckets
+	S3 S3Config
+
 	// CORS
 	CORSOrigins string
 }
@@ -69,6 +101,71 @@ type CognitoConfig struct {
 	SSOClientSecret string  // Secret for the SSO OAuth client
 	Domain         string   // Cognito hosted UI domain (full hostname, e.g. "admin-dev-auth.incrowdanswers.com")
 	SSORedirectURI string   // Callback URL for SSO code exchange
+}
+
+type ConferenceServiceConfig struct {
+	BaseURL string // API Gateway URL, e.g. "https://xxx.execute-api.us-east-1.amazonaws.com/prod"
+	APIKey  string // x-api-key header value
+}
+
+type NotificationServiceConfig struct {
+	BaseURL    string // Notification service API Gateway URL
+	APIKey     string // x-api-key header value
+	BearerToken string // Static bearer token for service-to-service auth
+}
+
+type GoogleCalendarConfig struct {
+	ServiceAccountKeyPath string // Path to service account JSON key file
+	DefaultCalendarID     string
+}
+
+type DecipherConfig struct {
+	BaseURL string // e.g. "https://surveys.opinionsite.com/api/v1"
+	APIKey  string
+}
+
+type CastingWordsConfig struct {
+	BaseURL string // e.g. "https://castingwords.com/store/API4"
+	APIKey  string
+}
+
+type StripeConfig struct {
+	SecretKey string
+}
+
+type TangoConfig struct {
+	BaseURL      string
+	PlatformName string
+	PlatformKey  string
+}
+
+type PayPalConfig struct {
+	BaseURL      string // e.g. "https://api-m.paypal.com" or sandbox
+	ClientID     string
+	ClientSecret string
+}
+
+type SMSConfig struct {
+	BaseURL       string // Bandwidth messaging API
+	APIToken      string
+	AccountID     string
+	ApplicationID string
+}
+
+type EventLogConfig struct {
+	BaseURL string
+	APIKey  string
+}
+
+type GoogleSheetsConfig struct {
+	SpreadsheetID string
+	// Uses same service account key as GoogleCalendar
+}
+
+type S3Config struct {
+	Region          string
+	RecordingBucket string
+	ExportBucket    string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -136,6 +233,70 @@ func Load() *Config {
 
 		AuthAPIURL: envOr("AUTH_API_URL", ""),
 		AuthAPIKey: envOr("AUTH_API_KEY", ""),
+
+		ConferenceService: ConferenceServiceConfig{
+			BaseURL: envOr("CONFERENCE_SERVICE_URL", ""),
+			APIKey:  envOr("CONFERENCE_SERVICE_API_KEY", ""),
+		},
+
+		NotificationService: NotificationServiceConfig{
+			BaseURL:     envOr("NOTIFICATION_SERVICE_URL", ""),
+			APIKey:      envOr("NOTIFICATION_SERVICE_API_KEY", ""),
+			BearerToken: envOr("NOTIFICATION_SERVICE_BEARER_TOKEN", ""),
+		},
+
+		GoogleCalendar: GoogleCalendarConfig{
+			ServiceAccountKeyPath: envOr("GOOGLE_SERVICE_ACCOUNT_KEY_PATH", ""),
+			DefaultCalendarID:     envOr("GOOGLE_CALENDAR_DEFAULT_ID", ""),
+		},
+
+		Decipher: DecipherConfig{
+			BaseURL: envOr("DECIPHER_API_URL", "https://surveys.opinionsite.com/api/v1"),
+			APIKey:  envOr("DECIPHER_API_KEY", ""),
+		},
+
+		CastingWords: CastingWordsConfig{
+			BaseURL: envOr("CASTINGWORDS_API_URL", "https://castingwords.com/store/API4"),
+			APIKey:  envOr("CASTINGWORDS_API_KEY", ""),
+		},
+
+		Stripe: StripeConfig{
+			SecretKey: envOr("STRIPE_SECRET_KEY", ""),
+		},
+
+		Tango: TangoConfig{
+			BaseURL:      envOr("TANGO_API_URL", "https://integration-api.tangocard.com/raas/v2"),
+			PlatformName: envOr("TANGO_PLATFORM_NAME", ""),
+			PlatformKey:  envOr("TANGO_PLATFORM_KEY", ""),
+		},
+
+		PayPal: PayPalConfig{
+			BaseURL:      envOr("PAYPAL_BASE_URL", "https://api-m.paypal.com"),
+			ClientID:     envOr("PAYPAL_CLIENT_ID", ""),
+			ClientSecret: envOr("PAYPAL_CLIENT_SECRET", ""),
+		},
+
+		SMS: SMSConfig{
+			BaseURL:       envOr("BANDWIDTH_API_URL", "https://messaging.bandwidth.com/api/v2"),
+			APIToken:      envOr("BANDWIDTH_API_TOKEN", ""),
+			AccountID:     envOr("BANDWIDTH_ACCOUNT_ID", ""),
+			ApplicationID: envOr("BANDWIDTH_APPLICATION_ID", ""),
+		},
+
+		EventLog: EventLogConfig{
+			BaseURL: envOr("EVENT_LOG_API_URL", ""),
+			APIKey:  envOr("EVENT_LOG_API_KEY", ""),
+		},
+
+		GoogleSheets: GoogleSheetsConfig{
+			SpreadsheetID: envOr("GOOGLE_SHEETS_SPREADSHEET_ID", ""),
+		},
+
+		S3: S3Config{
+			Region:          envOr("AWS_REGION", envOr("COGNITO_REGION", "us-east-1")),
+			RecordingBucket: envOr("S3_RECORDING_BUCKET", ""),
+			ExportBucket:    envOr("S3_EXPORT_BUCKET", ""),
+		},
 	}
 }
 

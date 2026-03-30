@@ -8,6 +8,7 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
+	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/logger"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
@@ -58,7 +59,7 @@ func main() {
 		}
 	}
 
-	h := handler.New(cfg, db, irisProjectRepo, qsProjectRepo, irisUserRepo, qsUserRepo, qsTimeSlotRepo, qsRespondentRepo, qsSurveyRepo, irisSurveyRepo, qsConferenceRepo, qsAnswerRepo)
+	h := handler.New(cfg, db, integration.NewServiceClients(cfg), irisProjectRepo, qsProjectRepo, irisUserRepo, qsUserRepo, qsTimeSlotRepo, qsRespondentRepo, qsSurveyRepo, irisSurveyRepo, qsConferenceRepo, qsAnswerRepo)
 	r := router.New(h, jwtAuth)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -928,4 +929,137 @@ func (r *SurveyRepo) GetPossibleModeratorsForTimeSlot(ctx context.Context, timeS
 		result = append(result, map[string]any{"id": id, "name": name, "email": email})
 	}
 	return result, rows.Err()
+}
+// UpdateInquiryPreview updates a project inquiry's preview fields.
+func (r *SurveyRepo) UpdateInquiryPreview(ctx context.Context, subscriptionID, projectID int64, fields map[string]any) error {
+	setClauses := []string{}
+	args := []any{}
+	for k, v := range fields {
+		setClauses = append(setClauses, k+" = ?")
+		args = append(args, v)
+	}
+	if len(setClauses) == 0 {
+		return nil
+	}
+	args = append(args, subscriptionID, projectID)
+	q := "UPDATE project_inquiry SET " + strings.Join(setClauses, ", ") + " WHERE subscription_id = ? AND project_id = ?"
+	_, err := r.db.ExecContext(ctx, q, args...)
+	return err
+}
+
+// CreateCustomCrowdInquiry creates a custom crowd inquiry.
+func (r *SurveyRepo) CreateCustomCrowdInquiry(ctx context.Context, subscriptionID int64, description string, interviewLength int, inquiryTypeID int) (int64, error) {
+	q := `INSERT INTO project_inquiry (subscription_id, description, interview_length, inquiry_type_id, under_review, created_on)
+	      VALUES (?, ?, ?, ?, 1, NOW())`
+	res, err := r.db.ExecContext(ctx, q, subscriptionID, description, interviewLength, inquiryTypeID)
+	if err != nil {
+		return 0, fmt.Errorf("create custom crowd inquiry: %w", err)
+	}
+	return res.LastInsertId()
+}
+
+// ResetProjectModerators removes all moderator assignments from project timeslots.
+func (r *SurveyRepo) ResetProjectModerators(ctx context.Context, projectID int64) (int64, error) {
+	q := `DELETE mts FROM moderator_time_slot mts
+	      INNER JOIN time_slot ts ON ts.id = mts.time_slot_id
+	      WHERE ts.project_id = ? AND ts.status_id IN (1, 2)` // only open/pending slots
+	res, err := r.db.ExecContext(ctx, q, projectID)
+	if err != nil {
+		return 0, fmt.Errorf("reset project moderators: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+// GetEmailTemplateForProject returns email template settings for a project.
+func (r *SurveyRepo) GetEmailTemplateForProject(ctx context.Context, projectID int64) (map[string]any, error) {
+	q := `SELECT p.id, p.name, COALESCE(p.email_subject, '') as subject,
+	             COALESCE(p.email_body, '') as body, COALESCE(p.email_from_name, '') as from_name
+	      FROM project p WHERE p.id = ?`
+	var id int64
+	var name, subject, body, fromName string
+	err := r.ro().QueryRowContext(ctx, q, projectID).Scan(&id, &name, &subject, &body, &fromName)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get email template: %w", err)
+	}
+	return map[string]any{
+		"projectId": id, "projectName": name,
+		"subject": subject, "body": body, "fromName": fromName,
+	}, nil
+}
+
+// ExportProjectData returns project interview data for export.
+func (r *SurveyRepo) ExportProjectData(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	q := `SELECT ts.id, ts.start_time, ts.end_time, ts.status_id, tss.description as status,
+	             COALESCE(CONCAT(u.first_name, ' ', u.last_name), '') as moderator,
+	             COALESCE(r.first_name, '') as respondent_first, COALESCE(r.last_name, '') as respondent_last
+	      FROM time_slot ts
+	      LEFT JOIN time_slot_status tss ON tss.id = ts.status_id
+	      LEFT JOIN moderator_time_slot mts ON mts.time_slot_id = ts.id AND mts.is_host = 1
+	      LEFT JOIN ic_user u ON u.id = mts.moderator_id
+	      LEFT JOIN responder r ON r.id = ts.responder_id
+	      WHERE ts.project_id = ? AND ts.is_invalid = 0
+	      ORDER BY ts.start_time`
+	rows, err := r.ro().QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("export project data: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id, statusID int64
+		var st, et time.Time
+		var status, moderator, rFirst, rLast string
+		if err := rows.Scan(&id, &st, &et, &statusID, &status, &moderator, &rFirst, &rLast); err != nil {
+			continue
+		}
+		result = append(result, map[string]any{
+			"timeSlotId": id, "startTime": st.Format(time.RFC3339), "endTime": et.Format(time.RFC3339),
+			"statusId": statusID, "status": status, "moderator": moderator,
+			"respondentFirstName": rFirst, "respondentLastName": rLast,
+		})
+	}
+	return result, rows.Err()
+}
+
+// GetUnavailableModerators returns moderators unavailable for a project.
+func (r *SurveyRepo) GetUnavailableModerators(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	q := `SELECT DISTINCT u.id, CONCAT(u.first_name, ' ', u.last_name) as name, u.email
+	      FROM ic_user u
+	      INNER JOIN moderator_time_slot mts ON mts.moderator_id = u.id
+	      INNER JOIN time_slot ts ON ts.id = mts.time_slot_id
+	      WHERE ts.project_id = ? AND ts.status_id IN (2, 3, 4, 7, 8, 9)
+	      ORDER BY name`
+	rows, err := r.ro().QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get unavailable mods: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id int64
+		var name, email string
+		if err := rows.Scan(&id, &name, &email); err != nil {
+			continue
+		}
+		result = append(result, map[string]any{"id": id, "name": name, "email": email})
+	}
+	return result, rows.Err()
+}
+
+// GetAvailableModeratorsCount returns count of available moderators for a project/sample size.
+func (r *SurveyRepo) GetAvailableModeratorsCount(ctx context.Context, projectID int64) (int, error) {
+	var count int
+	q := `SELECT COUNT(DISTINCT mts.moderator_id)
+	      FROM moderator_time_slot mts
+	      INNER JOIN time_slot ts ON ts.id = mts.time_slot_id
+	      WHERE ts.project_id = ? AND ts.status_id = 1`
+	err := r.ro().QueryRowContext(ctx, q, projectID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count available mods: %w", err)
+	}
+	return count, nil
 }

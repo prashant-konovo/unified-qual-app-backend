@@ -323,3 +323,108 @@ func (r *UserRepo) SoftDelete(ctx context.Context, id int64) error {
 	slog.InfoContext(ctx, "soft-deleted QS user", "id", id)
 	return nil
 }
+
+// AddRoles adds role IDs to a user (skips duplicates).
+func (r *UserRepo) AddRoles(ctx context.Context, userID int64, roleIDs []int) error {
+	for _, rid := range roleIDs {
+		_, err := r.db.ExecContext(ctx, "INSERT IGNORE INTO user_role (user_id, role_id) VALUES (?, ?)", userID, rid)
+		if err != nil {
+			return fmt.Errorf("add role %d to user %d: %w", rid, userID, err)
+		}
+	}
+	slog.InfoContext(ctx, "added roles to QS user", "userId", userID, "roles", roleIDs)
+	return nil
+}
+
+// DeleteRoles removes role IDs from a user.
+func (r *UserRepo) DeleteRoles(ctx context.Context, userID int64, roleIDs []int) error {
+	for _, rid := range roleIDs {
+		_, err := r.db.ExecContext(ctx, "DELETE FROM user_role WHERE user_id = ? AND role_id = ?", userID, rid)
+		if err != nil {
+			return fmt.Errorf("delete role %d from user %d: %w", rid, userID, err)
+		}
+	}
+	slog.InfoContext(ctx, "deleted roles from QS user", "userId", userID, "roles", roleIDs)
+	return nil
+}
+
+// GetRoles returns role IDs for a user.
+func (r *UserRepo) GetRoles(ctx context.Context, userID int64) ([]int, error) {
+	rows, err := r.db.QueryContext(ctx, "SELECT role_id FROM user_role WHERE user_id = ?", userID)
+	if err != nil {
+		return nil, fmt.Errorf("get roles for user %d: %w", userID, err)
+	}
+	defer rows.Close()
+	var roles []int
+	for rows.Next() {
+		var rid int
+		if err := rows.Scan(&rid); err != nil {
+			return nil, err
+		}
+		roles = append(roles, rid)
+	}
+	return roles, rows.Err()
+}
+
+// GetUserCommPreference returns communication preference for a user.
+func (r *UserRepo) GetUserCommPreference(ctx context.Context, userID int64) (map[string]any, error) {
+	q := `SELECT u.id, u.email, COALESCE(u.terms_accepted, 0) as opted_in
+	      FROM user u WHERE u.id = ? AND u.deleted = 0`
+	var id int64
+	var email sql.NullString
+	var optedIn int
+	err := r.db.QueryRowContext(ctx, q, userID).Scan(&id, &email, &optedIn)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get comm pref for user %d: %w", userID, err)
+	}
+	return map[string]any{
+		"userId": id, "email": email.String,
+		"optedIn": optedIn == 1, "canUnsubscribe": true,
+	}, nil
+}
+
+// SetUnsubscribed marks a user as unsubscribed (terms_accepted = 0).
+func (r *UserRepo) SetUnsubscribed(ctx context.Context, userID int64) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE user SET terms_accepted = 0 WHERE id = ?", userID)
+	if err != nil {
+		return fmt.Errorf("unsubscribe user %d: %w", userID, err)
+	}
+	slog.InfoContext(ctx, "unsubscribed QS user", "id", userID)
+	return nil
+}
+
+// ListByRole returns QS users filtered by role.
+func (r *UserRepo) ListByRole(ctx context.Context, roleID int, page, pageSize int) ([]UserListRow, int, error) {
+	return r.List(ctx, page, pageSize, &roleID, "")
+}
+
+// UpdateAvailability updates a moderator availability slot.
+func (r *UserRepo) UpdateModeratorAvailability(ctx context.Context, id int64, startTime, endTime time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE moderator_availability SET start_time = ?, end_time = ?, modified_on = NOW() WHERE id = ?",
+		startTime, endTime, id)
+	if err != nil {
+		return fmt.Errorf("update qs moderator availability %d: %w", id, err)
+	}
+	return nil
+}
+
+// CheckUserIsQsToolAndI2 checks if a user exists in QS and has I2 (IRIS) cross-reference.
+func (r *UserRepo) CheckUserIsQsToolAndI2(ctx context.Context, email string) (map[string]any, error) {
+	u, err := r.GetByEmail(ctx, email)
+	if err != nil {
+		return nil, err
+	}
+	if u == nil {
+		return map[string]any{"isQsTool": false, "isI2": false, "exists": false}, nil
+	}
+	return map[string]any{
+		"isQsTool": true,
+		"isI2":     u.CognitoUserID.Valid,
+		"exists":   true,
+		"userId":   u.ID,
+	}, nil
+}

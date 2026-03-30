@@ -986,6 +986,17 @@ func (h *Handler) GetConferenceParticipants(w http.ResponseWriter, r *http.Reque
 // GetMeetingMetadata returns meeting metadata.
 func (h *Handler) GetMeetingMetadata(w http.ResponseWriter, r *http.Request) {
 	hash := r.URL.Query().Get("hash")
+	bearerToken := extractBearerToken(r)
+
+	// Try Conference Service for live metadata
+	if hash == "" && h.services.Conference.Configured() {
+		meta, err := h.services.Conference.GetMetadata(r.Context(), bearerToken)
+		if err == nil && meta != nil {
+			success(w, meta)
+			return
+		}
+	}
+
 	if hash == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "hash parameter required"})
 		return
@@ -1030,6 +1041,17 @@ func (h *Handler) MeetingJoin(w http.ResponseWriter, r *http.Request) {
 // GetAttendeesByMeetingID returns attendees for a meeting.
 func (h *Handler) GetAttendeesByMeetingID(w http.ResponseWriter, r *http.Request) {
 	meetingID := chi.URLParam(r, "meetingId")
+	bearerToken := extractBearerToken(r)
+
+	// Try Conference Service for live attendee data
+	if h.services.Conference.Configured() {
+		attendees, err := h.services.Conference.GetAttendees(r.Context(), meetingID, bearerToken)
+		if err == nil && attendees != nil {
+			success(w, attendees)
+			return
+		}
+		slog.Warn("conference service get attendees failed, falling back to DB", "error", err)
+	}
 
 	if h.qsConferenceRepo != nil {
 		attendees, err := h.qsConferenceRepo.GetAttendeesByMeetingID(r.Context(), meetingID)
@@ -1047,11 +1069,39 @@ func (h *Handler) GetAttendeesByMeetingID(w http.ResponseWriter, r *http.Request
 // GetRecordingStatus returns recording status for a meeting.
 func (h *Handler) GetRecordingStatus(w http.ResponseWriter, r *http.Request) {
 	meetingID := chi.URLParam(r, "meetingId")
-	// Recording status tracked in time_slot_event or external service
+	bearerToken := extractBearerToken(r)
+
+	// Call Conference Service for real recording status
+	if h.services.Conference.Configured() {
+		status, err := h.services.Conference.GetRecordingStatus(r.Context(), meetingID, bearerToken)
+		if err == nil && status != nil {
+			status["meetingId"] = meetingID
+			success(w, status)
+			return
+		}
+		slog.Warn("conference service recording status failed", "meetingId", meetingID, "error", err)
+	}
+
+	// Fallback: DB lookup
+	if h.qsConferenceRepo != nil {
+		meta, _ := h.qsConferenceRepo.GetMeetingMetadata(r.Context(), meetingID)
+		if meta != nil {
+			success(w, map[string]any{
+				"meetingId":      meetingID,
+				"recording":      false,
+				"status":         "not_started",
+				"meetingExists":  true,
+				"conferenceHash": meta["conferenceHash"],
+			})
+			return
+		}
+	}
+
 	success(w, map[string]any{
-		"meetingId": meetingID,
-		"recording": false,
-		"status":    "not_started",
+		"meetingId":     meetingID,
+		"recording":     false,
+		"status":        "not_started",
+		"meetingExists": false,
 	})
 }
 
@@ -1342,6 +1392,14 @@ func (h *Handler) CreateEventLog(w http.ResponseWriter, r *http.Request) {
 			`INSERT INTO activity_log (event_type, description, user_id, project_id, time_slot_id, meta_data, created_on)
 			 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
 			req.EventType, req.Description, req.UserID, req.ProjectID, req.TimeSlotID, req.MetaData)
+	}
+
+	// Forward to external event logging service if configured
+	if h.services.EventLog.Configured() {
+		_ = h.services.EventLog.LogEvent(r.Context(), req.EventType, req.Description, map[string]any{
+			"userId": req.UserID, "projectId": req.ProjectID,
+			"timeSlotId": req.TimeSlotID, "metaData": req.MetaData,
+		})
 	}
 
 	slog.Info("event logged", "type", req.EventType, "userId", req.UserID, "projectId", req.ProjectID)

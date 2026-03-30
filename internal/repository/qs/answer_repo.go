@@ -415,3 +415,137 @@ func (r *AnswerRepo) ListNativeSurveysByProject(ctx context.Context, projectID i
 	}
 	return result, rows.Err()
 }
+
+// TopicTranslation represents a topic translation row.
+type TopicTranslation struct {
+	ID             int64  `json:"id"`
+	TopicID        int64  `json:"topicId"`
+	LanguageCode   string `json:"languageCode"`
+	TranslatedName string `json:"translatedName"`
+}
+
+// UpdateTopicTranslation upserts a topic translation for a project.
+func (r *AnswerRepo) UpdateTopicTranslation(ctx context.Context, projectID int64, topicID int64, languageCode, translatedName string) error {
+	// Try update first
+	q := `UPDATE topic_translation SET translated_name = ? WHERE topic_id = ? AND language_code = ?`
+	res, err := r.db.ExecContext(ctx, q, translatedName, topicID, languageCode)
+	if err != nil {
+		return fmt.Errorf("update topic translation: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		// Insert
+		q = `INSERT INTO topic_translation (topic_id, language_code, translated_name) VALUES (?, ?, ?)`
+		_, err = r.db.ExecContext(ctx, q, topicID, languageCode, translatedName)
+		if err != nil {
+			return fmt.Errorf("insert topic translation: %w", err)
+		}
+	}
+	return nil
+}
+
+// DeleteTopicTranslation deletes a topic translation by topic ID and language code.
+func (r *AnswerRepo) DeleteTopicTranslation(ctx context.Context, topicID int64, languageCode string) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM topic_translation WHERE topic_id = ? AND language_code = ?", topicID, languageCode)
+	if err != nil {
+		return fmt.Errorf("delete topic translation: %w", err)
+	}
+	return nil
+}
+
+// DeleteTranslation deletes a translation record by project/language.
+func (r *AnswerRepo) DeleteTranslation(ctx context.Context, projectID int64, languageCode string) error {
+	// Delete all topic translations for topics in this project with the given language
+	q := `DELETE tt FROM topic_translation tt
+	      INNER JOIN topic t ON t.id = tt.topic_id
+	      WHERE t.project_id = ? AND tt.language_code = ?`
+	_, err := r.db.ExecContext(ctx, q, projectID, languageCode)
+	if err != nil {
+		return fmt.Errorf("delete translation: %w", err)
+	}
+	return nil
+}
+
+// ListHonorariumReasons returns honorarium update reasons.
+func (r *AnswerRepo) ListHonorariumReasons(ctx context.Context) ([]map[string]any, error) {
+	q := `SELECT id, name FROM hono_value_update_reason ORDER BY id`
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		// Table may not exist — return defaults
+		return []map[string]any{
+			{"id": 1, "name": "Interview Completed"},
+			{"id": 2, "name": "Partial Completion"},
+			{"id": 3, "name": "No Show Compensation"},
+			{"id": 4, "name": "Technical Issue"},
+			{"id": 5, "name": "Other"},
+		}, nil
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			continue
+		}
+		result = append(result, map[string]any{"id": id, "name": name})
+	}
+	if len(result) == 0 {
+		return []map[string]any{
+			{"id": 1, "name": "Interview Completed"},
+			{"id": 2, "name": "Partial Completion"},
+			{"id": 3, "name": "No Show Compensation"},
+			{"id": 4, "name": "Technical Issue"},
+			{"id": 5, "name": "Other"},
+		}, nil
+	}
+	return result, nil
+}
+
+// CreateExternalPayment creates payment record with external source flag.
+func (r *AnswerRepo) CreateExternalPayment(ctx context.Context, timeSlotID int64, amount int, paymentType, status, externalRef string) (int64, error) {
+	q := `INSERT INTO time_slot_payment (time_slot_id, amount, payment_type, status, external_reference, modified_on) VALUES (?, ?, ?, ?, ?, NOW())`
+	res, err := r.db.ExecContext(ctx, q, timeSlotID, amount, paymentType, status, externalRef)
+	if err != nil {
+		return 0, fmt.Errorf("create external payment: %w", err)
+	}
+	return res.LastInsertId()
+}
+
+// ListInterviewPaymentStatuses returns the list of interview payment statuses.
+func (r *AnswerRepo) ListInterviewPaymentStatuses(ctx context.Context) ([]map[string]any, error) {
+	q := `SELECT id, name FROM interview_payment_status ORDER BY id`
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		// Fallback to hardcoded
+		return []map[string]any{
+			{"id": 1, "name": "Pending"},
+			{"id": 2, "name": "Approved"},
+			{"id": 3, "name": "Paid"},
+			{"id": 4, "name": "Failed"},
+			{"id": 5, "name": "Cancelled"},
+			{"id": 6, "name": "On Hold"},
+		}, nil
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			continue
+		}
+		result = append(result, map[string]any{"id": id, "name": name})
+	}
+	if len(result) == 0 {
+		return []map[string]any{
+			{"id": 1, "name": "Pending"},
+			{"id": 2, "name": "Approved"},
+			{"id": 3, "name": "Paid"},
+			{"id": 4, "name": "Failed"},
+			{"id": 5, "name": "Cancelled"},
+			{"id": 6, "name": "On Hold"},
+		}, nil
+	}
+	return result, nil
+}

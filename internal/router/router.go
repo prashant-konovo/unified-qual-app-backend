@@ -48,6 +48,10 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 		r.Post("/conf/{confId}/login", h.ConferenceLogin)
 		r.Get("/conf/{confId}/participants", h.GetConferenceParticipants)
 
+		// ── Public: Webhooks / Callbacks (service-to-service, no JWT) ──
+		// Recording upload callback from Conference Service (S3 trigger → Lambda → here)
+		r.Post("/chime/recording/meeting/{meetingId}", h.RecordingUploadCallback)
+
 		// ── Protected: All remaining routes require valid JWT ──
 		r.Group(func(r chi.Router) {
 			r.Use(jwtAuth.Middleware)
@@ -191,11 +195,26 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Use(middleware.RequireRoles("admin", "manager", "moderator"))
 				r.Post("/meetings/{meetingId}/action/{action}", h.MeetingAction)
 				r.Post("/meeting/{meetingId}/universal", h.MeetingUniversalJoin)
+				r.Post("/meeting", h.CreateMeeting)
 				// Phase 6: Meeting extended
 				r.Get("/meeting/metadata", h.GetMeetingMetadata)
 				r.Put("/meeting/join/{joinId}", h.MeetingJoin)
 				r.Get("/meeting/get_attendees_by_meeting_id/{meetingId}", h.GetAttendeesByMeetingID)
 				r.Get("/meeting/recording_status/{meetingId}", h.GetRecordingStatus)
+			})
+
+			// ── Transcription (admin + manager) — CastingWords integration ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Post("/transcription/order", h.CreateTranscriptionOrder)
+				r.Get("/transcription/status/{orderId}", h.GetTranscriptionStatus)
+				r.Get("/transcription/transcript/{orderId}", h.GetTranscript)
+			})
+
+			// ── SMS (admin + manager) — Bandwidth integration ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Post("/sms/send", h.SendSMS)
 			})
 
 			// ── Payments (admin + manager) ──
@@ -278,6 +297,91 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.RequireRoles("admin", "manager"))
 				r.Get("/salesforceprojects", h.ListSalesforceProjects)
+			})
+
+			// ══════════════════════════════════════════
+			// Phase 7 — Missing/Partial/Stub API Routes
+			// ══════════════════════════════════════════
+
+			// ── User Roles (admin) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin"))
+				r.Post("/user/add_roles", h.AddUserRoles)
+				r.Delete("/user/delete_roles", h.DeleteUserRoles)
+			})
+
+			// ── Password Reset (public-ish, but behind JWT) ──
+			r.Post("/reset-user-password/send-user-password-email", h.SendPasswordResetEmail)
+			r.Post("/reset-user-password/check-qsTool-i2", h.CheckUserIsQsToolAndI2)
+
+			// ── Unsubscribe / Comm Preferences (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Post("/unsubscribe/check-user-comm-preference/{userId}", h.CheckUserCommPreference)
+				r.Post("/unsubscribe/unsubscribe-user/{userId}", h.UnsubscribeUser)
+			})
+
+			// ── Project extensions (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Post("/project/{projectId}/moderators_reset", h.ResetProjectModerators)
+				r.Post("/project/{projectId}/handle-export", h.HandleProjectExport)
+				r.Get("/project/{projectId}/available_moderators_count", h.GetAvailableModeratorsCount)
+				r.Get("/project/{projectId}/unavailable_moderators", h.GetUnavailableModerators)
+				r.Get("/project_manager/client", h.ListProjectManagers)
+			})
+
+			// ── Conference Links (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Post("/project/{projectId}/add-conference-link", h.AddConferenceLink)
+				r.Put("/update-conference-link", h.UpdateConferenceLinkHandler)
+				r.Get("/conference-link/timeslot/{timeslotId}", h.GetConferenceLinkByTimeSlot)
+			})
+
+			// ── Notifications (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Post("/notifications/send", h.SendNotificationEmail)
+			})
+
+			// ── Third-Party / Eligibility (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Post("/third-party-integrate", h.ThirdPartyIntegrate)
+				r.Post("/qual/eligibility", h.CheckQualEligibility)
+			})
+
+			// ── Translation Delete (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Delete("/projects/{projectId}/topics/translations/{translationKey}", h.DeleteTopicTranslation)
+				r.Delete("/projects/{projectId}/translations/{langCode}", h.DeleteTranslation)
+			})
+
+			// ── External Payments (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Post("/payments/external", h.CreateExternalPayment)
+				r.Get("/payments/honorarium-reasons", h.GetHonorariumReasons)
+				r.Get("/payments/interview-statuses", h.GetInterviewPaymentStatusList)
+			})
+
+			// ── LS Inquiry (admin + manager) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager"))
+				r.Put("/subscription/{subscriptionId}/inquiry_preview", h.UpdateInquiryPreview)
+				r.Post("/custom_crowd_inquiry", h.CreateCustomCrowdInquiry)
+			})
+
+			// ── Google Calendar / Import placeholders (admin + manager + moderator) ──
+			r.Group(func(r chi.Router) {
+				r.Use(middleware.RequireRoles("admin", "manager", "moderator"))
+				r.Post("/moderator/{moderatorId}/import/start", h.StartModeratorImport)
+				r.Get("/moderator/{moderatorId}/import/availability", h.GetImportedAvailability)
+				r.Get("/moderator/{moderatorId}/import/status", h.GetImportStatus)
+				r.Delete("/moderator/{moderatorId}/import/unlink", h.UnlinkImportedModerator)
+				r.Put("/google-sheet/first-date", h.UpdateGoogleSheetFirstDate)
 			})
 		})
 	})
