@@ -1683,36 +1683,80 @@ func (h *Handler) CreateEventLog(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 // ListSalesforceProjects returns salesforce projects from both DBs.
+// Legacy contract: supports query params ?id, ?accountId, ?projectTypeId, ?isProject, ?subscriptionId, ?q
+// Returns adminJson-compatible shape with all legacy fields.
 func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request) {
-	source := h.resolveSource(r)
-	var result []map[string]any
+	q := r.URL.Query()
 
-	if (source == "" || source == "iris") && h.irisSurveyRepo != nil {
-		sfProjects, err := h.irisSurveyRepo.ListSalesforceProjects(r.Context())
-		if err != nil {
-			slog.Error("iris sf projects failed", "error", err)
-		}
-		for _, s := range sfProjects {
-			result = append(result, map[string]any{
-				"id": s.ID, "salesforceProjectId": s.SalesforceProjectID,
-				"name": s.Name, "number": nullStr(s.Number),
-				"subscriptionId": niVal(s.SubscriptionID),
-				"ownerName": nullStr(s.OwnerName),
-				"source": "iris",
-			})
-		}
+	// Build filter from query params (mirrors legacy Scala controller logic)
+	filter := &iris.SalesforceProjectFilter{
+		ID:     q.Get("id"),
+		Search: q.Get("q"),
 	}
 
-	if (source == "" || source == "qs") && h.qsAnswerRepo != nil {
-		sfProjects, err := h.qsAnswerRepo.ListSalesforceProjects(r.Context())
+	if v := q.Get("accountId"); v != "" {
+		aid, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			slog.Error("qs sf projects failed", "error", err)
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid accountId"})
+			return
+		}
+		filter.AccountID = aid
+	}
+
+	if v := q.Get("projectTypeId"); v != "" {
+		ptid, _ := strconv.ParseInt(v, 10, 64)
+		filter.ProjectTypeID = ptid
+	}
+
+	if q.Get("isProject") == "true" {
+		filter.IsProject = true
+	}
+
+	if v := q.Get("subscriptionId"); v != "" {
+		sid, _ := strconv.ParseInt(v, 10, 64)
+		filter.SubscriptionID = sid
+	}
+
+	// Legacy controller: if no ?id and not admin → 403.
+	// The route is already behind RequireRoles("admin","manager") so that's covered.
+	// Legacy controller: if no ?id and no ?accountId → return empty.
+	if filter.ID == "" && filter.AccountID == 0 {
+		success(w, []map[string]any{})
+		return
+	}
+
+	var result []map[string]any
+
+	if h.irisSurveyRepo != nil {
+		sfProjects, err := h.irisSurveyRepo.ListSalesforceProjects(r.Context(), filter)
+		if err != nil {
+			slog.Error("iris sf projects failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			return
 		}
 		for _, s := range sfProjects {
+			// Lookup monoProjectId (project.id by salesforce_project_id)
+			var monoProjectID any
+			if pid := h.irisSurveyRepo.GetMonoProjectID(r.Context(), s.SalesforceProjectID); pid != nil {
+				monoProjectID = *pid
+			}
 			result = append(result, map[string]any{
-				"id": s.ID, "salesforceProjectId": s.SalesforceProjectID,
-				"name": s.Name, "number": nullStr(s.Number),
-				"source": "qs",
+				"id":                      s.ID,
+				"projectId":               s.SalesforceProjectID,
+				"salesforceProjectId":      s.SalesforceProjectID,
+				"name":                     s.Name,
+				"number":                   nullStr(s.Number),
+				"salesforceAccountId":      nullStr(s.SalesforceAccountID),
+				"isProjectPricing":         s.IsProjectPricing,
+				"lastModifiedDate":         s.LastModifiedDate.Format("2006-01-02T15:04:05.000Z"),
+				"clientProjectName":        nullStr(s.ClientProjectName),
+				"clientProjectNumber":      nullStr(s.ClientProjectNumber),
+				"brandTypeId":              s.BrandTypeID,
+				"salesforceProjectType":    s.SalesforceProjectType,
+				"ownerName":               nullStr(s.OwnerName),
+				"projectManagerName":       nullStr(s.ProjectManagerName),
+				"projectReconciled":        nullStr(s.ProjectReconciled),
+				"monoProjectId":            monoProjectID,
 			})
 		}
 	}

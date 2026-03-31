@@ -116,15 +116,23 @@ type ICUserProject struct {
 
 // ICSalesforceProject maps the IRIS salesforce_project table.
 type ICSalesforceProject struct {
-	ID                   int64          `json:"id"`
-	SalesforceProjectID  string         `json:"salesforceProjectId"`
-	Name                 string         `json:"name"`
-	Number               sql.NullString `json:"number"`
-	SalesforceAccountID  sql.NullString `json:"salesforceAccountId"`
-	SubscriptionID       sql.NullInt64  `json:"subscriptionId"`
-	IsDeleted            bool           `json:"isDeleted"`
-	OwnerName            sql.NullString `json:"ownerName"`
-	ProjectManagerName   sql.NullString `json:"projectManagerName"`
+	ID                      int64          `json:"id"`
+	SalesforceProjectID     string         `json:"salesforceProjectId"`
+	Name                    string         `json:"name"`
+	Number                  sql.NullString `json:"number"`
+	SalesforceAccountID     sql.NullString `json:"salesforceAccountId"`
+	SubscriptionID          sql.NullInt64  `json:"subscriptionId"`
+	IsProjectPricing        bool           `json:"isProjectPricing"`
+	IsDeleted               bool           `json:"isDeleted"`
+	LastModifiedDate        time.Time      `json:"lastModifiedDate"`
+	ClientProjectName       sql.NullString `json:"clientProjectName"`
+	ClientProjectNumber     sql.NullString `json:"clientProjectNumber"`
+	BrandTypeID             int64          `json:"brandTypeId"`
+	SalesforceProjectType   int64          `json:"salesforceProjectType"`
+	SalesforceProjectStatus sql.NullString `json:"salesforceProjectStatus"`
+	OwnerName               sql.NullString `json:"ownerName"`
+	ProjectManagerName      sql.NullString `json:"projectManagerName"`
+	ProjectReconciled       sql.NullString `json:"projectReconciled"`
 }
 
 // ICProjectInquiry maps the IRIS project_inquiry table.
@@ -608,12 +616,75 @@ func (r *SurveyRepo) ListUserProjects(ctx context.Context, projectID int64) ([]m
 	return result, rows.Err()
 }
 
-// ListSalesforceProjects returns salesforce projects.
-func (r *SurveyRepo) ListSalesforceProjects(ctx context.Context) ([]ICSalesforceProject, error) {
-	q := `SELECT id, salesforce_project_id, name, number, salesforce_account_id, subscription_id,
-	       is_deleted, owner_name, project_manager_name
-	      FROM salesforce_project WHERE is_deleted = 0 ORDER BY name LIMIT 500`
-	rows, err := r.ro().QueryContext(ctx, q)
+// SalesforceProjectFilter holds optional filter parameters for listing salesforce projects.
+type SalesforceProjectFilter struct {
+	ID             string // salesforce_project_id (exact match)
+	AccountID      int64  // maps to account.salesforce_account_id
+	ProjectTypeID  int64  // salesforce_project_type filter
+	IsProject      bool   // exclude records that already have a project row
+	SubscriptionID int64  // filter via subscription.salesforce_subscription_id
+	Search         string // LIKE search on name or number
+}
+
+// ListSalesforceProjects returns salesforce projects with optional filtering.
+func (r *SurveyRepo) ListSalesforceProjects(ctx context.Context, f *SalesforceProjectFilter) ([]ICSalesforceProject, error) {
+	// Build query dynamically based on filter
+	base := `SELECT sp.id, sp.salesforce_project_id, sp.name, sp.number,
+	          sp.salesforce_account_id, sp.subscription_id, sp.is_project_pricing,
+	          sp.is_deleted, sp.last_modified_date, sp.client_project_name,
+	          sp.client_project_number, sp.brand_type_id, sp.salesforce_project_type,
+	          sp.salesforce_project_status, sp.owner_name, sp.project_manager_name,
+	          sp.project_reconciled
+	         FROM salesforce_project sp`
+
+	var where []string
+	var args []any
+
+	where = append(where, "sp.is_deleted = 0")
+
+	if f != nil && f.ID != "" {
+		where = append(where, "sp.salesforce_project_id = ?")
+		args = append(args, f.ID)
+	}
+
+	if f != nil && f.AccountID > 0 {
+		// Resolve account's salesforce_account_id
+		var sfAccountID string
+		err := r.ro().QueryRowContext(ctx, "SELECT salesforce_account_id FROM account WHERE id = ?", f.AccountID).Scan(&sfAccountID)
+		if err != nil {
+			return nil, fmt.Errorf("resolve account %d: %w", f.AccountID, err)
+		}
+		where = append(where, "sp.salesforce_account_id = ?")
+		args = append(args, sfAccountID)
+
+		if f.ProjectTypeID > 0 {
+			where = append(where, "sp.salesforce_project_type = ?")
+			args = append(args, f.ProjectTypeID)
+		}
+
+		if f.IsProject {
+			where = append(where, "NOT EXISTS (SELECT 1 FROM project p WHERE p.salesforce_project_id = sp.salesforce_project_id)")
+		}
+
+		if f.SubscriptionID > 0 {
+			// Filter by subscription's brand_type_id
+			var brandTypeID int64
+			err := r.ro().QueryRowContext(ctx, "SELECT brand_type FROM subscription WHERE id = ?", f.SubscriptionID).Scan(&brandTypeID)
+			if err == nil && brandTypeID > 0 {
+				where = append(where, "sp.brand_type_id = ?")
+				args = append(args, brandTypeID)
+			}
+		}
+
+		if f.Search != "" {
+			where = append(where, "(LOWER(sp.name) LIKE ? OR LOWER(sp.number) LIKE ?)")
+			like := "%" + strings.ToLower(f.Search) + "%"
+			args = append(args, like, like)
+		}
+	}
+
+	q := base + " WHERE " + strings.Join(where, " AND ") + " ORDER BY sp.name"
+	rows, err := r.ro().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list sf projects: %w", err)
 	}
@@ -622,13 +693,27 @@ func (r *SurveyRepo) ListSalesforceProjects(ctx context.Context) ([]ICSalesforce
 	for rows.Next() {
 		var s ICSalesforceProject
 		if err := rows.Scan(&s.ID, &s.SalesforceProjectID, &s.Name, &s.Number,
-			&s.SalesforceAccountID, &s.SubscriptionID, &s.IsDeleted,
-			&s.OwnerName, &s.ProjectManagerName); err != nil {
+			&s.SalesforceAccountID, &s.SubscriptionID, &s.IsProjectPricing,
+			&s.IsDeleted, &s.LastModifiedDate, &s.ClientProjectName,
+			&s.ClientProjectNumber, &s.BrandTypeID, &s.SalesforceProjectType,
+			&s.SalesforceProjectStatus, &s.OwnerName, &s.ProjectManagerName,
+			&s.ProjectReconciled); err != nil {
 			return nil, fmt.Errorf("scan sf project: %w", err)
 		}
 		result = append(result, s)
 	}
 	return result, rows.Err()
+}
+
+// GetMonoProjectID returns the project.id for a given salesforce_project_id, or nil if none.
+func (r *SurveyRepo) GetMonoProjectID(ctx context.Context, salesforceProjectID string) *int64 {
+	var id int64
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT id FROM project WHERE salesforce_project_id = ? LIMIT 1", salesforceProjectID).Scan(&id)
+	if err != nil {
+		return nil
+	}
+	return &id
 }
 
 // ListProjectInquiries returns inquiries for a subscription.
