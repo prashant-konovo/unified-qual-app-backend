@@ -855,6 +855,7 @@ func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetProjectQualReschedBody returns the reschedule email template body.
+// Legacy contract: {"html": "<rendered email HTML>"}
 func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "pid")
 	projectID, err := strconv.ParseInt(idStr, 10, 64)
@@ -868,7 +869,7 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			slog.Error("get qual resched body failed", "error", err)
 		}
-		success(w, map[string]any{"body": body})
+		success(w, map[string]any{"html": body})
 		return
 	}
 
@@ -876,11 +877,11 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 	if h.qsAnswerRepo != nil {
 		t, _ := h.qsAnswerRepo.GetCommunicationTemplate(r.Context(), "reschedule")
 		if t != nil {
-			success(w, map[string]any{"body": t.Body})
+			success(w, map[string]any{"html": t.Body})
 			return
 		}
 	}
-	success(w, map[string]any{"body": ""})
+	success(w, map[string]any{"html": ""})
 }
 
 // GetProjectAvailability returns moderator availability for a project.
