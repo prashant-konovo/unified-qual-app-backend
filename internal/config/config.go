@@ -63,6 +63,9 @@ type Config struct {
 	// S3 buckets
 	S3 S3Config
 
+	// Inquiry email recipient
+	InquiryEmailRecipient string
+
 	// CORS
 	CORSOrigins string
 }
@@ -166,6 +169,7 @@ type S3Config struct {
 	Region          string
 	RecordingBucket string
 	ExportBucket    string
+	InquiryBucket   string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -296,7 +300,10 @@ func Load() *Config {
 			Region:          envOr("AWS_REGION", envOr("COGNITO_REGION", "us-east-1")),
 			RecordingBucket: envOr("S3_RECORDING_BUCKET", ""),
 			ExportBucket:    envOr("S3_EXPORT_BUCKET", ""),
+			InquiryBucket:   envOr("S3_INQUIRY_BUCKET", ""),
 		},
+
+		InquiryEmailRecipient: envOr("INQUIRY_EMAIL_RECIPIENT", "dev-ni@incrowdnow.com"),
 	}
 }
 

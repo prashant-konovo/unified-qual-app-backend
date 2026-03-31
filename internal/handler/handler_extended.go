@@ -786,32 +786,128 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
+// CreateCustomCrowdInquiry handles custom crowd inquiry submission with CSV upload.
+// Contract-identical with legacy InCrowdAPI: POST /v1/custom_crowd_inquiry
+// Request: multipart/form-data with file + crowdName + completionDate + sampleSize + subscriptionId + marketId(optional)
+// Response: {} (empty JSON object)
 func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		SubscriptionID  int64  `json:"subscriptionId"`
-		Description     string `json:"description"`
-		InterviewLength int    `json:"interviewLength"`
-		InquiryTypeID   int    `json:"inquiryTypeId"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if err := r.ParseMultipartForm(32 << 20); err != nil { // 32 MB max
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "not valid multipart-form-data, or labeled as such"})
 		return
 	}
 
-	if h.irisSurveyRepo != nil {
-		inquiryID, err := h.irisSurveyRepo.CreateCustomCrowdInquiry(r.Context(), req.SubscriptionID, req.Description, req.InterviewLength, req.InquiryTypeID)
-		if err != nil {
-			slog.Error("create inquiry failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
-			return
-		}
-		created(w, map[string]any{
-			"id": inquiryID, "subscriptionId": req.SubscriptionID,
-			"description": req.Description, "source": "iris",
-		})
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "no file upload was found, or named \"file\""})
 		return
 	}
-	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	defer file.Close()
+
+	crowdName := r.FormValue("crowdName")
+	completionDate := r.FormValue("completionDate")
+	sampleSizeStr := r.FormValue("sampleSize")
+	subscriptionIDStr := r.FormValue("subscriptionId")
+	marketID := r.FormValue("marketId")
+
+	if crowdName == "" || completionDate == "" || sampleSizeStr == "" || subscriptionIDStr == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid form data for list match inquiry"})
+		return
+	}
+
+	subscriptionID, err := strconv.ParseInt(subscriptionIDStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid form data for list match inquiry"})
+		return
+	}
+
+	sampleSize, err := strconv.Atoi(sampleSizeStr)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid form data for list match inquiry"})
+		return
+	}
+
+	// Resolve calling user ID for filename
+	userIDStr := "unknown"
+	if user := middleware.GetUser(r); user != nil {
+		userIDStr = user.Username
+	}
+
+	// Upload file to S3
+	fileName := fmt.Sprintf("custom_crowd_inquiry%d_%s.csv", time.Now().UnixMilli(), userIDStr)
+	var downloadLink string
+	if h.services.S3 != nil && h.services.S3.Configured() {
+		url, uploadErr := h.services.S3.UploadFile(r.Context(), h.services.S3.InquiryBucket(), fileName, file, header.Header.Get("Content-Type"))
+		if uploadErr != nil {
+			slog.Error("S3 upload failed for custom crowd inquiry", "error", uploadErr, "userId", userIDStr)
+		} else {
+			downloadLink = url
+		}
+	} else {
+		slog.Warn("S3 not configured, skipping file upload for custom crowd inquiry")
+	}
+
+	// Determine inquiry type (List Match vs Prevalidated List)
+	isListMatch := marketID != ""
+	subject := "A Prevalidated List was submitted"
+	requestType := "Prevalidated List Request"
+	if isListMatch {
+		subject = "A List Match crowd was submitted"
+		requestType = "List Match Request"
+	}
+
+	// Look up subscription company name
+	companyName := "Unknown"
+	if h.irisSurveyRepo != nil {
+		if name, lookupErr := h.irisSurveyRepo.GetSubscriptionCompany(r.Context(), subscriptionID); lookupErr == nil && name != "" {
+			companyName = name
+		}
+	}
+
+	// Look up market name if provided
+	var marketName string
+	if isListMatch && h.irisSurveyRepo != nil {
+		if mID, parseErr := strconv.ParseInt(marketID, 10, 64); parseErr == nil {
+			if name, lookupErr := h.irisSurveyRepo.GetMarketName(r.Context(), mID); lookupErr == nil {
+				marketName = name
+			}
+		}
+	}
+
+	// Send email notification
+	if h.services.Notification != nil && h.services.Notification.Configured() {
+		emailBody := fmt.Sprintf(
+			"<h2>%s</h2>"+
+				"<p><strong>Company:</strong> %s</p>"+
+				"<p><strong>Crowd Name:</strong> %s</p>"+
+				"<p><strong>Sample Size:</strong> %d</p>"+
+				"<p><strong>Completion Date:</strong> %s</p>",
+			requestType, companyName, crowdName, sampleSize, completionDate,
+		)
+		if isListMatch && marketName != "" {
+			emailBody += fmt.Sprintf("<p><strong>Market:</strong> %s</p>", marketName)
+		}
+		if downloadLink != "" {
+			emailBody += fmt.Sprintf("<p><strong>File:</strong> <a href=\"%s\">Download CSV</a></p>", downloadLink)
+		} else {
+			emailBody += "<p><em>Warning: File upload failed — CSV was not uploaded to S3.</em></p>"
+		}
+
+		recipient := h.cfg.InquiryEmailRecipient
+		if recipient == "" {
+			recipient = "dev-ni@incrowdnow.com"
+		}
+		if emailErr := h.services.Notification.SendEmail(r.Context(), integration.EmailMessage{
+			To:          []string{recipient},
+			Subject:     subject,
+			Body:        emailBody,
+			ContentType: "text/html",
+		}); emailErr != nil {
+			slog.Error("failed to send custom crowd inquiry email", "error", emailErr, "userId", userIDStr)
+		}
+	}
+
+	// Contract-identical: legacy returns empty JSON object
+	writeJSON(w, http.StatusOK, map[string]any{})
 }
 
 // ──────────────────────────────────────────────

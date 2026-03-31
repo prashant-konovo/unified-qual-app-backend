@@ -13,6 +13,9 @@ import (
 	"strings"
 	"time"
 
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+
 	"github.com/InCrowd/unified-qual-api/internal/config"
 )
 
@@ -33,6 +36,7 @@ type ServiceClients struct {
 	SMS          *SMSClient
 	EventLog     *EventLogClient
 	GoogleSheets *GoogleSheetsClient
+	S3           *S3Client
 }
 
 func NewServiceClients(cfg *config.Config) *ServiceClients {
@@ -50,6 +54,7 @@ func NewServiceClients(cfg *config.Config) *ServiceClients {
 		SMS:          newSMSClient(cfg.SMS, httpClient),
 		EventLog:     newEventLogClient(cfg.EventLog, httpClient),
 		GoogleSheets: newGoogleSheetsClient(cfg.GoogleSheets, cfg.GoogleCalendar.ServiceAccountKeyPath, httpClient),
+		S3:           newS3Client(cfg.S3),
 	}
 }
 
@@ -1014,4 +1019,41 @@ func (gs *GoogleSheetsClient) UpdateFirstDate(ctx context.Context, sheetName, ce
 		return fmt.Errorf("google sheets returned %d: %s", resp.StatusCode, string(body))
 	}
 	return nil
+}
+
+// ──────────────────────────────────────────────
+// S3 Client (AWS SDK v2)
+// ──────────────────────────────────────────────
+
+// S3Client wraps AWS SDK v2 S3 operations.
+type S3Client struct {
+	region        string
+	inquiryBucket string
+}
+
+func newS3Client(cfg config.S3Config) *S3Client {
+	return &S3Client{region: cfg.Region, inquiryBucket: cfg.InquiryBucket}
+}
+
+func (sc *S3Client) Configured() bool { return sc.inquiryBucket != "" }
+
+func (sc *S3Client) InquiryBucket() string { return sc.inquiryBucket }
+
+func (sc *S3Client) UploadFile(ctx context.Context, bucket, key string, body io.Reader, contentType string) (string, error) {
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(sc.region))
+	if err != nil {
+		return "", fmt.Errorf("load AWS config: %w", err)
+	}
+	client := s3.NewFromConfig(awsCfg)
+	_, err = client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      &bucket,
+		Key:         &key,
+		Body:        body,
+		ContentType: &contentType,
+	})
+	if err != nil {
+		return "", fmt.Errorf("s3 upload: %w", err)
+	}
+	publicURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", bucket, sc.region, key)
+	return publicURL, nil
 }
