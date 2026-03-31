@@ -86,13 +86,19 @@ type ICCrowd struct {
 	DuplicatedFromS3Key         sql.NullString `json:"duplicatedFromS3Key"`
 }
 
-// ICMarket maps the IRIS market table.
+// ICMarket maps the IRIS market table (full legacy columns).
 type ICMarket struct {
-	ID             int64  `json:"id"`
-	Name           string `json:"name"`
-	CanRegister    bool   `json:"canRegister"`
-	CanInterview   bool   `json:"canInterview"`
-	IsActive       bool   `json:"isActive"`
+	ID                  int64          `json:"id"`
+	Name                string         `json:"name"`
+	CanRegister         bool           `json:"canRegister"`
+	ExemptFromValidation bool          `json:"exemptFromValidation"`
+	IsInternal          bool           `json:"isInternal"`
+	Rewards             bool           `json:"rewards"`
+	CanInterview        bool           `json:"canInterview"`
+	Rollup              sql.NullString `json:"rollup"`
+	MedproValidation    bool           `json:"medproValidation"`
+	RequiredLicensure   string         `json:"requiredLicensure"`
+	IsActive            bool           `json:"isActive"`
 }
 
 // ICObserver maps the IRIS observer table.
@@ -860,29 +866,133 @@ func (r *SurveyRepo) CountSurveyCrowdAnswersByBrand(ctx context.Context, surveyI
 		   AND us.is_invalid = 0 AND us.is_test = 0`, brandID, surveyID, crowdID).Scan(count)
 }
 
-// ListMarkets returns all active markets.
-func (r *SurveyRepo) ListMarkets(ctx context.Context) ([]ICMarket, error) {
-	q := `SELECT id, name, can_register, can_interview, is_active FROM market WHERE is_active = 1 ORDER BY name`
-	rows, err := r.ro().QueryContext(ctx, q)
+// MarketFilter holds optional filter params for listing markets.
+type MarketFilter struct {
+	BrandID              int64
+	SubscriptionID       *int64
+	IncludeAnyProfession bool
+	AnyProfessionID      int64 // Constants.marketsIds.anyProfession
+	Lang                 string
+	Limit                *int
+	Offset               *int
+}
+
+// ListMarkets returns markets with filtering, pagination, and adminJson fields.
+func (r *SurveyRepo) ListMarkets(ctx context.Context, f *MarketFilter) ([]ICMarket, int, error) {
+	selectCols := `market.id, market.name, market.can_register, market.exempt_from_validation,
+	       IFNULL(market.is_internal, 0), IFNULL(market.rewards, 1),
+	       market.can_interview, market.rollup,
+	       IFNULL(market.medpro_validation, 1), IFNULL(market.required_licensure, 'N/A'),
+	       market.is_active`
+
+	var joinClause string
+	var whereArgs []any
+
+	if f != nil && f.SubscriptionID != nil {
+		joinClause = " INNER JOIN subscription_markets ON subscription_markets.market_id = market.id"
+		joinClause += " WHERE subscription_markets.subscription_id = ?"
+		whereArgs = append(whereArgs, *f.SubscriptionID)
+	} else {
+		brand := int64(1)
+		if f != nil && f.BrandID > 0 {
+			brand = f.BrandID
+		}
+		joinClause = " INNER JOIN market_brand ON market_brand.market_id = market.id"
+		joinClause += " WHERE market_brand.brand_id = ?"
+		whereArgs = append(whereArgs, brand)
+	}
+
+	// Count total
+	countQ := "SELECT COUNT(DISTINCT market.id) FROM market" + joinClause
+	var totalCount int
+	_ = r.ro().QueryRowContext(ctx, countQ, whereArgs...).Scan(&totalCount)
+
+	// Main query
+	q := "SELECT DISTINCT " + selectCols + " FROM market" + joinClause + " ORDER BY market.name"
+
+	if f != nil && f.Limit != nil {
+		q += fmt.Sprintf(" LIMIT %d", *f.Limit)
+		if f.Offset != nil {
+			q += fmt.Sprintf(" OFFSET %d", *f.Offset)
+		}
+	}
+
+	rows, err := r.ro().QueryContext(ctx, q, whereArgs...)
 	if err != nil {
-		return nil, fmt.Errorf("list markets: %w", err)
+		return nil, 0, fmt.Errorf("list markets: %w", err)
 	}
 	defer rows.Close()
 	var result []ICMarket
 	for rows.Next() {
 		var m ICMarket
-		if err := rows.Scan(&m.ID, &m.Name, &m.CanRegister, &m.CanInterview, &m.IsActive); err != nil {
-			return nil, fmt.Errorf("scan market: %w", err)
+		if err := rows.Scan(&m.ID, &m.Name, &m.CanRegister, &m.ExemptFromValidation,
+			&m.IsInternal, &m.Rewards, &m.CanInterview, &m.Rollup,
+			&m.MedproValidation, &m.RequiredLicensure, &m.IsActive); err != nil {
+			return nil, 0, fmt.Errorf("scan market: %w", err)
 		}
 		result = append(result, m)
 	}
-	return result, rows.Err()
+
+	// Optionally include "Any Profession" market
+	if f != nil && f.IncludeAnyProfession && f.AnyProfessionID > 0 {
+		var ap ICMarket
+		err := r.ro().QueryRowContext(ctx,
+			"SELECT "+selectCols+" FROM market WHERE market.id = ?", f.AnyProfessionID).Scan(
+			&ap.ID, &ap.Name, &ap.CanRegister, &ap.ExemptFromValidation,
+			&ap.IsInternal, &ap.Rewards, &ap.CanInterview, &ap.Rollup,
+			&ap.MedproValidation, &ap.RequiredLicensure, &ap.IsActive)
+		if err == nil {
+			result = append(result, ap)
+			totalCount++
+		}
+	}
+
+	return result, totalCount, rows.Err()
+}
+
+// GetMarketNameTranslation returns the translated name for a market, or the default name.
+func (r *SurveyRepo) GetMarketNameTranslation(ctx context.Context, marketID int64, lang string) string {
+	var translated string
+	err := r.ro().QueryRowContext(ctx,
+		`SELECT translation FROM translator
+		 WHERE row_id = ? AND table_name = 'market' AND column_name = 'name' AND language = ?`,
+		marketID, lang).Scan(&translated)
+	if err == nil && translated != "" {
+		return translated
+	}
+	return "" // empty means use default
+}
+
+// GetMarketRollupTranslation returns the translated rollup for a market.
+func (r *SurveyRepo) GetMarketRollupTranslation(ctx context.Context, marketID int64, lang string) string {
+	var translated string
+	err := r.ro().QueryRowContext(ctx,
+		`SELECT translation FROM translator
+		 WHERE row_id = ? AND table_name = 'market' AND column_name = 'rollup' AND language = ?`,
+		marketID, lang).Scan(&translated)
+	if err == nil && translated != "" {
+		return translated
+	}
+	return "" // empty means use default
+}
+
+// GetSubscriptionIDForAccount looks up subscription ID from account ID.
+func (r *SurveyRepo) GetSubscriptionIDForAccount(ctx context.Context, accountID int64) *int64 {
+	var subID int64
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT id FROM subscription WHERE account_id = ? LIMIT 1", accountID).Scan(&subID)
+	if err != nil {
+		return nil
+	}
+	return &subID
 }
 
 // ListMarketsWithNPI returns markets that have can_interview and NPI association.
 func (r *SurveyRepo) ListMarketsWithNPI(ctx context.Context) ([]ICMarket, error) {
-	q := `SELECT id, name, can_register, can_interview, is_active FROM market
-	      WHERE is_active = 1 AND can_interview = 1 ORDER BY name`
+	q := `SELECT id, name, can_register, exempt_from_validation,
+	       IFNULL(is_internal, 0), IFNULL(rewards, 1), can_interview, rollup,
+	       IFNULL(medpro_validation, 1), IFNULL(required_licensure, 'N/A'), is_active
+	      FROM market WHERE is_active = 1 AND can_interview = 1 ORDER BY name`
 	rows, err := r.ro().QueryContext(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("list npi markets: %w", err)
@@ -891,7 +1001,9 @@ func (r *SurveyRepo) ListMarketsWithNPI(ctx context.Context) ([]ICMarket, error)
 	var result []ICMarket
 	for rows.Next() {
 		var m ICMarket
-		if err := rows.Scan(&m.ID, &m.Name, &m.CanRegister, &m.CanInterview, &m.IsActive); err != nil {
+		if err := rows.Scan(&m.ID, &m.Name, &m.CanRegister, &m.ExemptFromValidation,
+			&m.IsInternal, &m.Rewards, &m.CanInterview, &m.Rollup,
+			&m.MedproValidation, &m.RequiredLicensure, &m.IsActive); err != nil {
 			return nil, fmt.Errorf("scan market: %w", err)
 		}
 		result = append(result, m)

@@ -1533,26 +1533,113 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 // Market Domain
 // ──────────────────────────────────────────────
 
-// ListMarkets returns all active markets.
+// ListMarkets returns markets with legacy-compatible filtering, pagination, and adminJson.
+// Legacy contract: {markets: [adminJson], limit, offset, totalCount}
+// Query params: brandId, subscriptionId, accountId, includeAnyProfession, lang, limit, offset
 func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
-	if h.irisSurveyRepo != nil {
-		markets, err := h.irisSurveyRepo.ListMarkets(r.Context())
-		if err != nil {
-			slog.Error("list markets failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
-			return
-		}
-		result := make([]map[string]any, 0, len(markets))
-		for _, m := range markets {
-			result = append(result, map[string]any{
-				"id": m.ID, "name": m.Name, "canRegister": m.CanRegister,
-				"canInterview": m.CanInterview, "isActive": m.IsActive,
-			})
-		}
-		success(w, result)
+	if h.irisSurveyRepo == nil {
+		success(w, map[string]any{"markets": []any{}, "limit": nil, "offset": nil, "totalCount": 0})
 		return
 	}
-	success(w, []any{})
+
+	q := r.URL.Query()
+	lang := q.Get("lang")
+	if lang == "" {
+		lang = "en_us"
+	}
+
+	filter := &iris.MarketFilter{
+		BrandID: 1,
+		Lang:    lang,
+	}
+
+	if bid := q.Get("brandId"); bid != "" {
+		if v, err := strconv.ParseInt(bid, 10, 64); err == nil {
+			filter.BrandID = v
+		}
+	}
+
+	// subscriptionId takes precedence; accountId resolves to subscription
+	if sid := q.Get("subscriptionId"); sid != "" {
+		if v, err := strconv.ParseInt(sid, 10, 64); err == nil {
+			filter.SubscriptionID = &v
+		}
+	} else if aid := q.Get("accountId"); aid != "" {
+		if v, err := strconv.ParseInt(aid, 10, 64); err == nil {
+			if v == 0 {
+				filter.SubscriptionID = &v
+			} else if subID := h.irisSurveyRepo.GetSubscriptionIDForAccount(r.Context(), v); subID != nil {
+				filter.SubscriptionID = subID
+			}
+		}
+	}
+
+	if q.Get("includeAnyProfession") == "true" {
+		filter.IncludeAnyProfession = true
+		filter.AnyProfessionID = 26 // Constants.marketsIds.anyProfession
+	}
+
+	var limitVal, offsetVal any
+	if lim := q.Get("limit"); lim != "" {
+		if v, err := strconv.Atoi(lim); err == nil {
+			filter.Limit = &v
+			limitVal = v
+		}
+	}
+	if off := q.Get("offset"); off != "" {
+		if v, err := strconv.Atoi(off); err == nil {
+			filter.Offset = &v
+			offsetVal = v
+		}
+	}
+
+	markets, totalCount, err := h.irisSurveyRepo.ListMarkets(r.Context(), filter)
+	if err != nil {
+		slog.Error("list markets failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		return
+	}
+
+	ctx := r.Context()
+	result := make([]map[string]any, 0, len(markets))
+	for _, m := range markets {
+		// Translations
+		name := m.Name
+		if lang != "en_us" {
+			if translated := h.irisSurveyRepo.GetMarketNameTranslation(ctx, m.ID, lang); translated != "" {
+				name = translated
+			}
+		}
+		rollup := nsVal(m.Rollup)
+		if lang != "en_us" {
+			if translated := h.irisSurveyRepo.GetMarketRollupTranslation(ctx, m.ID, lang); translated != "" {
+				rollup = translated
+			}
+		}
+		if rollup == nil {
+			rollup = ""
+		}
+
+		result = append(result, map[string]any{
+			"id":                   m.ID,
+			"name":                 name,
+			"canRegister":          m.CanRegister,
+			"exemptFromValidation": m.ExemptFromValidation,
+			"rollup":               rollup,
+			"isInternal":           m.IsInternal,
+			"rewards":              m.Rewards,
+			"canInterview":         m.CanInterview,
+			"medproValidation":     m.MedproValidation,
+			"requiredLicensure":    m.RequiredLicensure,
+		})
+	}
+
+	success(w, map[string]any{
+		"markets":    result,
+		"limit":      limitVal,
+		"offset":     offsetVal,
+		"totalCount": totalCount,
+	})
 }
 
 // ListMarketsNPI returns markets with NPI.
