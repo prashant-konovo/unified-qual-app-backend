@@ -152,15 +152,18 @@ type ICProjectInquiry struct {
 	Description            string         `json:"description"`
 	Notes                  sql.NullString `json:"notes"`
 	SubscriptionID         int64          `json:"subscriptionId"`
+	InquiryTypeID          int64          `json:"inquiryTypeId"`
+	InterviewLength        int64          `json:"interviewLength"`
+	RequiredCompletionDate sql.NullTime   `json:"requiredCompletionDate"`
 	ProjectID              int64          `json:"projectId"`
-	InquiryTypeID          int            `json:"inquiryTypeId"`
-	InterviewLength        int            `json:"interviewLength"`
-	RequiredCompletionDate time.Time      `json:"requiredCompletionDate"`
 	CreatedOn              time.Time      `json:"createdOn"`
 	CreatedBy              int64          `json:"createdBy"`
+	ModifiedOn             time.Time      `json:"modifiedOn"`
+	ModifiedBy             int64          `json:"modifiedBy"`
 	UnderReview            bool           `json:"underReview"`
 	TranscriptsRequested   bool           `json:"transcriptsRequested"`
 	RequiresStimuli        bool           `json:"requiresStimuli"`
+	IsDynamicStimulus      bool           `json:"isDynamicStimulus"`
 }
 
 // SurveyRepo handles IRIS survey/crowd/market/observer queries.
@@ -909,13 +912,57 @@ func (r *SurveyRepo) GetMonoProjectID(ctx context.Context, salesforceProjectID s
 	return &id
 }
 
-// ListProjectInquiries returns inquiries for a subscription.
-func (r *SurveyRepo) ListProjectInquiries(ctx context.Context, subscriptionID int64) ([]ICProjectInquiry, error) {
-	q := `SELECT id, description, notes, subscription_id, project_id, inquiry_type_id,
-	       interview_length, required_completion_date, created_on, created_by,
-	       under_review, transcripts_requested, requires_stimuli
-	      FROM project_inquiry WHERE subscription_id = ? ORDER BY created_on DESC`
-	rows, err := r.ro().QueryContext(ctx, q, subscriptionID)
+// InquiryFilter holds optional filter/sort params for listing inquiries.
+type InquiryFilter struct {
+	StatusIDs []int64
+	Search    string
+	SortBy    string
+	SortDir   string
+}
+
+// ListProjectInquiries returns inquiries for a subscription with optional filtering.
+func (r *SurveyRepo) ListProjectInquiries(ctx context.Context, subscriptionID int64, f *InquiryFilter) ([]ICProjectInquiry, error) {
+	q := `SELECT project_inquiry.id, project_inquiry.description, project_inquiry.notes,
+	       project_inquiry.subscription_id, project_inquiry.inquiry_type_id,
+	       project_inquiry.interview_length, project_inquiry.required_completion_date,
+	       project_inquiry.project_id, project_inquiry.created_on, project_inquiry.created_by,
+	       project_inquiry.modified_on, project_inquiry.modified_by,
+	       project_inquiry.under_review, project_inquiry.transcripts_requested,
+	       project_inquiry.requires_stimuli, project_inquiry.is_dynamic_stimulus
+	      FROM project_inquiry
+	      INNER JOIN project ON project_inquiry.project_id = project.id
+	      WHERE project_inquiry.subscription_id = ? AND project.is_archived = 0`
+	args := []any{subscriptionID}
+
+	if f != nil && len(f.StatusIDs) > 0 {
+		placeholders := make([]string, len(f.StatusIDs))
+		for i, sid := range f.StatusIDs {
+			placeholders[i] = "?"
+			args = append(args, sid)
+		}
+		q += " AND project.project_status_id IN (" + strings.Join(placeholders, ",") + ")"
+	}
+
+	if f != nil && f.Search != "" {
+		q += " AND project.name LIKE ?"
+		args = append(args, "%"+f.Search+"%")
+	}
+
+	if f != nil && f.SortBy != "" {
+		// Whitelist allowed sort columns
+		allowed := map[string]bool{"name": true, "created_on": true, "modified_on": true, "project_status_id": true}
+		if allowed[f.SortBy] {
+			dir := "ASC"
+			if strings.EqualFold(f.SortDir, "desc") {
+				dir = "DESC"
+			}
+			q += fmt.Sprintf(" ORDER BY project.%s %s", f.SortBy, dir)
+		}
+	} else {
+		q += " ORDER BY project_inquiry.created_on DESC"
+	}
+
+	rows, err := r.ro().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list inquiries: %w", err)
 	}
@@ -923,14 +970,34 @@ func (r *SurveyRepo) ListProjectInquiries(ctx context.Context, subscriptionID in
 	var result []ICProjectInquiry
 	for rows.Next() {
 		var pi ICProjectInquiry
-		if err := rows.Scan(&pi.ID, &pi.Description, &pi.Notes, &pi.SubscriptionID, &pi.ProjectID,
-			&pi.InquiryTypeID, &pi.InterviewLength, &pi.RequiredCompletionDate, &pi.CreatedOn,
-			&pi.CreatedBy, &pi.UnderReview, &pi.TranscriptsRequested, &pi.RequiresStimuli); err != nil {
+		if err := rows.Scan(&pi.ID, &pi.Description, &pi.Notes, &pi.SubscriptionID,
+			&pi.InquiryTypeID, &pi.InterviewLength, &pi.RequiredCompletionDate,
+			&pi.ProjectID, &pi.CreatedOn, &pi.CreatedBy,
+			&pi.ModifiedOn, &pi.ModifiedBy, &pi.UnderReview,
+			&pi.TranscriptsRequested, &pi.RequiresStimuli, &pi.IsDynamicStimulus); err != nil {
 			return nil, fmt.Errorf("scan inquiry: %w", err)
 		}
 		result = append(result, pi)
 	}
 	return result, rows.Err()
+}
+
+// GetInquiryTypeName returns the name for an inquiry type ID.
+func (r *SurveyRepo) GetInquiryTypeName(ctx context.Context, typeID int64) string {
+	var name string
+	if err := r.ro().QueryRowContext(ctx,
+		"SELECT description FROM inquiry_type WHERE id = ?", typeID).Scan(&name); err != nil {
+		// Fallback names
+		switch typeID {
+		case 1:
+			return "Qual"
+		case 2:
+			return "Quant"
+		default:
+			return ""
+		}
+	}
+	return name
 }
 
 // GetProjectInquiry returns a single project inquiry.

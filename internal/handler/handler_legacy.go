@@ -984,6 +984,7 @@ func (h *Handler) GetSubscriptionQuestionTypes(w http.ResponseWriter, r *http.Re
 }
 
 // GetSubscriptionInquiries returns inquiries for a subscription.
+// Legacy contract: returns [{"inquiry": {...adminJson}, "project": {...listJson}}]
 func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "subId")
 	subID, err := strconv.ParseInt(idStr, 10, 64)
@@ -992,27 +993,92 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if h.irisSurveyRepo != nil {
-		inquiries, err := h.irisSurveyRepo.ListProjectInquiries(r.Context(), subID)
-		if err != nil {
-			slog.Error("inquiries list failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
-			return
-		}
-		result := make([]map[string]any, 0, len(inquiries))
-		for _, pi := range inquiries {
-			result = append(result, map[string]any{
-				"id": pi.ID, "description": pi.Description,
-				"subscriptionId": pi.SubscriptionID, "projectId": pi.ProjectID,
-				"inquiryTypeId": pi.InquiryTypeID, "interviewLength": pi.InterviewLength,
-				"createdOn": pi.CreatedOn.Format(time.RFC3339),
-				"underReview": pi.UnderReview,
-			})
-		}
-		success(w, result)
+	if h.irisSurveyRepo == nil {
+		success(w, []map[string]any{})
 		return
 	}
-	success(w, []any{})
+
+	q := r.URL.Query()
+	filter := &iris.InquiryFilter{
+		Search:  q.Get("q"),
+		SortBy:  q.Get("sortBy"),
+		SortDir: q.Get("sortDir"),
+	}
+
+	// Parse status IDs
+	if statusStr := q.Get("status"); statusStr != "" {
+		for _, s := range strings.Split(statusStr, ",") {
+			if id, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64); err == nil {
+				filter.StatusIDs = append(filter.StatusIDs, id)
+			}
+		}
+	}
+
+	inquiries, err := h.irisSurveyRepo.ListProjectInquiries(r.Context(), subID, filter)
+	if err != nil {
+		slog.Error("inquiries list failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		return
+	}
+
+	ctx := r.Context()
+	result := make([]map[string]any, 0, len(inquiries))
+	for _, pi := range inquiries {
+		// Build inquiry adminJson
+		inquiryJSON := map[string]any{
+			"id":                     pi.ID,
+			"description":            pi.Description,
+			"notes":                  nullStr(pi.Notes),
+			"subscriptionId":         pi.SubscriptionID,
+			"inquiryTypeId":          pi.InquiryTypeID,
+			"inquiryType":            h.irisSurveyRepo.GetInquiryTypeName(ctx, pi.InquiryTypeID),
+			"interviewLength":        pi.InterviewLength,
+			"requiredCompletionDate": ntVal(pi.RequiredCompletionDate),
+			"projectId":              pi.ProjectID,
+			"createdOn":              pi.CreatedOn.Format(time.RFC3339),
+			"createdBy":              pi.CreatedBy,
+			"modifiedOn":             pi.ModifiedOn.Format(time.RFC3339),
+			"modifiedBy":             pi.ModifiedBy,
+			"underReview":            pi.UnderReview,
+			"transcriptsRequested":   pi.TranscriptsRequested,
+			"requiresStimuli":        pi.RequiresStimuli,
+			"isDynamicStimulus":      pi.IsDynamicStimulus,
+		}
+
+		// Build project listJson
+		projectJSON := map[string]any{}
+		if h.irisProjectRepo != nil {
+			if p, err := h.irisProjectRepo.GetByID(ctx, pi.ProjectID); err == nil && p != nil {
+				projectJSON = map[string]any{
+					"id":                   p.ID,
+					"name":                 p.Name,
+					"description":          nullStr(p.Description),
+					"subscriptionId":       p.SubscriptionID,
+					"createdOn":            p.CreatedOn.Format(time.RFC3339),
+					"createdBy":            niVal(p.CreatedBy),
+					"modifiedOn":           ntVal(p.ModifiedOn),
+					"budget":               nullStr(p.Budget),
+					"isPrivate":            p.IsPrivate,
+					"qualModeratorId":      niVal(p.QualModeratorID),
+					"projectStatusId":      p.ProjectStatusID,
+					"projectTypeId":        p.ProjectTypeID,
+					"salesforceProjectId":  nullStr(p.SalesforceProjectID),
+					"completedOn":          ntVal(p.CompletedOn),
+					"isArchived":           p.IsArchived,
+					"archivedBy":           niVal(p.ArchivedBy),
+					"archivedOn":           ntVal(p.ArchivedOn),
+					"finalizedOn":          ntVal(p.FinalizedOn),
+				}
+			}
+		}
+
+		result = append(result, map[string]any{
+			"inquiry": inquiryJSON,
+			"project": projectJSON,
+		})
+	}
+
+	success(w, result)
 }
 
 // GetSubscriptionProjectInquiry returns a specific inquiry for a subscription/project.
@@ -1037,7 +1103,7 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 			"id": pi.ID, "description": pi.Description,
 			"subscriptionId": pi.SubscriptionID, "projectId": pi.ProjectID,
 			"inquiryTypeId": pi.InquiryTypeID, "interviewLength": pi.InterviewLength,
-			"requiredCompletionDate": pi.RequiredCompletionDate.Format(time.RFC3339),
+			"requiredCompletionDate": ntVal(pi.RequiredCompletionDate),
 			"underReview": pi.UnderReview,
 			"transcriptsRequested": pi.TranscriptsRequested,
 			"requiresStimuli": pi.RequiresStimuli,
