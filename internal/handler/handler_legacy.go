@@ -743,6 +743,7 @@ func (h *Handler) DeleteProjectMedia(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 // GetSubscriptionInterviews returns interviews for a subscription.
+// Legacy contract: response wrapped as {"interviews": [...]} with 16-field interview objects.
 func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	subID, err := strconv.ParseInt(idStr, 10, 64)
@@ -758,10 +759,13 @@ func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Reque
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		success(w, interviews)
+		if interviews == nil {
+			interviews = []map[string]any{}
+		}
+		success(w, map[string]any{"interviews": interviews})
 		return
 	}
-	success(w, []any{})
+	success(w, map[string]any{"interviews": []map[string]any{}})
 }
 
 // GetSubscriptionCrowds returns crowds for a subscription.

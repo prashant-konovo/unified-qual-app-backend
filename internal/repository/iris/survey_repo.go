@@ -852,15 +852,52 @@ func (r *SurveyRepo) GetProjectAvailability(ctx context.Context, projectID int64
 
 // GetSubscriptionInterviews returns all interviews for a subscription.
 func (r *SurveyRepo) GetSubscriptionInterviews(ctx context.Context, subscriptionID int64) ([]map[string]any, error) {
-	q := `SELECT ts.id, ts.project_id, p.name AS project_name,
-	       ts.start_time, ts.end_time, ts.duration, ts.status_id,
-	       ts.conference_hash, ts.interviewee_id,
-	       CONCAT(u.first_name, ' ', u.last_name) AS interviewee_name
-	      FROM time_slot ts
-	      JOIN project p ON p.id = ts.project_id AND p.subscription_id = ?
-	      LEFT JOIN ic_user u ON u.id = ts.interviewee_id
-	      WHERE ts.is_invalid = 0
-	      ORDER BY ts.start_time DESC LIMIT 500`
+	q := `SELECT
+	        ic_user.id AS participant_id,
+	        project.id AS project_id,
+	        project.name AS project_name,
+	        crowd.name AS crowd_name,
+	        survey.name_private AS survey_name_private,
+	        time_slot.duration,
+	        time_slot.start_time,
+	        time_slot.end_time,
+	        time_slot.id AS time_slot_id,
+	        time_slot.conference_hash,
+	        moderator_info.id AS host_moderator_id,
+	        moderator_info.first_name AS host_moderator_first_name,
+	        moderator_info.last_name AS host_moderator_last_name,
+	        moderator_info.hash AS host_moderator_hash,
+	        project_inquiry.requires_stimuli,
+	        research_time_slot_hash.hash AS share_hash
+	      FROM ic_user
+	      INNER JOIN user_survey ON user_survey.user_id = ic_user.id
+	      INNER JOIN crowd ON user_survey.crowd_id = crowd.id
+	      INNER JOIN survey ON user_survey.survey_id = survey.id
+	      INNER JOIN answer ON answer.user_survey_id = user_survey.id
+	      INNER JOIN answer_details ON answer_details.answer_id = answer.id
+	      INNER JOIN time_slot ON answer_details.time_slot_id = time_slot.id
+	      LEFT JOIN research_time_slot_hash ON research_time_slot_hash.time_slot_id = time_slot.id
+	      INNER JOIN (
+	        SELECT
+	          ic_user.id AS id,
+	          ic_user.first_name AS first_name,
+	          ic_user.last_name AS last_name,
+	          conference_invitation.participant_hash AS hash,
+	          moderator_time_slot.time_slot_id
+	        FROM moderator_time_slot
+	        INNER JOIN conference_invitation ON moderator_time_slot.time_slot_id = conference_invitation.time_slot_id
+	          AND conference_invitation.user_id = moderator_time_slot.moderator_id
+	          AND moderator_time_slot.is_host = 1
+	        INNER JOIN ic_user ON ic_user.id = moderator_time_slot.moderator_id
+	        WHERE moderator_time_slot.is_host
+	      ) moderator_info ON moderator_info.time_slot_id = time_slot.id
+	      INNER JOIN project ON time_slot.project_id = project.id
+	      INNER JOIN project_inquiry ON project.id = project_inquiry.project_id
+	      INNER JOIN subscription ON subscription.id = project.subscription_id
+	      WHERE project.subscription_id = ?
+	        AND user_survey.is_test = 0
+	        AND user_survey.is_invalid = 0
+	      ORDER BY time_slot.start_time ASC`
 	rows, err := r.ro().QueryContext(ctx, q, subscriptionID)
 	if err != nil {
 		return nil, fmt.Errorf("get sub interviews: %w", err)
@@ -868,30 +905,42 @@ func (r *SurveyRepo) GetSubscriptionInterviews(ctx context.Context, subscription
 	defer rows.Close()
 	var result []map[string]any
 	for rows.Next() {
-		var tsID, projectID int64
-		var projectName string
+		var participantID, projectID, timeSlotID, hostModeratorID int64
+		var projectName, crowdName, surveyNamePrivate string
+		var duration int64
 		var startTime, endTime time.Time
-		var duration, statusID int
-		var confHash sql.NullString
-		var intervieweeID sql.NullInt64
-		var intervieweeName sql.NullString
-		if err := rows.Scan(&tsID, &projectID, &projectName, &startTime, &endTime, &duration,
-			&statusID, &confHash, &intervieweeID, &intervieweeName); err != nil {
+		var conferenceHash string
+		var hostModeratorFirstName, hostModeratorLastName, hostModeratorHash string
+		var requiresStimulus bool
+		var shareHash sql.NullString
+		if err := rows.Scan(&participantID, &projectID, &projectName, &crowdName,
+			&surveyNamePrivate, &duration, &startTime, &endTime, &timeSlotID,
+			&conferenceHash, &hostModeratorID, &hostModeratorFirstName,
+			&hostModeratorLastName, &hostModeratorHash, &requiresStimulus,
+			&shareHash); err != nil {
 			return nil, fmt.Errorf("scan sub interview: %w", err)
 		}
+		var shareHashVal any
+		if shareHash.Valid {
+			shareHashVal = shareHash.String
+		}
 		m := map[string]any{
-			"id": tsID, "projectId": projectID, "projectName": projectName,
-			"startTime": startTime.Format(time.RFC3339), "endTime": endTime.Format(time.RFC3339),
-			"duration": duration, "statusId": statusID,
-		}
-		if confHash.Valid {
-			m["conferenceHash"] = confHash.String
-		}
-		if intervieweeID.Valid {
-			m["intervieweeId"] = intervieweeID.Int64
-		}
-		if intervieweeName.Valid {
-			m["intervieweeName"] = intervieweeName.String
+			"participantId":          participantID,
+			"projectId":               projectID,
+			"projectName":             projectName,
+			"crowdName":               crowdName,
+			"surveyNamePrviate":       surveyNamePrivate,
+			"duration":                duration,
+			"startTime":               startTime.Format(time.RFC3339),
+			"endTime":                 endTime.Format(time.RFC3339),
+			"timeSlotId":              timeSlotID,
+			"conferenceHash":          conferenceHash,
+			"hostModeratorId":         hostModeratorID,
+			"hostModeratorFirstName":  hostModeratorFirstName,
+			"hostModeratorLastName":   hostModeratorLastName,
+			"hostModeratorHash":       hostModeratorHash,
+			"requiresStimulus":        requiresStimulus,
+			"shareHash":               shareHashVal,
 		}
 		result = append(result, m)
 	}
