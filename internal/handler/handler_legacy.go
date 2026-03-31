@@ -936,23 +936,51 @@ func (h *Handler) buildCrowdBasicJSON(ctx context.Context, c iris.ICCrowd) map[s
 }
 
 // GetSubscriptionQuestionTypes returns question types for a subscription.
+// Legacy contract: returns all question_type rows with pagination wrapper.
+// Response: {"totalCount": N, "limit": N, "offset": N, "questionTypes": [...]}
 func (h *Handler) GetSubscriptionQuestionTypes(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	subID, err := strconv.ParseInt(idStr, 10, 64)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid subscription id"})
+	_ = chi.URLParam(r, "id") // subId validated but not used for filtering (legacy returns all types)
+
+	if h.irisSurveyRepo == nil {
+		success(w, map[string]any{"totalCount": 0, "limit": nil, "offset": nil, "questionTypes": []map[string]any{}})
 		return
 	}
 
-	if h.irisSurveyRepo != nil {
-		types, err := h.irisSurveyRepo.GetSubscriptionQuestionTypes(r.Context(), subID)
-		if err != nil {
-			slog.Error("question types failed", "error", err)
-		}
-		success(w, types)
+	allTypes, err := h.irisSurveyRepo.GetAllQuestionTypes(r.Context())
+	if err != nil {
+		slog.Error("question types failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
-	success(w, []any{})
+	if allTypes == nil {
+		allTypes = []map[string]any{}
+	}
+
+	totalCount := len(allTypes)
+	q := r.URL.Query()
+
+	// Apply pagination (legacy supports ?limit, ?offset)
+	var limitVal, offsetVal any
+	result := allTypes
+	if v := q.Get("offset"); v != "" {
+		if o, err := strconv.Atoi(v); err == nil && o > 0 && o < len(result) {
+			result = result[o:]
+			offsetVal = o
+		}
+	}
+	if v := q.Get("limit"); v != "" {
+		if l, err := strconv.Atoi(v); err == nil && l > 0 && l < len(result) {
+			result = result[:l]
+			limitVal = l
+		}
+	}
+
+	success(w, map[string]any{
+		"totalCount":    totalCount,
+		"limit":         limitVal,
+		"offset":        offsetVal,
+		"questionTypes": result,
+	})
 }
 
 // GetSubscriptionInquiries returns inquiries for a subscription.

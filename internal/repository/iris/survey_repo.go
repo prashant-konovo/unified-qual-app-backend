@@ -1140,13 +1140,10 @@ func (r *SurveyRepo) GetSubscriptionInterviews(ctx context.Context, subscription
 	return result, rows.Err()
 }
 
-// GetSubscriptionQuestionTypes returns question types for a subscription.
-func (r *SurveyRepo) GetSubscriptionQuestionTypes(ctx context.Context, subscriptionID int64) ([]map[string]any, error) {
-	q := `SELECT DISTINCT st.id, st.name
-	      FROM survey_type st
-	      JOIN survey s ON s.survey_type_id = st.id AND s.subscription_id = ?
-	      ORDER BY st.name`
-	rows, err := r.ro().QueryContext(ctx, q, subscriptionID)
+// GetAllQuestionTypes returns all question types from the question_type table.
+func (r *SurveyRepo) GetAllQuestionTypes(ctx context.Context) ([]map[string]any, error) {
+	q := `SELECT id, description, allow_na, allows_delta FROM question_type ORDER BY id`
+	rows, err := r.ro().QueryContext(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("get question types: %w", err)
 	}
@@ -1154,13 +1151,45 @@ func (r *SurveyRepo) GetSubscriptionQuestionTypes(ctx context.Context, subscript
 	var result []map[string]any
 	for rows.Next() {
 		var id int64
-		var name string
-		if err := rows.Scan(&id, &name); err != nil {
+		var description string
+		var allowNA, allowsDelta bool
+		if err := rows.Scan(&id, &description, &allowNA, &allowsDelta); err != nil {
 			return nil, fmt.Errorf("scan question type: %w", err)
 		}
-		result = append(result, map[string]any{"id": id, "name": name})
+		// Get compatible logic type IDs
+		logicTypes := r.getCompatibleLogicTypes(ctx, id)
+		result = append(result, map[string]any{
+			"id":                    id,
+			"description":           description,
+			"compatibleLogicTypes":  logicTypes,
+			"allowNA":               allowNA,
+			"allowsDelta":           allowsDelta,
+		})
 	}
 	return result, rows.Err()
+}
+
+// getCompatibleLogicTypes returns logic type IDs compatible with a question type.
+func (r *SurveyRepo) getCompatibleLogicTypes(ctx context.Context, questionTypeID int64) []int64 {
+	rows, err := r.ro().QueryContext(ctx,
+		`SELECT survey_question_logic_type_id FROM question_type_logic_type
+		 WHERE question_type_id = ?`, questionTypeID)
+	if err != nil {
+		return []int64{}
+	}
+	defer rows.Close()
+	var result []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		result = append(result, id)
+	}
+	if result == nil {
+		return []int64{}
+	}
+	return result
 }
 
 // GetQualRescheduleBody returns the qual reschedule email template body for a project.
