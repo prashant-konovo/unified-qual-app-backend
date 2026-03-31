@@ -3,12 +3,14 @@ package handler
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -680,7 +682,9 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
 }
 
-// GetSubscriptionProjectSurveys returns surveys for all projects in a subscription.
+// GetSubscriptionProjectSurveys returns projects and their surveys for a subscription.
+// Contract-identical with legacy InCrowdAPI: GET /v1/project/:subId/project_surveys
+// Response: { "projects": { "<projectId>": { "name", "projectStatusId", "surveys": [...] } } }
 func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "subId")
 	subID, err := strconv.ParseInt(idStr, 10, 64)
@@ -689,22 +693,95 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if h.irisSurveyRepo != nil {
-		surveys, err := h.irisSurveyRepo.ListSurveysForSubscription(r.Context(), subID)
-		if err != nil {
-			slog.Error("subscription surveys failed", "error", err)
-		}
-		result := make([]map[string]any, 0, len(surveys))
-		for _, s := range surveys {
-			result = append(result, map[string]any{
-				"id": s.ID, "namePublic": s.NamePublic, "projectId": s.ProjectID,
-				"status": s.Status, "createdOn": s.CreatedOn.Format(time.RFC3339),
-			})
-		}
-		success(w, result)
+	if h.irisSurveyRepo == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"projects": map[string]any{}})
 		return
 	}
-	success(w, []any{})
+
+	// Resolve calling user's IRIS DB id for favorite check
+	var callerUserID int64
+	user := middleware.GetUser(r)
+	if user != nil && user.Email != "" && h.irisUserRepo != nil {
+		u, err := h.irisUserRepo.GetByEmail(r.Context(), user.Email)
+		if err == nil && u != nil {
+			callerUserID = u.ID
+		}
+	}
+
+	// Step 1: Get projects for subscription (excludes status 1 / draft, excludes archived)
+	projects, err := h.irisSurveyRepo.ListProjectsForSubscription(r.Context(), subID)
+	if err != nil {
+		slog.Error("subscription projects failed", "error", err)
+		writeJSON(w, http.StatusOK, map[string]any{"projects": map[string]any{}})
+		return
+	}
+
+	projectsMap := make(map[string]any, len(projects))
+	for _, p := range projects {
+		// Step 2: Get surveys for each project
+		surveys, err := h.irisSurveyRepo.ListSurveysForProject(r.Context(), p.ID)
+		if err != nil {
+			slog.Error("project surveys failed", "projectId", p.ID, "error", err)
+			surveys = nil
+		}
+
+		surveyList := make([]map[string]any, 0, len(surveys))
+		for _, s := range surveys {
+			// Status object: { "status": <int>, "label": <string> }
+			statusObj := map[string]any{"status": s.Status, "label": ""}
+			_, label, err := h.irisSurveyRepo.GetSurveyStatusLabel(r.Context(), s.Status)
+			if err == nil {
+				statusObj["label"] = label
+			}
+
+			// Qual crowd name (first survey_crowd entry)
+			qualCrowdName := ""
+			if name, err := h.irisSurveyRepo.GetFirstSurveyCrowdName(r.Context(), s.ID); err == nil {
+				qualCrowdName = name
+			}
+
+			// Question count
+			numQuestions := 0
+			if cnt, err := h.irisSurveyRepo.CountSurveyQuestions(r.Context(), s.ID); err == nil {
+				numQuestions = cnt
+			}
+
+			// Completion count (non-invalid, non-test)
+			numCompletions := 0
+			if cnt, err := h.irisSurveyRepo.CountSurveyCompletions(r.Context(), s.ID); err == nil {
+				numCompletions = cnt
+			}
+
+			// Favorite check for calling user
+			favorite := false
+			if callerUserID > 0 {
+				if fav, err := h.irisSurveyRepo.IsSurveyFavoriteOf(r.Context(), s.ID, callerUserID); err == nil {
+					favorite = fav
+				}
+			}
+
+			surveyList = append(surveyList, map[string]any{
+				"id":               s.ID,
+				"namePublic":       s.NamePublic,
+				"namePrivate":      nsVal(s.NamePrivate),
+				"favorite":         favorite,
+				"status":           statusObj,
+				"qualCrowdName":    qualCrowdName,
+				"projectId":        s.ProjectID,
+				"numQuestions":      numQuestions,
+				"numCompletions":    numCompletions,
+				"completionsNeeded": s.CompletionsNeeded,
+			})
+		}
+
+		projectsMap[fmt.Sprintf("%d", p.ID)] = map[string]any{
+			"name":            p.Name,
+			"projectStatusId": p.ProjectStatusID,
+			"surveys":         surveyList,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"projects": projectsMap})
 }
 
 // ──────────────────────────────────────────────

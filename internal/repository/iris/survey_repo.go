@@ -1063,3 +1063,97 @@ func (r *SurveyRepo) GetAvailableModeratorsCount(ctx context.Context, projectID 
 	}
 	return count, nil
 }
+
+// ICProjectBasic holds the minimal project fields needed for subscription project survey listing.
+type ICProjectBasic struct {
+	ID              int64  `json:"id"`
+	Name            string `json:"name"`
+	ProjectStatusID int    `json:"projectStatusId"`
+}
+
+// ListProjectsForSubscription returns non-archived, non-draft projects for a subscription.
+// Mirrors legacy: Project.readWhere('subscription_id -> subId, 'project_status_id_not_in -> 1, 'is_archived -> false)
+func (r *SurveyRepo) ListProjectsForSubscription(ctx context.Context, subscriptionID int64) ([]ICProjectBasic, error) {
+	q := `SELECT id, name, project_status_id
+	      FROM project
+	      WHERE subscription_id = ? AND project_status_id NOT IN (1) AND is_archived = 0`
+	rows, err := r.ro().QueryContext(ctx, q, subscriptionID)
+	if err != nil {
+		return nil, fmt.Errorf("list projects for subscription: %w", err)
+	}
+	defer rows.Close()
+	var result []ICProjectBasic
+	for rows.Next() {
+		var p ICProjectBasic
+		if err := rows.Scan(&p.ID, &p.Name, &p.ProjectStatusID); err != nil {
+			return nil, fmt.Errorf("scan project basic: %w", err)
+		}
+		result = append(result, p)
+	}
+	return result, rows.Err()
+}
+
+// GetSurveyStatusLabel returns the status and label from the survey_status table.
+func (r *SurveyRepo) GetSurveyStatusLabel(ctx context.Context, statusCode int) (int, string, error) {
+	var status int
+	var label string
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT status, label FROM survey_status WHERE status = ?", statusCode).Scan(&status, &label)
+	if err != nil {
+		return statusCode, "", fmt.Errorf("get survey status label: %w", err)
+	}
+	return status, label, nil
+}
+
+// GetFirstSurveyCrowdName returns the crowd name for the first (head) survey_crowd entry.
+// Mirrors legacy: SurveyCrowd.readWhere('survey_id -> id).head → Crowd.getWithId(crowdId).name
+func (r *SurveyRepo) GetFirstSurveyCrowdName(ctx context.Context, surveyID int64) (string, error) {
+	var name string
+	q := `SELECT c.name
+	      FROM survey_crowd sc
+	      JOIN crowd c ON c.id = sc.crowd_id
+	      WHERE sc.survey_id = ?
+	      LIMIT 1`
+	err := r.ro().QueryRowContext(ctx, q, surveyID).Scan(&name)
+	if err != nil {
+		return "", fmt.Errorf("get first survey crowd name: %w", err)
+	}
+	return name, nil
+}
+
+// CountSurveyQuestions returns the number of questions in a survey.
+func (r *SurveyRepo) CountSurveyQuestions(ctx context.Context, surveyID int64) (int, error) {
+	var count int
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM survey_question WHERE survey_id = ?", surveyID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count survey questions: %w", err)
+	}
+	return count, nil
+}
+
+// CountSurveyCompletions returns the number of completed (non-invalid, non-test) responses.
+// Mirrors legacy: UserSurvey.countWhere('survey_id -> id, 'user_survey_status_id -> 3, 'is_invalid -> false, 'is_test -> false)
+func (r *SurveyRepo) CountSurveyCompletions(ctx context.Context, surveyID int64) (int, error) {
+	var count int
+	err := r.ro().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM user_survey
+		 WHERE survey_id = ? AND user_survey_status_id = 3 AND is_invalid = 0 AND is_test = 0`,
+		surveyID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count survey completions: %w", err)
+	}
+	return count, nil
+}
+
+// IsSurveyFavoriteOf checks if a survey is favorited by a specific user.
+func (r *SurveyRepo) IsSurveyFavoriteOf(ctx context.Context, surveyID, userID int64) (bool, error) {
+	var count int
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT COUNT(id) FROM user_survey_favorite WHERE user_id = ? AND survey_id = ?",
+		userID, surveyID).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("check survey favorite: %w", err)
+	}
+	return count > 0, nil
+}
