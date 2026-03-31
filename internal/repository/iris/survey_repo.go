@@ -1157,3 +1157,134 @@ func (r *SurveyRepo) IsSurveyFavoriteOf(ctx context.Context, surveyID, userID in
 	}
 	return count > 0, nil
 }
+
+// GetSubscriptionCompany returns the company name for a subscription.
+func (r *SurveyRepo) GetSubscriptionCompany(ctx context.Context, subscriptionID int64) (string, error) {
+	var company string
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT COALESCE(company, '') FROM subscription WHERE id = ?", subscriptionID).Scan(&company)
+	if err != nil {
+		return "", fmt.Errorf("get subscription company: %w", err)
+	}
+	return company, nil
+}
+
+// GetProjectName returns the name of a project.
+func (r *SurveyRepo) GetProjectName(ctx context.Context, projectID int64) (string, error) {
+	var name string
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT COALESCE(name, '') FROM project WHERE id = ?", projectID).Scan(&name)
+	if err != nil {
+		return "", fmt.Errorf("get project name: %w", err)
+	}
+	return name, nil
+}
+
+// GetProjectTypeID returns the project_type_id for a project.
+func (r *SurveyRepo) GetProjectTypeID(ctx context.Context, projectID int64) (int, error) {
+	var ptid int
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT COALESCE(project_type_id, 1) FROM project WHERE id = ?", projectID).Scan(&ptid)
+	if err != nil {
+		return 1, fmt.Errorf("get project type id: %w", err)
+	}
+	return ptid, nil
+}
+
+// ICSurveyType maps the survey_type table.
+type ICSurveyType struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// GetSurveyType returns the survey type by ID.
+func (r *SurveyRepo) GetSurveyType(ctx context.Context, typeID int) (map[string]any, error) {
+	var id int64
+	var name string
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT id, name FROM survey_type WHERE id = ?", typeID).Scan(&id, &name)
+	if err != nil {
+		return nil, fmt.Errorf("get survey type: %w", err)
+	}
+	return map[string]any{"id": id, "name": name}, nil
+}
+
+// GetSurveyPricing returns pricing info for a survey.
+func (r *SurveyRepo) GetSurveyPricing(ctx context.Context, surveyID int64) (map[string]any, error) {
+	var pricingTypeID int64
+	var freeScreeners int64
+	var fixedRate sql.NullInt64
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT COALESCE(survey_pricing_type_id, 0), COALESCE(free_screeners, 0), fixed_rate FROM survey_pricing WHERE survey_id = ?",
+		surveyID).Scan(&pricingTypeID, &freeScreeners, &fixedRate)
+	if err != nil {
+		// Return defaults if no pricing row
+		return map[string]any{"surveyPricingTypeId": 0, "freeScreeners": 0, "fixedRate": nil}, nil
+	}
+	result := map[string]any{
+		"surveyPricingTypeId": pricingTypeID,
+		"freeScreeners":       freeScreeners,
+	}
+	if fixedRate.Valid {
+		result["fixedRate"] = fixedRate.Int64
+	} else {
+		result["fixedRate"] = nil
+	}
+	return result, nil
+}
+
+// GetUserProjectPermissions returns a user's permissions on a project.
+func (r *SurveyRepo) GetUserProjectPermissions(ctx context.Context, userID, projectID int64) (map[string]any, error) {
+	var id int64
+	var canWrite, canRead bool
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT id, can_write, can_read FROM user_project WHERE user_id = ? AND project_id = ?",
+		userID, projectID).Scan(&id, &canWrite, &canRead)
+	if err != nil {
+		// No user_project row — return defaults
+		return map[string]any{
+			"userId": userID, "projectId": projectID,
+			"canWrite": false, "canRead": false, "favorite": false,
+		}, nil
+	}
+	return map[string]any{
+		"id": id, "userId": userID, "projectId": projectID,
+		"canWrite": canWrite, "canRead": canRead,
+	}, nil
+}
+
+// UserCanReadProject checks if a user has read access to a project.
+func (r *SurveyRepo) UserCanReadProject(ctx context.Context, userID, projectID int64) (bool, error) {
+	var canRead bool
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT can_read FROM user_project WHERE user_id = ? AND project_id = ?",
+		userID, projectID).Scan(&canRead)
+	if err != nil {
+		return false, nil // no row means no access
+	}
+	return canRead, nil
+}
+
+// CountSurveyCrowds returns the number of non-excluded crowds on a survey.
+func (r *SurveyRepo) CountSurveyCrowds(ctx context.Context, surveyID int64) (int, error) {
+	var count int
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM survey_crowd WHERE survey_id = ? AND excluded = 0", surveyID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count survey crowds: %w", err)
+	}
+	return count, nil
+}
+
+// CountScreenOutCompletions returns completions with screen-out status.
+func (r *SurveyRepo) CountScreenOutCompletions(ctx context.Context, surveyID int64) (int, error) {
+	var count int
+	err := r.ro().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM user_survey
+		 WHERE survey_id = ? AND user_survey_status_id IN (3, 5) AND is_invalid = 0 AND is_test = 0`,
+		surveyID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count screen out completions: %w", err)
+	}
+	return count, nil
+}

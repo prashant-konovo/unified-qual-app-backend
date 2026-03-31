@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
+	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -166,6 +167,9 @@ func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
 }
 
 // ToggleSurveyFavorite toggles favorite status on a survey.
+// Contract-identical with legacy InCrowdAPI: PUT /v1/survey/:id/favorite
+// Request: {"favorite": true/false}  (userId derived from JWT)
+// Response: full survey subscriberJson object
 func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	surveyID, err := strconv.ParseInt(idStr, 10, 64)
@@ -174,25 +178,216 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse request body: legacy format is {"favorite": bool}
 	var req struct {
-		Favorite bool  `json:"favorite"`
-		UserID   int64 `json:"userId"`
+		Favorite bool `json:"favorite"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
 		return
 	}
 
-	if h.irisSurveyRepo != nil && h.resolveSource(r) == "iris" {
-		if err := h.irisSurveyRepo.ToggleFavorite(r.Context(), surveyID, req.UserID, req.Favorite); err != nil {
-			slog.Error("toggle favorite failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
-			return
-		}
-		success(w, map[string]any{"favorite": req.Favorite, "source": "iris"})
+	if h.irisSurveyRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "database unavailable"})
 		return
 	}
-	success(w, map[string]any{"favorite": req.Favorite, "source": "qs"})
+
+	// Resolve calling user's IRIS DB ID from JWT email
+	var callerUserID int64
+	user := middleware.GetUser(r)
+	if user != nil && user.Email != "" && h.irisUserRepo != nil {
+		u, err := h.irisUserRepo.GetByEmail(r.Context(), user.Email)
+		if err == nil && u != nil {
+			callerUserID = u.ID
+		}
+	}
+	if callerUserID == 0 {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "could not resolve user identity"})
+		return
+	}
+
+	// Fetch survey (verify it exists)
+	s, err := h.irisSurveyRepo.GetSurvey(r.Context(), surveyID)
+	if err != nil {
+		slog.Error("get survey failed", "id", surveyID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		return
+	}
+	if s == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": fmt.Sprintf("survey not found: %d", surveyID)})
+		return
+	}
+
+	// Authorization: user must be admin OR have canRead on the survey's project
+	isAdmin := false
+	if user != nil {
+		for _, role := range user.Roles {
+			if role == "admin" {
+				isAdmin = true
+				break
+			}
+		}
+	}
+	if !isAdmin {
+		canRead, _ := h.irisSurveyRepo.UserCanReadProject(r.Context(), callerUserID, s.ProjectID)
+		if !canRead {
+			writeJSON(w, http.StatusForbidden, map[string]any{
+				"error": map[string]any{
+					"userMessage":      "You're not allowed to adjust other peoples favorites",
+					"developerMessage": "Access is denied to users who don't have the correct permissions to perform a task.",
+					"status":           "FORBIDDEN",
+					"code":             403,
+				},
+			})
+			return
+		}
+	}
+
+	// Toggle the favorite
+	if err := h.irisSurveyRepo.ToggleFavorite(r.Context(), surveyID, callerUserID, req.Favorite); err != nil {
+		slog.Error("toggle favorite failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to toggle favorite"})
+		return
+	}
+
+	// Re-fetch survey (legacy calls survey.refresh)
+	s, _ = h.irisSurveyRepo.GetSurvey(r.Context(), surveyID)
+
+	// Build subscriberJson-equivalent response
+	writeJSON(w, http.StatusOK, h.buildSubscriberJSON(r, s, callerUserID))
+}
+
+// buildSubscriberJSON builds a legacy-compatible subscriberJson response for a survey.
+func (h *Handler) buildSubscriberJSON(r *http.Request, s *iris.ICSurvey, callerUserID int64) map[string]any {
+	ctx := r.Context()
+
+	// Status object
+	statusObj := map[string]any{"status": s.Status, "label": ""}
+	if _, label, err := h.irisSurveyRepo.GetSurveyStatusLabel(ctx, s.Status); err == nil {
+		statusObj["label"] = label
+	}
+
+	// Survey type
+	var surveyType any
+	if st, err := h.irisSurveyRepo.GetSurveyType(ctx, s.SurveyTypeID); err == nil {
+		surveyType = st
+	}
+
+	// Subscription company
+	subscriptionCompany := ""
+	if s.SubscriptionID.Valid {
+		if c, err := h.irisSurveyRepo.GetSubscriptionCompany(ctx, s.SubscriptionID.Int64); err == nil {
+			subscriptionCompany = c
+		}
+	}
+
+	// Project info
+	projectName := ""
+	projectTypeID := 1
+	if pn, err := h.irisSurveyRepo.GetProjectName(ctx, s.ProjectID); err == nil {
+		projectName = pn
+	}
+	if pt, err := h.irisSurveyRepo.GetProjectTypeID(ctx, s.ProjectID); err == nil {
+		projectTypeID = pt
+	}
+
+	// Favorite check
+	favorite := false
+	if callerUserID > 0 {
+		if f, err := h.irisSurveyRepo.IsSurveyFavoriteOf(ctx, s.ID, callerUserID); err == nil {
+			favorite = f
+		}
+	}
+
+	// Completions
+	numCompletions := 0
+	if cnt, err := h.irisSurveyRepo.CountSurveyCompletions(ctx, s.ID); err == nil {
+		numCompletions = cnt
+	}
+
+	// Questions
+	numQuestions := 0
+	if cnt, err := h.irisSurveyRepo.CountSurveyQuestions(ctx, s.ID); err == nil {
+		numQuestions = cnt
+	}
+
+	// Crowds count
+	numCrowds := 0
+	if cnt, err := h.irisSurveyRepo.CountSurveyCrowds(ctx, s.ID); err == nil {
+		numCrowds = cnt
+	}
+
+	// Has crowd screening (at least one crowd)
+	hasCrowdScreening := numCrowds > 0
+
+	// Pricing
+	pricing := map[string]any{"surveyPricingTypeId": 0, "freeScreeners": 0, "fixedRate": nil}
+	if p, err := h.irisSurveyRepo.GetSurveyPricing(ctx, s.ID); err == nil {
+		pricing = p
+	}
+
+	// Permissions
+	permissions := map[string]any{
+		"userId": callerUserID, "projectId": s.ProjectID,
+		"canWrite": false, "canRead": false, "favorite": favorite,
+	}
+	if perms, err := h.irisSurveyRepo.GetUserProjectPermissions(ctx, callerUserID, s.ProjectID); err == nil {
+		perms["favorite"] = favorite
+		permissions = perms
+	}
+
+	// Qual crowd name (first crowd)
+	qualCrowdName := ""
+	if name, err := h.irisSurveyRepo.GetFirstSurveyCrowdName(ctx, s.ID); err == nil {
+		qualCrowdName = name
+	}
+
+	// Build the full response matching legacy subscriberJson structure
+	// minimalJson fields
+	result := map[string]any{
+		"id":                    s.ID,
+		"projectId":             s.ProjectID,
+		"subscriptionId":        niVal(s.SubscriptionID),
+		"subscriptionCompany":   subscriptionCompany,
+		"surveyTypeId":          s.SurveyTypeID,
+		"projectTypeId":         projectTypeID,
+		"languageId":            s.LanguageID,
+		"namePublic":            s.NamePublic,
+		"namePrivate":           nsVal(s.NamePrivate),
+		"topicName":             nsVal(s.TopicName),
+		"isArchived":            s.IsArchived,
+		"salesforceProjectId":   nsVal(s.SalesforceProjectID),
+		"createdOn":             s.CreatedOn.Format(time.RFC3339),
+		"createdBy":             s.CreatedBy,
+		"modifiedOn":            ntVal(s.ModifiedOn),
+		// listJson fields
+		"numCompletions":    numCompletions,
+		"completionsNeeded": s.CompletionsNeeded,
+		"surveyType":        surveyType,
+		"status":            statusObj,
+		// subscriberJson fields
+		"numQuestions":      numQuestions,
+		"projectName":       projectName,
+		"hasCrowdScreening": hasCrowdScreening,
+		"favorite":          favorite,
+		"numCrowds":         numCrowds,
+		"qualCrowdName":     qualCrowdName,
+		"lengthOfInterview": niVal(s.LengthOfInterview),
+		// pricing
+		"surveyPricingTypeId": pricing["surveyPricingTypeId"],
+		"freeScreeners":       pricing["freeScreeners"],
+		"fixedRate":            pricing["fixedRate"],
+		// permissions
+		"permissions": permissions,
+		// Fields that require external integrations (SightX, etc.) — return safe defaults
+		"isEnhancedGlobalized": false,
+		"availableLanguages":   []any{},
+		"waves":                []any{},
+		"parallels":            []any{},
+		"isBasis":              false,
+	}
+
+	return result
 }
 
 // ──────────────────────────────────────────────
@@ -1651,6 +1846,14 @@ func nsVal(ns sql.NullString) any {
 func niVal(ni sql.NullInt64) any {
 	if ni.Valid {
 		return ni.Int64
+	}
+	return nil
+}
+
+// ntVal extracts value from sql.NullTime for JSON output (RFC3339 format).
+func ntVal(nt sql.NullTime) any {
+	if nt.Valid {
+		return nt.Time.Format(time.RFC3339)
 	}
 	return nil
 }
