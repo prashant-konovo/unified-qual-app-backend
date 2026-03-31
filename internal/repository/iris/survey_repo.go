@@ -30,14 +30,34 @@ type ICSurvey struct {
 	LengthOfInterview  sql.NullInt64  `json:"lengthOfInterview"`
 }
 
-// ICSurveyCrowd maps the survey_crowd join table.
+// ICSurveyCrowd maps the survey_crowd join table (all 26 columns).
 type ICSurveyCrowd struct {
-	ID             int64  `json:"id"`
-	SurveyID       int64  `json:"surveyId"`
-	CrowdID        int64  `json:"crowdId"`
-	AnswerRequest  int    `json:"answerRequest"`
-	QualHonorarium sql.NullInt64 `json:"qualHonorarium"`
-	Excluded       bool   `json:"excluded"`
+	ID                 int64          `json:"id"`
+	SurveyID           int64          `json:"surveyId"`
+	CrowdID            int64          `json:"crowdId"`
+	AnswerRequest      int64          `json:"answerRequest"`
+	CreatedBy          int64          `json:"createdBy"`
+	CreatedOn          time.Time      `json:"createdOn"`
+	ModifiedBy         int64          `json:"modifiedBy"`
+	ModifiedOn         time.Time      `json:"modifiedOn"`
+	QualHonorarium     sql.NullInt64  `json:"qualHonorarium"`
+	QuantHonorarium    sql.NullInt64  `json:"quantHonorarium"`
+	ProductID          sql.NullInt64  `json:"productId"`
+	HonorariumGroup    sql.NullInt64  `json:"honorariumGroup"`
+	RewardLevel        sql.NullInt64  `json:"rewardLevel"`
+	Excluded           int64          `json:"excluded"`
+	IsInvitationPaused bool           `json:"isInvitationPaused"`
+	IsReminderPaused   bool           `json:"isReminderPaused"`
+	InvitationPausedOn sql.NullTime   `json:"invitationPausedOn"`
+	ReminderPausedOn   sql.NullTime   `json:"reminderPausedOn"`
+	SLAnswerRequest    int64          `json:"slAnswerRequest"`
+	SLAnswerPercent    int64          `json:"slAnswerPercent"`
+	SLSamplePaused     bool           `json:"slSamplePaused"`
+	IsSampleClosed     bool           `json:"isSampleClosed"`
+	SampleClosedOn     sql.NullTime   `json:"sampleClosedOn"`
+	PausedByQf         bool           `json:"pausedByQf"`
+	AfterQfResumedOn   sql.NullTime   `json:"afterQfResumedOn"`
+	CrowdGroupID       sql.NullInt64  `json:"crowdGroupId"`
 }
 
 // ICCrowd maps core columns from the IRIS crowd table.
@@ -278,10 +298,17 @@ func (r *SurveyRepo) ValidateSurvey(ctx context.Context, id int64) ([]string, er
 	return errors, nil
 }
 
-// GetSurveyCrowds returns crowds assigned to a survey.
-func (r *SurveyRepo) GetSurveyCrowds(ctx context.Context, surveyID int64) ([]map[string]any, error) {
-	q := `SELECT sc.id, sc.survey_id, sc.crowd_id, sc.answer_request, sc.qual_honorarium, sc.excluded,
-	       c.name, c.subscription_id, c.type_id, c.market_id
+// GetSurveyCrowds returns survey_crowd rows with all 26 columns for a survey.
+func (r *SurveyRepo) GetSurveyCrowds(ctx context.Context, surveyID int64) ([]ICSurveyCrowd, error) {
+	q := `SELECT sc.id, sc.survey_id, sc.crowd_id, sc.answer_request,
+	       sc.created_by, sc.created_on, sc.modified_by, sc.modified_on,
+	       sc.qual_honorarium, sc.quant_honorarium, sc.product_id,
+	       sc.honorarium_group, sc.reward_level, sc.excluded,
+	       sc.is_invitation_paused, sc.is_reminder_paused,
+	       sc.invitation_paused_on, sc.reminder_paused_on,
+	       sc.sl_answer_request, sc.sl_answer_percent, sc.sl_sample_paused,
+	       sc.is_sample_closed, sc.sample_closed_on,
+	       sc.paused_by_qf, sc.after_qf_resumed_on, sc.crowd_group_id
 	      FROM survey_crowd sc
 	      JOIN crowd c ON c.id = sc.crowd_id
 	      WHERE sc.survey_id = ? ORDER BY c.name`
@@ -290,31 +317,279 @@ func (r *SurveyRepo) GetSurveyCrowds(ctx context.Context, surveyID int64) ([]map
 		return nil, fmt.Errorf("get survey crowds: %w", err)
 	}
 	defer rows.Close()
-	var result []map[string]any
+	var result []ICSurveyCrowd
 	for rows.Next() {
-		var scID, survID, crowdID int64
-		var ansReq int
-		var qualHono sql.NullInt64
-		var excluded bool
-		var cName string
-		var cSubID int64
-		var cTypeID, cMarketID int
-		if err := rows.Scan(&scID, &survID, &crowdID, &ansReq, &qualHono, &excluded,
-			&cName, &cSubID, &cTypeID, &cMarketID); err != nil {
+		var sc ICSurveyCrowd
+		if err := rows.Scan(&sc.ID, &sc.SurveyID, &sc.CrowdID, &sc.AnswerRequest,
+			&sc.CreatedBy, &sc.CreatedOn, &sc.ModifiedBy, &sc.ModifiedOn,
+			&sc.QualHonorarium, &sc.QuantHonorarium, &sc.ProductID,
+			&sc.HonorariumGroup, &sc.RewardLevel, &sc.Excluded,
+			&sc.IsInvitationPaused, &sc.IsReminderPaused,
+			&sc.InvitationPausedOn, &sc.ReminderPausedOn,
+			&sc.SLAnswerRequest, &sc.SLAnswerPercent, &sc.SLSamplePaused,
+			&sc.IsSampleClosed, &sc.SampleClosedOn,
+			&sc.PausedByQf, &sc.AfterQfResumedOn, &sc.CrowdGroupID); err != nil {
 			return nil, fmt.Errorf("scan survey crowd: %w", err)
 		}
-		m := map[string]any{
-			"id": scID, "surveyId": survID, "crowdId": crowdID,
-			"answerRequest": ansReq, "excluded": excluded,
-			"crowdName": cName, "subscriptionId": cSubID,
-			"crowdTypeId": cTypeID, "marketId": cMarketID,
-		}
-		if qualHono.Valid {
-			m["qualHonorarium"] = qualHono.Int64
-		}
-		result = append(result, m)
+		result = append(result, sc)
 	}
 	return result, rows.Err()
+}
+
+// CountSurveyCrowdAnswers returns completed answer count for a survey-crowd pair.
+func (r *SurveyRepo) CountSurveyCrowdAnswers(ctx context.Context, surveyID, crowdID int64) int64 {
+	var count int64
+	_ = r.ro().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM user_survey
+		 WHERE survey_id = ? AND crowd_id = ? AND user_survey_status_id = 3
+		   AND is_invalid = 0 AND is_test = 0`, surveyID, crowdID).Scan(&count)
+	return count
+}
+
+// GetSHCStatus returns SHC fielding status for a survey_crowd.
+func (r *SurveyRepo) GetSHCStatus(ctx context.Context, surveyCrowdID int64) string {
+	var fieldedOn, closedOn sql.NullTime
+	err := r.ro().QueryRowContext(ctx,
+		`SELECT fielded_on, closed_on FROM survey_crowd_responder_type
+		 WHERE survey_crowd_id = ? AND responder_type_id = 16`, surveyCrowdID).Scan(&fieldedOn, &closedOn)
+	if err != nil {
+		return "unfielded"
+	}
+	if fieldedOn.Valid && !closedOn.Valid {
+		return "fielding"
+	}
+	if fieldedOn.Valid && closedOn.Valid {
+		return "closed"
+	}
+	return "unfielded"
+}
+
+// GetSurveyCrowdVendors returns vendor/provider names for a survey_crowd.
+func (r *SurveyRepo) GetSurveyCrowdVendors(ctx context.Context, surveyCrowdID int64) []string {
+	rows, err := r.ro().QueryContext(ctx,
+		`SELECT rt.provider_name FROM survey_crowd_responder_type scrt
+		 JOIN responder_type rt ON rt.id = scrt.responder_type_id
+		 WHERE scrt.survey_crowd_id = ?`, surveyCrowdID)
+	if err != nil {
+		return []string{}
+	}
+	defer rows.Close()
+	var vendors []string
+	for rows.Next() {
+		var name string
+		if rows.Scan(&name) == nil {
+			vendors = append(vendors, name)
+		}
+	}
+	if vendors == nil {
+		vendors = []string{}
+	}
+	return vendors
+}
+
+// GetCrowdGroupInfo returns crowd group details by ID.
+func (r *SurveyRepo) GetCrowdGroupInfo(ctx context.Context, groupID int64) map[string]any {
+	var id int64
+	var name string
+	var createdOn time.Time
+	var completionsNeeded int64
+	err := r.ro().QueryRowContext(ctx,
+		`SELECT id, name, created_on, completions_needed FROM crowd_group WHERE id = ?`,
+		groupID).Scan(&id, &name, &createdOn, &completionsNeeded)
+	if err != nil {
+		return nil
+	}
+	return map[string]any{
+		"id":                id,
+		"name":              name,
+		"createdOn":         createdOn.Format(time.RFC3339),
+		"completionsNeeded": completionsNeeded,
+	}
+}
+
+// GetCrowdCurrency returns the currency code for a crowd's country (default USD).
+func (r *SurveyRepo) GetCrowdCurrency(ctx context.Context, crowdID int64) string {
+	// Get country_id from crowd attributes (attribute_id=29)
+	countryID := r.GetCrowdCountryID(ctx, crowdID)
+	if countryID <= 0 {
+		return "USD"
+	}
+	var code string
+	err := r.ro().QueryRowContext(ctx,
+		`SELECT pc.code FROM payment_currency pc
+		 JOIN attribute_choice ac ON ac.id = ?
+		 JOIN country co ON co.name = ac.label
+		 WHERE pc.country_id = co.id LIMIT 1`, countryID).Scan(&code)
+	if err != nil {
+		return "USD"
+	}
+	return code
+}
+
+// GetSHCHonorariumLevel returns current SHC honorarium level for a survey_crowd.
+func (r *SurveyRepo) GetSHCHonorariumLevel(ctx context.Context, surveyCrowdID int64) *string {
+	var level sql.NullString
+	err := r.ro().QueryRowContext(ctx,
+		`SELECT current_honorarium_level FROM survey_crowd_responder_type
+		 WHERE survey_crowd_id = ? AND responder_type_id = 16`, surveyCrowdID).Scan(&level)
+	if err != nil || !level.Valid {
+		return nil
+	}
+	return &level.String
+}
+
+// GetCrowdMarketHonoGroups returns market honorarium groups for a crowd+survey.
+func (r *SurveyRepo) GetCrowdMarketHonoGroups(ctx context.Context, crowdID, surveyID int64) []map[string]any {
+	rows, err := r.ro().QueryContext(ctx,
+		`SELECT cm.id, cm.market_id, cm.honorarium_group_id, cm.profession_id
+		 FROM crowd_market cm WHERE cm.crowd_id = ?`, crowdID)
+	if err != nil {
+		return []map[string]any{}
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id, marketID int64
+		var honoGroupID, professionID sql.NullInt64
+		if rows.Scan(&id, &marketID, &honoGroupID, &professionID) == nil {
+			result = append(result, map[string]any{
+				"id":                id,
+				"marketId":          marketID,
+				"honorariumGroupId": niVal(honoGroupID),
+				"professionId":     niVal(professionID),
+			})
+		}
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result
+}
+
+// GetSurveyCustomHonoReasonIDs returns custom honorarium reason IDs for a survey.
+func (r *SurveyRepo) GetSurveyCustomHonoReasonIDs(ctx context.Context, surveyID int64) []int64 {
+	rows, err := r.ro().QueryContext(ctx,
+		`SELECT custom_hono_reason_id FROM survey_custom_hono_reason WHERE survey_id = ?`, surveyID)
+	if err != nil {
+		return []int64{}
+	}
+	defer rows.Close()
+	var result []int64
+	for rows.Next() {
+		var id int64
+		if rows.Scan(&id) == nil {
+			result = append(result, id)
+		}
+	}
+	if result == nil {
+		result = []int64{}
+	}
+	return result
+}
+
+// GetCrowdAttributesRemoved returns removed crowd attributes for a survey_crowd.
+func (r *SurveyRepo) GetCrowdAttributesRemoved(ctx context.Context, surveyCrowdID int64) []map[string]any {
+	rows, err := r.ro().QueryContext(ctx,
+		`SELECT car.id, car.survey_crowd_id, car.attribute_id, car.show_warning,
+		        a.name AS attribute_name
+		 FROM crowd_attribute_removed car
+		 LEFT JOIN attribute a ON a.id = car.attribute_id
+		 WHERE car.survey_crowd_id = ?`, surveyCrowdID)
+	if err != nil {
+		return []map[string]any{}
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id, scID, attrID int64
+		var showWarning bool
+		var attrName sql.NullString
+		if rows.Scan(&id, &scID, &attrID, &showWarning, &attrName) == nil {
+			result = append(result, map[string]any{
+				"id":            id,
+				"surveyCrowdId": scID,
+				"attributeId":   attrID,
+				"attributeName": nsVal(attrName),
+				"showWarning":   showWarning,
+			})
+		}
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result
+}
+
+// GetMultiProfessionHono returns multi-profession honorarium data for a survey_crowd.
+func (r *SurveyRepo) GetMultiProfessionHono(ctx context.Context, surveyCrowdID int64) []map[string]any {
+	rows, err := r.ro().QueryContext(ctx,
+		`SELECT id, survey_crowd_id, crowd_market_id, honorarium
+		 FROM survey_crowd_multi_profession_honorarium WHERE survey_crowd_id = ?`, surveyCrowdID)
+	if err != nil {
+		return []map[string]any{}
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id, scID, cmID int64
+		var hono sql.NullInt64
+		if rows.Scan(&id, &scID, &cmID, &hono) == nil {
+			result = append(result, map[string]any{
+				"id":            id,
+				"surveyCrowdId": scID,
+				"crowdMarketId": cmID,
+				"honorarium":    niVal(hono),
+			})
+		}
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result
+}
+
+// GetCrowdSize returns the count of members in a crowd.
+func (r *SurveyRepo) GetCrowdSize(ctx context.Context, crowdID int64) int64 {
+	var count int64
+	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM crowd_user WHERE crowd_id = ?", crowdID).Scan(&count)
+	return count
+}
+
+// GetCrowdAvailableCount returns available user count for survey-crowd.
+func (r *SurveyRepo) GetCrowdAvailableCount(ctx context.Context, surveyID, crowdID int64) int64 {
+	var count int64
+	_ = r.ro().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM user_survey
+		 WHERE survey_id = ? AND crowd_id = ? AND user_survey_status_id = 1`, surveyID, crowdID).Scan(&count)
+	return count
+}
+
+// GetCrowdAvailableEligibleCount returns eligible available users for survey-crowd.
+func (r *SurveyRepo) GetCrowdAvailableEligibleCount(ctx context.Context, surveyID, crowdID int64, fullMatch bool) int64 {
+	var count int64
+	q := `SELECT COUNT(*) FROM user_survey
+	      WHERE survey_id = ? AND crowd_id = ? AND user_survey_status_id = 1 AND is_eligible = 1`
+	if fullMatch {
+		q += " AND is_full_match = 1"
+	}
+	_ = r.ro().QueryRowContext(ctx, q, surveyID, crowdID).Scan(&count)
+	return count
+}
+
+// niVal extracts value from sql.NullInt64 for JSON output (repo-level helper).
+func niVal(ni sql.NullInt64) any {
+	if ni.Valid {
+		return ni.Int64
+	}
+	return nil
+}
+
+// nsVal extracts value from sql.NullString for JSON output (repo-level helper).
+func nsVal(ns sql.NullString) any {
+	if ns.Valid {
+		return ns.String
+	}
+	return nil
 }
 
 // CrowdFilter holds optional filter/pagination params for listing crowds.
@@ -521,6 +796,68 @@ func (r *SurveyRepo) GetCrowdEngagementRate(ctx context.Context, crowdID int64, 
 		return nil
 	}
 	return &rate
+}
+
+// GetCrowdByID returns a single crowd by ID.
+func (r *SurveyRepo) GetCrowdByID(ctx context.Context, crowdID int64) (*ICCrowd, error) {
+	q := `SELECT id, name, description, subscription_id, created_by, type_id, market_id,
+	       CAST(deleted AS UNSIGNED), and_or, deleted_on, deleted_by, created_on,
+	       is_archived, modified_on, created_from_sample_template_id,
+	       IFNULL(created_from_exclusion_list, 0), is_newbie,
+	       incrowd_tpa, doximity_tpa, can_share_with_doximity,
+	       duplicated_from_s3_key
+	      FROM crowd WHERE id = ?`
+	var c ICCrowd
+	err := r.ro().QueryRowContext(ctx, q, crowdID).Scan(
+		&c.ID, &c.Name, &c.Description, &c.SubscriptionID, &c.CreatedBy,
+		&c.TypeID, &c.MarketID, &c.Deleted, &c.AndOr, &c.DeletedOn, &c.DeletedBy,
+		&c.CreatedOn, &c.IsArchived, &c.ModifiedOn,
+		&c.CreatedFromSampleTemplateID, &c.CreatedFromExclusionList, &c.IsNewbie,
+		&c.IncrowdTPA, &c.DoximityTPA, &c.CanShareWithDoximity,
+		&c.DuplicatedFromS3Key)
+	if err != nil {
+		return nil, fmt.Errorf("get crowd %d: %w", crowdID, err)
+	}
+	return &c, nil
+}
+
+// GetCrowdAttributes returns crowd attribute data for admin JSON.
+func (r *SurveyRepo) GetCrowdAttributes(ctx context.Context, crowdID int64) []map[string]any {
+	rows, err := r.ro().QueryContext(ctx,
+		`SELECT ca.id, ca.crowd_id, ca.attribute_id, a.name AS attribute_name
+		 FROM crowd_attribute ca
+		 LEFT JOIN attribute a ON a.id = ca.attribute_id
+		 WHERE ca.crowd_id = ?`, crowdID)
+	if err != nil {
+		return []map[string]any{}
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id, cid, aid int64
+		var aname sql.NullString
+		if rows.Scan(&id, &cid, &aid, &aname) == nil {
+			result = append(result, map[string]any{
+				"id":            id,
+				"crowdId":       cid,
+				"attributeId":   aid,
+				"attributeName": nsVal(aname),
+			})
+		}
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result
+}
+
+// CountSurveyCrowdAnswersByBrand counts answers for a crowd by brand.
+func (r *SurveyRepo) CountSurveyCrowdAnswersByBrand(ctx context.Context, surveyID, crowdID, brandID int64, count *int64) error {
+	return r.ro().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM user_survey us
+		 JOIN user_brand ub ON ub.user_id = us.user_id AND ub.brand_id = ?
+		 WHERE us.survey_id = ? AND us.crowd_id = ? AND us.user_survey_status_id = 3
+		   AND us.is_invalid = 0 AND us.is_test = 0`, brandID, surveyID, crowdID).Scan(count)
 }
 
 // ListMarkets returns all active markets.

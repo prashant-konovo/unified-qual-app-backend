@@ -112,6 +112,8 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetSurveyCrowds returns crowds assigned to a survey.
+// Legacy contract: {"surveyId": id, "surveyCrowds": [adminJson|basicHonoJson|...]}
+// Query params: jsonType (admin|hono|subscriber|minimalJson), survey_detail_crowds (true/false)
 func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	surveyID, err := strconv.ParseInt(idStr, 10, 64)
@@ -120,19 +122,331 @@ func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.irisSurveyRepo != nil && h.resolveSource(r) == "iris" {
-		crowds, err := h.irisSurveyRepo.GetSurveyCrowds(r.Context(), surveyID)
-		if err != nil {
-			slog.Error("get survey crowds failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
-			return
-		}
-		success(w, map[string]any{"crowds": crowds, "source": "iris"})
+	if h.irisSurveyRepo == nil || h.resolveSource(r) != "iris" {
+		success(w, map[string]any{"surveyId": surveyID, "surveyCrowds": []any{}})
 		return
 	}
 
-	// QS doesn't have survey crowds in the same way
-	success(w, map[string]any{"crowds": []any{}, "source": "qs"})
+	q := r.URL.Query()
+	jsonType := q.Get("jsonType")
+	if jsonType == "" {
+		jsonType = "admin"
+	}
+	includeDetailCrowds := q.Get("survey_detail_crowds") == "true"
+
+	surveyCrowds, err := h.irisSurveyRepo.GetSurveyCrowds(r.Context(), surveyID)
+	if err != nil {
+		slog.Error("get survey crowds failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		return
+	}
+
+	// Get survey info for startTime/status
+	survey, _ := h.irisSurveyRepo.GetSurvey(r.Context(), surveyID)
+
+	ctx := r.Context()
+	items := make([]map[string]any, 0, len(surveyCrowds))
+	for _, sc := range surveyCrowds {
+		var item map[string]any
+		if includeDetailCrowds {
+			item = h.buildSurveyCrowdDetailJSON(ctx, sc, survey)
+		} else {
+			switch jsonType {
+			case "hono":
+				item = h.buildSurveyCrowdHonoJSON(ctx, sc, survey)
+			case "subscriber":
+				item = h.buildSurveyCrowdSubscriberJSON(ctx, sc, survey)
+			case "minimalJson":
+				item = h.buildSurveyCrowdMinimalJSON(ctx, sc, survey)
+			default: // "admin"
+				item = h.buildSurveyCrowdAdminJSON(ctx, sc, survey)
+			}
+		}
+		items = append(items, item)
+	}
+
+	success(w, map[string]any{
+		"surveyId":     surveyID,
+		"surveyCrowds": items,
+	})
+}
+
+// buildSurveyCrowdFlatJSON produces the base flatJson fields from survey_crowd.
+func (h *Handler) buildSurveyCrowdFlatJSON(ctx context.Context, sc iris.ICSurveyCrowd) map[string]any {
+	answerTotal := h.irisSurveyRepo.CountSurveyCrowdAnswers(ctx, sc.SurveyID, sc.CrowdID)
+
+	// honorarium: qualHonorarium for qual, quantHonorarium for quant
+	var honorarium any
+	if sc.QualHonorarium.Valid {
+		honorarium = sc.QualHonorarium.Int64
+	}
+	// Check project type via survey → project → project_type_id
+	if survey, _ := h.irisSurveyRepo.GetSurvey(ctx, sc.SurveyID); survey != nil {
+		if h.irisProjectRepo != nil {
+			if p, _ := h.irisProjectRepo.GetByID(ctx, survey.ProjectID); p != nil {
+				if p.ProjectTypeID == 1 { // quant
+					if sc.QuantHonorarium.Valid {
+						honorarium = sc.QuantHonorarium.Int64
+					} else {
+						honorarium = nil
+					}
+				}
+			}
+		}
+	}
+
+	return map[string]any{
+		"surveyId":          sc.SurveyID,
+		"crowdId":           sc.CrowdID,
+		"answerRequest":     sc.AnswerRequest,
+		"answerTotal":       answerTotal,
+		"slAnswerRequest":   sc.SLAnswerRequest,
+		"slAnswerPercent":   sc.SLAnswerPercent,
+		"qualHonorarium":    niVal(sc.QualHonorarium),
+		"honorarium":        honorarium,
+		"excluded":          sc.Excluded,
+		"isInvitationPaused": sc.IsInvitationPaused,
+		"isReminderPaused":  sc.IsReminderPaused,
+		"isSampleClosed":    sc.IsSampleClosed,
+		"pausedByQf":        sc.PausedByQf,
+		"afterQfResumedOn":  ntVal(sc.AfterQfResumedOn),
+	}
+}
+
+// buildSurveyCrowdAdminJSON produces the admin (default) JSON for a survey crowd.
+func (h *Handler) buildSurveyCrowdAdminJSON(ctx context.Context, sc iris.ICSurveyCrowd, survey *iris.ICSurvey) map[string]any {
+	flat := h.buildSurveyCrowdFlatJSON(ctx, sc)
+
+	shcStatus := h.irisSurveyRepo.GetSHCStatus(ctx, sc.ID)
+	shcLevel := h.irisSurveyRepo.GetSHCHonorariumLevel(ctx, sc.ID)
+
+	// currentShcHonorariumLevel: nil if unfielded
+	var shcLevelVal any
+	if shcLevel != nil && shcStatus != "unfielded" {
+		shcLevelVal = *shcLevel
+	}
+
+	// currentShcHonorariumOptions: filter based on level
+	options := []string{"A", "B", "C", "D"}
+	if shcLevel != nil {
+		var filtered []string
+		for _, opt := range options {
+			if opt >= *shcLevel {
+				filtered = append(filtered, opt)
+			}
+		}
+		options = filtered
+	}
+
+	// Crowd group
+	var crowdGroup any
+	if sc.CrowdGroupID.Valid {
+		crowdGroup = h.irisSurveyRepo.GetCrowdGroupInfo(ctx, sc.CrowdGroupID.Int64)
+	}
+
+	// Nested crowd object using adminJsonAvailable (basicJson + counts)
+	crowdJSON := h.buildCrowdAdminJSONAvailable(ctx, sc.CrowdID, sc.SurveyID)
+
+	// Survey start time / status
+	var surveyTimeStarted any
+	var surveyStatus any
+	if survey != nil {
+		surveyTimeStarted = ntVal(survey.FieldedOn)
+		surveyStatus = survey.Status
+	}
+
+	flat["surveyCrowdId"] = sc.ID
+	flat["surveyTimeStarted"] = surveyTimeStarted
+	flat["surveyStatus"] = surveyStatus
+	flat["shcStatus"] = shcStatus
+	flat["crowd"] = crowdJSON
+	flat["crowdGroup"] = crowdGroup
+	flat["vendors"] = h.irisSurveyRepo.GetSurveyCrowdVendors(ctx, sc.ID)
+	flat["currentShcHonorariumLevel"] = shcLevelVal
+	flat["crowdMarketHonoGroups"] = h.irisSurveyRepo.GetCrowdMarketHonoGroups(ctx, sc.CrowdID, sc.SurveyID)
+	flat["multiProfessionCrowdMarketsHono"] = h.irisSurveyRepo.GetMultiProfessionHono(ctx, sc.ID)
+	flat["surveyCustomHonoReasons"] = h.irisSurveyRepo.GetSurveyCustomHonoReasonIDs(ctx, sc.SurveyID)
+	flat["crowdCurrency"] = h.irisSurveyRepo.GetCrowdCurrency(ctx, sc.CrowdID)
+	flat["currentShcHonorariumOptions"] = options
+	flat["excluded"] = sc.Excluded
+	flat["isInvitationPaused"] = sc.IsInvitationPaused
+	flat["isReminderPaused"] = sc.IsReminderPaused
+	flat["isSampleClosed"] = sc.IsSampleClosed
+	flat["crowdAttributeRemoved"] = h.irisSurveyRepo.GetCrowdAttributesRemoved(ctx, sc.ID)
+
+	return flat
+}
+
+// buildSurveyCrowdSharedJSON produces the shared base for hono/subscriber/minimal.
+func (h *Handler) buildSurveyCrowdSharedJSON(ctx context.Context, sc iris.ICSurveyCrowd) map[string]any {
+	flat := h.buildSurveyCrowdFlatJSON(ctx, sc)
+
+	shcStatus := h.irisSurveyRepo.GetSHCStatus(ctx, sc.ID)
+	shcLevel := h.irisSurveyRepo.GetSHCHonorariumLevel(ctx, sc.ID)
+
+	var shcLevelVal any
+	if shcLevel != nil && shcStatus != "unfielded" {
+		shcLevelVal = *shcLevel
+	}
+	options := []string{"A", "B", "C", "D"}
+	if shcLevel != nil {
+		var filtered []string
+		for _, opt := range options {
+			if opt >= *shcLevel {
+				filtered = append(filtered, opt)
+			}
+		}
+		options = filtered
+	}
+
+	var crowdGroup any
+	if sc.CrowdGroupID.Valid {
+		crowdGroup = h.irisSurveyRepo.GetCrowdGroupInfo(ctx, sc.CrowdGroupID.Int64)
+	}
+
+	flat["surveyCrowdId"] = sc.ID
+	flat["currentShcHonorariumLevel"] = shcLevelVal
+	flat["crowdMarketHonoGroups"] = h.irisSurveyRepo.GetCrowdMarketHonoGroups(ctx, sc.CrowdID, sc.SurveyID)
+	flat["surveyCustomHonoReasons"] = h.irisSurveyRepo.GetSurveyCustomHonoReasonIDs(ctx, sc.SurveyID)
+	flat["crowdCurrency"] = h.irisSurveyRepo.GetCrowdCurrency(ctx, sc.CrowdID)
+	flat["currentShcHonorariumOptions"] = options
+	flat["excluded"] = sc.Excluded
+	flat["crowdGroup"] = crowdGroup
+	flat["multiProfessionCrowdMarketsHono"] = h.irisSurveyRepo.GetMultiProfessionHono(ctx, sc.ID)
+
+	return flat
+}
+
+// buildSurveyCrowdHonoJSON produces basicHonoJson (jsonType=hono).
+func (h *Handler) buildSurveyCrowdHonoJSON(ctx context.Context, sc iris.ICSurveyCrowd, survey *iris.ICSurvey) map[string]any {
+	shared := h.buildSurveyCrowdSharedJSON(ctx, sc)
+	shared["crowd"] = h.buildCrowdBasicJSONForSurveyCrowd(ctx, sc.CrowdID)
+	return shared
+}
+
+// buildSurveyCrowdSubscriberJSON produces subscriberAppJson (jsonType=subscriber).
+func (h *Handler) buildSurveyCrowdSubscriberJSON(ctx context.Context, sc iris.ICSurveyCrowd, survey *iris.ICSurvey) map[string]any {
+	shared := h.buildSurveyCrowdSharedJSON(ctx, sc)
+	shared["crowd"] = h.buildCrowdAdminJSONAvailable(ctx, sc.CrowdID, sc.SurveyID)
+	return shared
+}
+
+// buildSurveyCrowdMinimalJSON produces minimalJson (jsonType=minimalJson).
+func (h *Handler) buildSurveyCrowdMinimalJSON(ctx context.Context, sc iris.ICSurveyCrowd, survey *iris.ICSurvey) map[string]any {
+	shared := h.buildSurveyCrowdSharedJSON(ctx, sc)
+	shared["crowd"] = h.buildCrowdFlatICJSON(ctx, sc.CrowdID)
+	return shared
+}
+
+// buildSurveyCrowdDetailJSON produces adminJsonSurveyCrowd (survey_detail_crowds=true).
+func (h *Handler) buildSurveyCrowdDetailJSON(ctx context.Context, sc iris.ICSurveyCrowd, survey *iris.ICSurvey) map[string]any {
+	flat := h.buildSurveyCrowdFlatJSON(ctx, sc)
+
+	var surveyTimeStarted any
+	var surveyStatus any
+	if survey != nil {
+		surveyTimeStarted = ntVal(survey.FieldedOn)
+		surveyStatus = survey.Status
+	}
+
+	flat["surveyCrowdId"] = sc.ID
+	flat["crowd"] = h.buildCrowdFlatJSON(ctx, sc.CrowdID, &sc.SurveyID)
+	flat["answerTotal"] = h.irisSurveyRepo.CountSurveyCrowdAnswers(ctx, sc.SurveyID, sc.CrowdID)
+	flat["surveyTimeStarted"] = surveyTimeStarted
+	flat["surveyStatus"] = surveyStatus
+	flat["shcStatus"] = h.irisSurveyRepo.GetSHCStatus(ctx, sc.ID)
+	flat["vendors"] = h.irisSurveyRepo.GetSurveyCrowdVendors(ctx, sc.ID)
+	flat["crowdCurrency"] = h.irisSurveyRepo.GetCrowdCurrency(ctx, sc.CrowdID)
+	flat["excluded"] = sc.Excluded
+	flat["isInvitationPaused"] = sc.IsInvitationPaused
+	flat["isReminderPaused"] = sc.IsReminderPaused
+	flat["isSampleClosed"] = sc.IsSampleClosed
+	flat["groupId"] = niVal(sc.CrowdGroupID)
+
+	return flat
+}
+
+// buildCrowdBasicJSONForSurveyCrowd loads an ICCrowd and returns basicJson.
+func (h *Handler) buildCrowdBasicJSONForSurveyCrowd(ctx context.Context, crowdID int64) map[string]any {
+	crowd, err := h.irisSurveyRepo.GetCrowdByID(ctx, crowdID)
+	if err != nil || crowd == nil {
+		return map[string]any{}
+	}
+	return h.buildCrowdBasicJSON(ctx, *crowd)
+}
+
+// buildCrowdFlatJSON produces crowd.flatJson(surveyId) = basicJson + contactableCount + partialCount + totalAnswerByBrand.
+func (h *Handler) buildCrowdFlatJSON(ctx context.Context, crowdID int64, surveyID *int64) map[string]any {
+	base := h.buildCrowdBasicJSONForSurveyCrowd(ctx, crowdID)
+	size := h.irisSurveyRepo.GetCrowdSize(ctx, crowdID)
+
+	// Brand IDs for keyed counts
+	brandIDs, _ := h.irisSurveyRepo.GetCrowdBrandIDs(ctx, crowdID)
+	if brandIDs == nil {
+		brandIDs = []int64{}
+	}
+
+	contactableCount := map[string]int64{"0": size}
+	partialCount := map[string]int64{"0": size}
+	for _, bid := range brandIDs {
+		contactableCount[fmt.Sprintf("%d", bid)] = size
+		partialCount[fmt.Sprintf("%d", bid)] = size
+	}
+	base["contactableCount"] = contactableCount
+	base["partialCount"] = partialCount
+
+	if surveyID != nil {
+		totalAnswerByBrand := map[string]int64{}
+		for _, bid := range []int64{1, 2} {
+			var count int64
+			_ = h.irisSurveyRepo.CountSurveyCrowdAnswersByBrand(ctx, *surveyID, crowdID, bid, &count)
+			totalAnswerByBrand[fmt.Sprintf("%d", bid)] = count
+		}
+		base["totalAnswerByBrand"] = totalAnswerByBrand
+	}
+
+	return base
+}
+
+// buildCrowdFlatICJSON produces crowd.flatICJson = basicJson + contactableCount + partialCount (non-contactable subtracted).
+func (h *Handler) buildCrowdFlatICJSON(ctx context.Context, crowdID int64) map[string]any {
+	base := h.buildCrowdBasicJSONForSurveyCrowd(ctx, crowdID)
+	size := h.irisSurveyRepo.GetCrowdSize(ctx, crowdID)
+
+	brandIDs, _ := h.irisSurveyRepo.GetCrowdBrandIDs(ctx, crowdID)
+	if brandIDs == nil {
+		brandIDs = []int64{}
+	}
+
+	contactableCount := map[string]int64{"0": size}
+	partialCount := map[string]int64{"0": size}
+	for _, bid := range brandIDs {
+		contactableCount[fmt.Sprintf("%d", bid)] = size
+		partialCount[fmt.Sprintf("%d", bid)] = size
+	}
+	base["contactableCount"] = contactableCount
+	base["partialCount"] = partialCount
+
+	return base
+}
+
+// buildCrowdAdminJSONAvailable produces crowd.adminJsonAvailable(surveyId).
+// = basicJson + counts + attributes + followupRules + availableCount/eligible.
+func (h *Handler) buildCrowdAdminJSONAvailable(ctx context.Context, crowdID, surveyID int64) map[string]any {
+	base := h.buildCrowdFlatJSON(ctx, crowdID, nil)
+
+	// Admin-level list extensions
+	base["validRespondersCount"] = map[string]int64{"0": h.irisSurveyRepo.GetCrowdSize(ctx, crowdID)}
+	base["followupRules"] = []map[string]any{}
+	base["hasRelatedSurveys"] = false
+	base["attributes"] = h.irisSurveyRepo.GetCrowdAttributes(ctx, crowdID)
+
+	// Available counts for survey
+	base["availableCount"] = h.irisSurveyRepo.GetCrowdAvailableCount(ctx, surveyID, crowdID)
+	base["availableEligibleCount"] = h.irisSurveyRepo.GetCrowdAvailableEligibleCount(ctx, surveyID, crowdID, false)
+	base["availableEligibleFullMatchCount"] = h.irisSurveyRepo.GetCrowdAvailableEligibleCount(ctx, surveyID, crowdID, true)
+
+	return base
 }
 
 // CloseSurvey closes a survey.
