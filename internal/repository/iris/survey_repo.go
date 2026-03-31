@@ -41,18 +41,29 @@ type ICSurveyCrowd struct {
 }
 
 // ICCrowd maps core columns from the IRIS crowd table.
+// ICCrowd maps core columns from the IRIS crowd table.
 type ICCrowd struct {
-	ID             int64          `json:"id"`
-	Name           string         `json:"name"`
-	Description    sql.NullString `json:"description"`
-	SubscriptionID int64          `json:"subscriptionId"`
-	TypeID         int            `json:"typeId"`
-	MarketID       int64          `json:"marketId"`
-	BrandID        int            `json:"brandId"`
-	Deleted        int            `json:"deleted"`
-	IsArchived     bool           `json:"isArchived"`
-	CreatedOn      time.Time      `json:"createdOn"`
-	ModifiedOn     time.Time      `json:"modifiedOn"`
+	ID                          int64          `json:"id"`
+	Name                        string         `json:"name"`
+	Description                 sql.NullString `json:"description"`
+	SubscriptionID              int64          `json:"subscriptionId"`
+	CreatedBy                   int64          `json:"createdBy"`
+	TypeID                      int            `json:"typeId"`
+	MarketID                    int64          `json:"marketId"`
+	Deleted                     bool           `json:"deleted"`
+	AndOr                       sql.NullInt64  `json:"andOr"`
+	DeletedOn                   sql.NullTime   `json:"deletedOn"`
+	DeletedBy                   sql.NullInt64  `json:"deletedBy"`
+	CreatedOn                   time.Time      `json:"createdOn"`
+	IsArchived                  bool           `json:"isArchived"`
+	ModifiedOn                  time.Time      `json:"modifiedOn"`
+	CreatedFromSampleTemplateID sql.NullInt64  `json:"createdFromSampleTemplateId"`
+	CreatedFromExclusionList    bool           `json:"createdFromExclusionList"`
+	IsNewbie                    bool           `json:"isNewbie"`
+	IncrowdTPA                  sql.NullString `json:"incrowdTPA"`
+	DoximityTPA                 sql.NullString `json:"doximityTPA"`
+	CanShareWithDoximity        bool           `json:"canShareWithDoximity"`
+	DuplicatedFromS3Key         sql.NullString `json:"duplicatedFromS3Key"`
 }
 
 // ICMarket maps the IRIS market table.
@@ -303,28 +314,210 @@ func (r *SurveyRepo) GetSurveyCrowds(ctx context.Context, surveyID int64) ([]map
 	return result, rows.Err()
 }
 
-// ListCrowdsForSubscription returns crowds for a subscription.
-func (r *SurveyRepo) ListCrowdsForSubscription(ctx context.Context, subscriptionID int64) ([]ICCrowd, error) {
-	q := `SELECT id, name, description, subscription_id, type_id, market_id, brand_id,
-	       CAST(deleted AS UNSIGNED), is_archived, created_on, modified_on
-	      FROM crowd WHERE subscription_id = ? AND deleted = b'0' AND is_archived = 0
-	      ORDER BY name`
-	rows, err := r.ro().QueryContext(ctx, q, subscriptionID)
+// CrowdFilter holds optional filter/pagination params for listing crowds.
+type CrowdFilter struct {
+	IncludeExclusionLists bool
+	Limit                 int
+	Offset                int
+}
+
+// ListCrowdsForSubscription returns crowds for a subscription with pagination.
+func (r *SurveyRepo) ListCrowdsForSubscription(ctx context.Context, subscriptionID int64, f *CrowdFilter) ([]ICCrowd, int, error) {
+	baseCols := `id, name, description, subscription_id, created_by, type_id, market_id,
+	       CAST(deleted AS UNSIGNED), and_or, deleted_on, deleted_by, created_on,
+	       is_archived, modified_on, created_from_sample_template_id,
+	       created_from_exclusion_list, is_newbie, incrowd_tpa, doximity_tpa,
+	       can_share_with_doximity, duplicated_from_s3_key`
+
+	where := "subscription_id = ? AND deleted = b'0' AND is_archived = 0 AND is_newbie = 0"
+	args := []any{subscriptionID}
+
+	if f != nil && !f.IncludeExclusionLists {
+		where += " AND created_from_exclusion_list = 0"
+	}
+
+	// Count total
+	var total int
+	countQ := "SELECT COUNT(*) FROM crowd WHERE " + where
+	if err := r.ro().QueryRowContext(ctx, countQ, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count crowds: %w", err)
+	}
+
+	// Apply pagination
+	limit := 20
+	offset := 0
+	if f != nil && f.Limit > 0 {
+		limit = f.Limit
+	}
+	if f != nil && f.Offset > 0 {
+		offset = f.Offset
+	}
+
+	q := fmt.Sprintf("SELECT %s FROM crowd WHERE %s ORDER BY name LIMIT %d OFFSET %d",
+		baseCols, where, limit, offset)
+	rows, err := r.ro().QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil, fmt.Errorf("list crowds: %w", err)
+		return nil, 0, fmt.Errorf("list crowds: %w", err)
 	}
 	defer rows.Close()
 	var result []ICCrowd
 	for rows.Next() {
 		var c ICCrowd
-		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.SubscriptionID, &c.TypeID,
-			&c.MarketID, &c.BrandID, &c.Deleted, &c.IsArchived,
-			&c.CreatedOn, &c.ModifiedOn); err != nil {
-			return nil, fmt.Errorf("scan crowd: %w", err)
+		var deletedInt int
+		if err := rows.Scan(&c.ID, &c.Name, &c.Description, &c.SubscriptionID, &c.CreatedBy,
+			&c.TypeID, &c.MarketID, &deletedInt, &c.AndOr, &c.DeletedOn, &c.DeletedBy,
+			&c.CreatedOn, &c.IsArchived, &c.ModifiedOn,
+			&c.CreatedFromSampleTemplateID, &c.CreatedFromExclusionList,
+			&c.IsNewbie, &c.IncrowdTPA, &c.DoximityTPA,
+			&c.CanShareWithDoximity, &c.DuplicatedFromS3Key); err != nil {
+			return nil, 0, fmt.Errorf("scan crowd: %w", err)
 		}
+		c.Deleted = deletedInt != 0
 		result = append(result, c)
 	}
+	return result, total, rows.Err()
+}
+
+// GetCrowdTypeDescription returns the description for a crowd type ID.
+func (r *SurveyRepo) GetCrowdTypeDescription(ctx context.Context, typeID int) (string, error) {
+	var desc string
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT description FROM crowd_type WHERE id = ?", typeID).Scan(&desc)
+	return desc, err
+}
+
+// GetMarketName returns a market's name by ID.
+func (r *SurveyRepo) GetMarketName(ctx context.Context, marketID int64) (string, error) {
+	var name string
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT name FROM market WHERE id = ?", marketID).Scan(&name)
+	return name, err
+}
+
+// GetCrowdBrandIDs returns brand IDs for a crowd from the crowd_brand junction table.
+func (r *SurveyRepo) GetCrowdBrandIDs(ctx context.Context, crowdID int64) ([]int64, error) {
+	rows, err := r.ro().QueryContext(ctx,
+		"SELECT brand_id FROM crowd_brand WHERE crowd_id = ?", crowdID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		result = append(result, id)
+	}
 	return result, rows.Err()
+}
+
+// GetBrandName returns a brand name by ID.
+func (r *SurveyRepo) GetBrandName(ctx context.Context, brandID int64) (string, error) {
+	var name string
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT name FROM brand WHERE id = ?", brandID).Scan(&name)
+	return name, err
+}
+
+// GetAccountIDForSubscription returns the account_id from the subscription table.
+func (r *SurveyRepo) GetAccountIDForSubscription(ctx context.Context, subscriptionID int64) *int64 {
+	var id int64
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT account_id FROM subscription WHERE id = ?", subscriptionID).Scan(&id)
+	if err != nil {
+		return nil
+	}
+	return &id
+}
+
+// GetCrowdCountryID returns the country attribute choice ID for a crowd (attribute_id=29).
+func (r *SurveyRepo) GetCrowdCountryID(ctx context.Context, crowdID int64) int64 {
+	var id int64
+	err := r.ro().QueryRowContext(ctx,
+		`SELECT cac.attribute_choice_id FROM crowd_attribute_choice cac
+		 JOIN crowd_attribute ca ON ca.id = cac.crowd_attribute_id
+		 WHERE ca.crowd_id = ? AND ca.attribute_id = 29 LIMIT 1`, crowdID).Scan(&id)
+	if err != nil {
+		return 0
+	}
+	return id
+}
+
+// GetAttributeChoiceLabel returns the label for an attribute choice.
+func (r *SurveyRepo) GetAttributeChoiceLabel(ctx context.Context, choiceID int64) string {
+	var label string
+	if err := r.ro().QueryRowContext(ctx,
+		"SELECT label FROM attribute_choice WHERE id = ?", choiceID).Scan(&label); err != nil {
+		return ""
+	}
+	return label
+}
+
+// GetCountryLanguages returns country-language labels for a country ID.
+func (r *SurveyRepo) GetCountryLanguages(ctx context.Context, countryID int64, countryName string) []string {
+	rows, err := r.ro().QueryContext(ctx,
+		"SELECT label FROM country_language_association WHERE country_id = ?", countryID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var result []string
+	for rows.Next() {
+		var label string
+		if err := rows.Scan(&label); err != nil {
+			continue
+		}
+		result = append(result, countryName+"-"+label)
+	}
+	return result
+}
+
+// CrowdHasListMatch checks if a crowd was created via list match.
+func (r *SurveyRepo) CrowdHasListMatch(ctx context.Context, crowdID int64) bool {
+	var cnt int
+	if err := r.ro().QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM list_match_report WHERE crowd_id = ? LIMIT 1", crowdID).Scan(&cnt); err != nil {
+		return false
+	}
+	return cnt > 0
+}
+
+// GetCrowdSpecialtyIDs returns specialty IDs for a crowd.
+func (r *SurveyRepo) GetCrowdSpecialtyIDs(ctx context.Context, crowdID int64) []int {
+	rows, err := r.ro().QueryContext(ctx,
+		"SELECT specialty_id FROM crowd_specialties WHERE crowd_id = ?", crowdID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var result []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			continue
+		}
+		result = append(result, id)
+	}
+	return result
+}
+
+// GetCrowdEngagementRate returns the engagement rate for a crowd.
+func (r *SurveyRepo) GetCrowdEngagementRate(ctx context.Context, crowdID int64, fullMatch bool) *float64 {
+	var rate float64
+	fm := 0
+	if fullMatch {
+		fm = 1
+	}
+	err := r.ro().QueryRowContext(ctx,
+		`SELECT engagement_rate FROM crowd_users_survey_engagement_rate
+		 WHERE crowd_id = ? AND brand_id IS NULL AND rate_key = 'completes' AND full_match = ?`,
+		crowdID, fm).Scan(&rate)
+	if err != nil {
+		return nil
+	}
+	return &rate
 }
 
 // ListMarkets returns all active markets.

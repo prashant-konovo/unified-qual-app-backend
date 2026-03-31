@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -769,6 +770,8 @@ func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Reque
 }
 
 // GetSubscriptionCrowds returns crowds for a subscription.
+// Legacy contract: response wrapped as {"crowds": [...], "limit": N, "offset": N, "totalCount": N}
+// Supports ?limit, ?offset, ?includeExclusionLists, ?jsonType=basic|admin (default admin).
 func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	subID, err := strconv.ParseInt(idStr, 10, 64)
@@ -777,24 +780,159 @@ func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if h.irisSurveyRepo != nil {
-		crowds, err := h.irisSurveyRepo.ListCrowdsForSubscription(r.Context(), subID)
-		if err != nil {
-			slog.Error("subscription crowds failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
-			return
-		}
-		result := make([]map[string]any, 0, len(crowds))
-		for _, c := range crowds {
-			result = append(result, map[string]any{
-				"id": c.ID, "name": c.Name, "subscriptionId": c.SubscriptionID,
-				"typeId": c.TypeID, "marketId": c.MarketID,
-			})
-		}
-		success(w, result)
+	if h.irisSurveyRepo == nil {
+		success(w, map[string]any{"crowds": []map[string]any{}, "limit": 20, "offset": 0, "totalCount": 0})
 		return
 	}
-	success(w, []any{})
+
+	q := r.URL.Query()
+
+	// Parse pagination
+	limit := 20
+	offset := 0
+	if v := q.Get("limit"); v != "" {
+		if l, err := strconv.Atoi(v); err == nil && l > 0 {
+			limit = l
+		}
+	}
+	if v := q.Get("offset"); v != "" {
+		if o, err := strconv.Atoi(v); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
+	includeExclusionLists := q.Get("includeExclusionLists") == "true"
+
+	filter := &iris.CrowdFilter{
+		IncludeExclusionLists: includeExclusionLists,
+		Limit:                 limit,
+		Offset:                offset,
+	}
+
+	crowds, total, err := h.irisSurveyRepo.ListCrowdsForSubscription(r.Context(), subID, filter)
+	if err != nil {
+		slog.Error("subscription crowds failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		return
+	}
+
+	ctx := r.Context()
+	result := make([]map[string]any, 0, len(crowds))
+	for _, c := range crowds {
+		result = append(result, h.buildCrowdBasicJSON(ctx, c))
+	}
+
+	success(w, map[string]any{
+		"crowds":     result,
+		"limit":      limit,
+		"offset":     offset,
+		"totalCount": total,
+	})
+}
+
+// buildCrowdBasicJSON builds a legacy-compatible basicJson response for a crowd.
+func (h *Handler) buildCrowdBasicJSON(ctx context.Context, c iris.ICCrowd) map[string]any {
+	// Type description
+	typeDesc := ""
+	if td, err := h.irisSurveyRepo.GetCrowdTypeDescription(ctx, c.TypeID); err == nil {
+		typeDesc = td
+	}
+
+	// Display name
+	descriptiveName := c.Name
+	if c.Deleted {
+		descriptiveName = "[DELETED] " + c.Name
+	}
+
+	// Account ID (from subscription)
+	var accountID any
+	if aid := h.irisSurveyRepo.GetAccountIDForSubscription(ctx, c.SubscriptionID); aid != nil {
+		accountID = *aid
+	}
+
+	// Market name
+	marketName := ""
+	if mn, err := h.irisSurveyRepo.GetMarketName(ctx, c.MarketID); err == nil {
+		marketName = mn
+	}
+
+	// Brand IDs and name
+	brandIDs, _ := h.irisSurveyRepo.GetCrowdBrandIDs(ctx, c.ID)
+	if brandIDs == nil {
+		brandIDs = []int64{}
+	}
+	var brandNames []string
+	for _, bid := range brandIDs {
+		if bn, err := h.irisSurveyRepo.GetBrandName(ctx, bid); err == nil {
+			brandNames = append(brandNames, bn)
+		}
+	}
+	brandName := strings.Join(brandNames, ", ")
+
+	// Country (attribute_id=29)
+	countryID := h.irisSurveyRepo.GetCrowdCountryID(ctx, c.ID)
+	countryName := ""
+	var countryLanguage []string
+	if countryID > 0 {
+		countryName = h.irisSurveyRepo.GetAttributeChoiceLabel(ctx, countryID)
+		countryLanguage = h.irisSurveyRepo.GetCountryLanguages(ctx, countryID, countryName)
+	}
+	if countryLanguage == nil {
+		countryLanguage = []string{}
+	}
+
+	// Created via list match
+	createdViaListMatch := h.irisSurveyRepo.CrowdHasListMatch(ctx, c.ID) || c.DuplicatedFromS3Key.Valid
+
+	// Specialty values
+	specialtyValues := h.irisSurveyRepo.GetCrowdSpecialtyIDs(ctx, c.ID)
+	if specialtyValues == nil {
+		specialtyValues = []int{}
+	}
+
+	// Engagement rates
+	var expectedCompletesRate any
+	if rate := h.irisSurveyRepo.GetCrowdEngagementRate(ctx, c.ID, false); rate != nil {
+		expectedCompletesRate = *rate
+	}
+	var expectedCompletesRateFullMatch any
+	if rate := h.irisSurveyRepo.GetCrowdEngagementRate(ctx, c.ID, true); rate != nil {
+		expectedCompletesRateFullMatch = *rate
+	}
+
+	return map[string]any{
+		"id":                          c.ID,
+		"typeId":                      c.TypeID,
+		"typeDescription":             typeDesc,
+		"name":                        c.Name,
+		"descriptiveName":             descriptiveName,
+		"description":                 nullStr(c.Description),
+		"subscriptionId":              c.SubscriptionID,
+		"accountId":                   accountID,
+		"createdBy":                   c.CreatedBy,
+		"marketId":                    c.MarketID,
+		"marketName":                  marketName,
+		"brandIds":                    brandIDs,
+		"brandName":                   brandName,
+		"countryId":                   countryID,
+		"countryName":                 countryName,
+		"countryLanguage":             countryLanguage,
+		"deleted":                     c.Deleted,
+		"andOr":                       niVal(c.AndOr),
+		"deletedOn":                   ntVal(c.DeletedOn),
+		"deletedBy":                   niVal(c.DeletedBy),
+		"createdOn":                   c.CreatedOn.Format(time.RFC3339),
+		"isArchived":                  c.IsArchived,
+		"createdFromSampleTemplateId": niVal(c.CreatedFromSampleTemplateID),
+		"isNewbie":                    c.IsNewbie,
+		"createdViaListMatch":         createdViaListMatch,
+		"incrowdTPA":                  nullStr(c.IncrowdTPA),
+		"doximityTPA":                 nullStr(c.DoximityTPA),
+		"canShareWithDoximity":        c.CanShareWithDoximity,
+		"crowdSpecialtyValues":        specialtyValues,
+		"expectedCompletesRate":       expectedCompletesRate,
+		"expectedCompletesRateFullMatch": expectedCompletesRateFullMatch,
+	}
 }
 
 // GetSubscriptionQuestionTypes returns question types for a subscription.
