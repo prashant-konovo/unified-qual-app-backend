@@ -285,6 +285,16 @@ func (r *UserRepo) Update(ctx context.Context, id int64, firstName, lastName, ti
 	return nil
 }
 
+// UpdateTimeZone updates only the time_zone field for a user.
+func (r *UserRepo) UpdateTimeZone(ctx context.Context, userID int64, timeZone string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE user SET time_zone = ? WHERE id = ?", timeZone, userID)
+	if err != nil {
+		return fmt.Errorf("update timezone for user %d: %w", userID, err)
+	}
+	slog.InfoContext(ctx, "updated QS user timezone", "id", userID, "timeZone", timeZone)
+	return nil
+}
+
 // UpdateModeratorBuffer updates a moderator's buffer setting.
 func (r *UserRepo) UpdateModeratorBuffer(ctx context.Context, id int64, buffer int) error {
 	q := "UPDATE user SET moderator_buffer = ?, moderator_buffer_modified_on = NOW() WHERE id = ?"

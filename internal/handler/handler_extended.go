@@ -188,6 +188,47 @@ func (h *Handler) GetUserEmail(w http.ResponseWriter, r *http.Request) {
 }
 
 // ──────────────────────────────────────────────
+// Upsert User TimeZone (MRA #9)
+// ──────────────────────────────────────────────
+
+// UpsertUserTimeZone updates only the time_zone for a user.
+// Contract-identical with legacy QS Tool: POST /user/upsert-user-time-zone-selection
+// Request: {userId, userSelectedTimeZone}
+// Response: {} (legacy UPDATE returns no records)
+func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UserID               int64  `json:"userId"`
+		UserSelectedTimeZone string `json:"userSelectedTimeZone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while creating a new user",
+		})
+		return
+	}
+
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "no database available",
+			"errorMessage": "An error occured while creating a new user",
+		})
+		return
+	}
+
+	if err := h.qsUserRepo.UpdateTimeZone(r.Context(), req.UserID, req.UserSelectedTimeZone); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while creating a new user",
+		})
+		return
+	}
+
+	// Legacy returns {data: result["records"]} but UPDATE has no records → empty object
+	writeJSON(w, http.StatusOK, map[string]any{})
+}
+
+// ──────────────────────────────────────────────
 // Password Management (MRA #10, #11)
 // ──────────────────────────────────────────────
 

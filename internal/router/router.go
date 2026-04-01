@@ -295,6 +295,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 			r.Get("/user/get-email/{id}", h.GetUserEmail)
 			r.Get("/user/{id}", h.GetUser)
 			r.Put("/user/{id}", h.UpdateUser)
+			r.Post("/user/upsert-user-time-zone-selection", h.UpsertUserTimeZone)
 			r.Put("/user/password_matches", h.CheckPasswordMatches)
 
 			// ── Event Logs (any authenticated) ──
