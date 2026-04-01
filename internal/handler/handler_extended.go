@@ -105,29 +105,55 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		UserID  int64 `json:"userId"`
-		RoleIDs []int `json:"roleIds"`
+		Email  string `json:"email"`
+		RoleID int    `json:"roleId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
-		return
-	}
-	if req.UserID == 0 || len(req.RoleIDs) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "userId and roleIds required"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while removing user roles",
+		})
 		return
 	}
 
-	if h.qsUserRepo != nil {
-		if err := h.qsUserRepo.DeleteRoles(r.Context(), req.UserID, req.RoleIDs); err != nil {
-			slog.Error("delete roles failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete roles"})
-			return
-		}
-		roles, _ := h.qsUserRepo.GetRoles(r.Context(), req.UserID)
-		writeJSON(w, http.StatusOK, map[string]any{"userId": req.UserID, "roles": roles, "source": "qs"})
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "no database available",
+			"errorMessage": "An error occured while removing user roles",
+		})
 		return
 	}
-	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+
+	// Legacy flow: look up user by email, delete role, then soft-delete user
+	user, err := h.qsUserRepo.GetByEmail(r.Context(), req.Email)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while removing user roles",
+		})
+		return
+	}
+
+	// Delete the role
+	if err := h.qsUserRepo.DeleteRoles(r.Context(), user.ID, []int{req.RoleID}); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while removing user roles",
+		})
+		return
+	}
+	// Soft-delete the user (matching legacy deleteUserRoleAndDeleteUser transaction)
+	if err := h.qsUserRepo.SoftDelete(r.Context(), user.ID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while removing user roles",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"userId": user.ID,
+	})
 }
 
 // ──────────────────────────────────────────────
