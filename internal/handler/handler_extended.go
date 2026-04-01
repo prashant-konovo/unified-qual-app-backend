@@ -237,11 +237,17 @@ func (h *Handler) SendPasswordResetEmail(w http.ResponseWriter, r *http.Request)
 		Email string `json:"email"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
 		return
 	}
 	if req.Email == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "email required"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "email required",
+			"errorMessage": "email required",
+		})
 		return
 	}
 
@@ -268,9 +274,14 @@ func (h *Handler) SendPasswordResetEmail(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	// Always return success to not leak user existence.
+	// Return legacy Lambda proxy result shape
 	slog.Info("password reset requested", "email", req.Email)
-	writeJSON(w, http.StatusOK, map[string]any{"sent": true, "email": req.Email})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":          200,
+		"headers":         map[string]string{"Content-Type": "application/json"},
+		"body":            map[string]any{"message": "Password reset email sent"},
+		"isBase64Encoded": false,
+	})
 }
 
 func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request) {
