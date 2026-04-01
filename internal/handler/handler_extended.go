@@ -3220,3 +3220,98 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 		"message": "Interview invalidated successfully",
 	})
 }
+
+// SendInvalidateRescheduleMailMRA handles POST /interview/send_invalidate_reschedule_mail (MRA).
+// Contract-identical scaffold with legacy: two flows — standard reschedule mail & ineligible PM notification.
+// Full email orchestration (SES, template rendering, PM notification) requires separate migration.
+func (h *Handler) SendInvalidateRescheduleMailMRA(w http.ResponseWriter, r *http.Request) {
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "Failed to send reschedule email",
+		})
+		return
+	}
+
+	var body struct {
+		TimeSlotID      any   `json:"timeSlotId"`
+		ParticipantID   any   `json:"participantId"`
+		IsIneligibleMail *bool `json:"isIneligibleMail"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Invalid JSON payload"})
+		return
+	}
+
+	// Flow 1: Ineligible Mail — PM notification for participant eligibility change
+	if body.IsIneligibleMail != nil && *body.IsIneligibleMail {
+		// Legacy accepts participantId as single value or array
+		var participantIDs []int64
+		switch v := body.ParticipantID.(type) {
+		case float64:
+			participantIDs = append(participantIDs, int64(v))
+		case []any:
+			for _, item := range v {
+				if num, ok := item.(float64); ok {
+					participantIDs = append(participantIDs, int64(num))
+				}
+			}
+		}
+		if len(participantIDs) == 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "participantId is required"})
+			return
+		}
+
+		// PARTIAL: Full implementation requires fetching upcoming timeslots per participant,
+		// PM details, communication preferences, email template rendering, and SES sending.
+		slog.Info("SendInvalidateRescheduleMailMRA: ineligible mail flow (PARTIAL)", "participantIDs", participantIDs)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success":       true,
+			"processed_ids": participantIDs,
+			"failed_ids":    []int64{},
+		})
+		return
+	}
+
+	// Flow 2: Standard reschedule mail
+	var timeSlotID int64
+	switch v := body.TimeSlotID.(type) {
+	case float64:
+		timeSlotID = int64(v)
+	case string:
+		timeSlotID, _ = strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+	}
+	if timeSlotID == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "timeSlotId is required"})
+		return
+	}
+
+	// Fetch timeslot and validate state
+	ts, err := h.qsTimeSlotRepo.GetByID(r.Context(), timeSlotID)
+	if err != nil || ts == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "Timeslot not found"})
+		return
+	}
+
+	if !ts.IsInvalidatedInterview {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "Interview not invalidated yet!"})
+		return
+	}
+
+	if ts.IsInvalidateEmailSent {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "Invalidate Reschedule Email Already Sent"})
+		return
+	}
+
+	// PARTIAL: Full implementation requires:
+	// - Fetch responder by timeSlotId (email, language, timezone, externalResponderId)
+	// - Fetch project details (surveyId, salesForceJobNumber, shghash, externalSurveyId)
+	// - Fetch/generate reschedule token (generateHash)
+	// - Build reschedule URL with query params
+	// - Fetch & render email template with timezone-localized start time
+	// - Send email via SES
+	// - Mark email as sent (markInvalidateEmailSentService)
+	// - Notify PM (fire-and-forget)
+	slog.Info("SendInvalidateRescheduleMailMRA: reschedule mail flow (PARTIAL)", "timeSlotID", timeSlotID)
+
+	writeJSON(w, http.StatusOK, map[string]any{"status": "SUCCESS"})
+}

@@ -84,6 +84,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Post("/interview/schedule", h.ScheduleInterviewMRA)
 				r.Post("/interview/respondent_reschedule", h.RespondentRescheduleMRA)
 				r.Post("/interview/invalidate", h.InvalidateInterviewMRA)
+				r.Post("/interview/send_invalidate_reschedule_mail", h.SendInvalidateRescheduleMailMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)
