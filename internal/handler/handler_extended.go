@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
+	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -745,45 +747,351 @@ func (h *Handler) GetInterviewPaymentStatusList(w http.ResponseWriter, r *http.R
 // LS: Inquiry Preview & Custom Crowd Inquiry (LS #6, #7, #55)
 // ──────────────────────────────────────────────
 
+// ── Inquiry Preview types (contract-identical with legacy Scala InCrowdAPI) ──
+
+type ipCrowdAttributeSpec struct {
+	AttributeID  int64   `json:"attributeId"`
+	NumericMin   *int64  `json:"numericMin"`
+	NumericMax   *int64  `json:"numericMax"`
+	ChoiceIDs    []int64 `json:"choiceIds"`
+	QualRequired *bool   `json:"qualRequired"`
+}
+
+type ipDifficultyLevelReq struct {
+	ID int64 `json:"id"`
+}
+
+type ipDifficultyAssessmentResp struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	IsHardStop bool   `json:"isHardStop"`
+}
+
+type ipCrowdSpec struct {
+	Name                 *string                     `json:"name"`
+	NumberRequested      *int64                      `json:"numberRequested"`
+	Notes                *string                     `json:"notes"`
+	Attributes           []ipCrowdAttributeSpec      `json:"attributes"`
+	MarketID             int64                       `json:"marketId"`
+	MarketName           *string                     `json:"marketName"`
+	DifficultyLevel      ipDifficultyLevelReq        `json:"difficultyLevel"`
+	DifficultyAssessment *ipDifficultyAssessmentResp `json:"difficultyAssessment"`
+	CrowdID              *int64                      `json:"crowdId"`
+	IsCustom             bool                        `json:"isCustom"`
+	ValidRespondersCount *int64                      `json:"validRespondersCount"`
+}
+
+type ipProposal struct {
+	InterviewLength      int64         `json:"interviewLength"`
+	Name                 string        `json:"name"`
+	SalesforceProjectID  *string       `json:"salesforceProjectId"`
+	CompletionDate       *string       `json:"completionDate"`
+	Notes                *string       `json:"notes"`
+	Crowds               []ipCrowdSpec `json:"crowds"`
+	CustomCrowds         []ipCrowdSpec `json:"customCrowds"`
+	ProjectID            *int64        `json:"projectId"`
+	UnderReview          bool          `json:"underReview"`
+	TranscriptsRequested bool          `json:"transcriptsRequested"`
+	RequiresStimuli      bool          `json:"requiresStimuli"`
+	IsDynamicStimulus    bool          `json:"isDynamicStimulus"`
+}
+
+type ipFee struct {
+	GrossSubtotal float64  `json:"grossSubtotal"`
+	NetSubtotal   float64  `json:"netSubtotal"`
+	DiscountRate  *float64 `json:"discountRate"`
+	PricePerUnit  float64  `json:"pricePerUnit"`
+	Count         int64    `json:"count"`
+	IsHonorarium  bool     `json:"isHonorarium"`
+	Name          string   `json:"name"`
+	ProductID     int64    `json:"productId"`
+}
+
+type ipProjectCosts struct {
+	GrossTotal float64 `json:"grossTotal"`
+	NetTotal   float64 `json:"netTotal"`
+	Fees       []ipFee `json:"fees"`
+}
+
+type ipResponse struct {
+	Proposal             *ipProposal     `json:"proposal"`
+	SalesforceProjectName *string        `json:"salesforceProjectName"`
+	Costs                *ipProjectCosts `json:"costs"`
+	IsHardStop           bool            `json:"isHardStop"`
+}
+
+// isSpecializedCrowd checks whether a crowd is "specialized" per legacy logic.
+func ipIsSpecializedCrowd(c *ipCrowdSpec) bool {
+	if c.MarketID != 1 {
+		return false
+	}
+	if c.IsCustom {
+		return true
+	}
+	nonGeneralChoices := map[int64]bool{304: true}
+	for _, attr := range c.Attributes {
+		if attr.AttributeID == 1 {
+			for _, cid := range attr.ChoiceIDs {
+				if !nonGeneralChoices[cid] {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// ipCrowdMatchesProduct determines if a crowd matches a product for honorarium calculations.
+func ipCrowdMatchesProduct(c *ipCrowdSpec, relatedMarketIDs []int64, isSpecialized bool) bool {
+	for _, mid := range relatedMarketIDs {
+		if mid == c.MarketID {
+			return true
+		}
+	}
+	crowdSpecialized := ipIsSpecializedCrowd(c)
+	if isSpecialized && crowdSpecialized {
+		return true
+	}
+	if !isSpecialized && !crowdSpecialized && c.MarketID == 1 {
+		return true
+	}
+	return false
+}
+
 func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	subStr := chi.URLParam(r, "subscriptionId")
 	subID, _ := strconv.ParseInt(subStr, 10, 64)
 
-	var req struct {
-		ProjectID            int64  `json:"projectId"`
-		Description          string `json:"description"`
-		InterviewLength      int    `json:"interviewLength"`
-		TranscriptsRequested bool   `json:"transcriptsRequested"`
-		RequiresStimuli      bool   `json:"requiresStimuli"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var proposal ipProposal
+	if err := json.NewDecoder(r.Body).Decode(&proposal); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
 		return
 	}
 
-	if h.irisSurveyRepo != nil {
-		fields := map[string]any{}
-		if req.Description != "" {
-			fields["description"] = req.Description
-		}
-		if req.InterviewLength > 0 {
-			fields["interview_length"] = req.InterviewLength
-		}
-		if req.TranscriptsRequested {
-			fields["transcripts_requested"] = 1
-		}
-		if req.RequiresStimuli {
-			fields["requires_stimuli"] = 1
-		}
-		if err := h.irisSurveyRepo.UpdateInquiryPreview(r.Context(), subID, req.ProjectID, fields); err != nil {
-			slog.Error("update inquiry preview failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
-			return
-		}
-		success(w, map[string]any{"updated": true, "subscriptionId": subID, "projectId": req.ProjectID, "source": "iris"})
+	if h.irisSurveyRepo == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 		return
 	}
-	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+
+	ctx := r.Context()
+
+	// Step 1: Get qual products
+	allProducts, err := h.irisSurveyRepo.GetQualProducts(ctx)
+	if err != nil {
+		slog.Error("get qual products failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get products"})
+		return
+	}
+
+	// Filter out transcription products if not requested
+	var filtered []iris.QualProduct
+	for _, p := range allProducts {
+		if !proposal.TranscriptsRequested && strings.HasPrefix(p.Name, "Transcription") {
+			continue
+		}
+		filtered = append(filtered, p)
+	}
+
+	// Partition: base products (no qual_interview_minutes) + matching interview length
+	var products []iris.QualProduct
+	for _, p := range filtered {
+		if p.QualInterviewMinutes == nil {
+			products = append(products, p)
+		} else if *p.QualInterviewMinutes == proposal.InterviewLength {
+			products = append(products, p)
+		}
+	}
+
+	// Step 2: Get related market IDs for each product
+	for i := range products {
+		mids, err := h.irisSurveyRepo.GetProductRelatedMarketIDs(ctx, products[i].ID)
+		if err != nil {
+			slog.Error("get product market ids failed", "error", err, "productId", products[i].ID)
+		}
+		products[i].RelatedMarketIDs = mids
+	}
+
+	// Step 4: Get subscription discount
+	serviceDiscount, err := h.irisSurveyRepo.GetSubscriptionServiceDiscount(ctx, subID)
+	if err != nil {
+		slog.Error("get subscription discount failed", "error", err)
+		serviceDiscount = 0
+	}
+
+	// Combine all crowds for total respondent count
+	allCrowds := make([]ipCrowdSpec, 0, len(proposal.Crowds)+len(proposal.CustomCrowds))
+	allCrowds = append(allCrowds, proposal.Crowds...)
+	allCrowds = append(allCrowds, proposal.CustomCrowds...)
+
+	var totalRespondents int64
+	for _, c := range allCrowds {
+		if c.NumberRequested != nil {
+			totalRespondents += *c.NumberRequested
+		}
+	}
+
+	// Step 3: Calculate fees
+	var fees []ipFee
+	for _, p := range products {
+		var fee ipFee
+		fee.Name = p.Name
+		fee.ProductID = p.ID
+		fee.PricePerUnit = p.PriceUSD
+		fee.IsHonorarium = p.IsHonorarium
+
+		if p.IsHonorarium {
+			var count int64
+			for i := range allCrowds {
+				if ipCrowdMatchesProduct(&allCrowds[i], p.RelatedMarketIDs, p.IsSpecialized) {
+					if allCrowds[i].NumberRequested != nil {
+						count += *allCrowds[i].NumberRequested
+					}
+				}
+			}
+			fee.Count = count
+			fee.GrossSubtotal = p.PriceUSD * float64(count)
+			fee.NetSubtotal = fee.GrossSubtotal
+			fee.IsHonorarium = true
+		} else if p.IsForService {
+			if p.IsFlatFee {
+				fee.Count = 1
+			} else {
+				fee.Count = totalRespondents
+			}
+			fee.GrossSubtotal = p.PriceUSD * float64(fee.Count)
+			dr := serviceDiscount
+			fee.DiscountRate = &dr
+			fee.NetSubtotal = fee.GrossSubtotal * (1 - serviceDiscount)
+		} else if p.IsFlatFee {
+			fee.Count = 1
+			fee.GrossSubtotal = p.PriceUSD
+			fee.NetSubtotal = fee.GrossSubtotal
+		} else {
+			fee.Count = totalRespondents
+			fee.GrossSubtotal = p.PriceUSD * float64(totalRespondents)
+			fee.NetSubtotal = fee.GrossSubtotal
+		}
+
+		fees = append(fees, fee)
+	}
+
+	var grossTotal, netTotal float64
+	for _, f := range fees {
+		grossTotal += f.GrossSubtotal
+		netTotal += f.NetSubtotal
+	}
+
+	// Step 5: Assess crowd difficulty
+	assessments, err := h.irisSurveyRepo.GetDifficultyAssessments(ctx)
+	if err != nil {
+		slog.Error("get difficulty assessments failed", "error", err)
+	}
+
+	isHardStop := false
+
+	for i := range proposal.Crowds {
+		da := h.assessCrowdDifficulty(ctx, &proposal.Crowds[i], assessments)
+		proposal.Crowds[i].DifficultyAssessment = da
+		if da != nil && da.IsHardStop {
+			isHardStop = true
+		}
+	}
+	for i := range proposal.CustomCrowds {
+		da := h.assessCrowdDifficulty(ctx, &proposal.CustomCrowds[i], assessments)
+		proposal.CustomCrowds[i].DifficultyAssessment = da
+		if da != nil && da.IsHardStop {
+			isHardStop = true
+		}
+	}
+
+	// Step 6: Resolve custom crowd names
+	for i := range proposal.CustomCrowds {
+		if proposal.CustomCrowds[i].CrowdID != nil {
+			name, err := h.irisSurveyRepo.GetCrowdNameByID(ctx, *proposal.CustomCrowds[i].CrowdID)
+			if err != nil {
+				slog.Error("get crowd name failed", "error", err, "crowdId", *proposal.CustomCrowds[i].CrowdID)
+			} else {
+				proposal.CustomCrowds[i].Name = &name
+			}
+		}
+	}
+
+	// Step 7: Lookup Salesforce project
+	var sfProjectName *string
+	if proposal.SalesforceProjectID != nil && *proposal.SalesforceProjectID != "" {
+		num, name, err := h.irisSurveyRepo.GetSalesforceProjectByExtID(ctx, *proposal.SalesforceProjectID)
+		if err != nil {
+			slog.Error("get salesforce project failed", "error", err)
+		} else {
+			formatted := fmt.Sprintf("%s - %s", num, name)
+			sfProjectName = &formatted
+		}
+	}
+
+	// Ensure fees is an empty array, not null
+	if fees == nil {
+		fees = []ipFee{}
+	}
+
+	// Step 8: Build response
+	resp := ipResponse{
+		Proposal:              &proposal,
+		SalesforceProjectName: sfProjectName,
+		Costs: &ipProjectCosts{
+			GrossTotal: grossTotal,
+			NetTotal:   netTotal,
+			Fees:       fees,
+		},
+		IsHardStop: isHardStop,
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// assessCrowdDifficulty calculates the feasibility score for a crowd and matches it to an assessment.
+func (h *Handler) assessCrowdDifficulty(ctx context.Context, crowd *ipCrowdSpec, assessments []iris.DifficultyAssessmentRow) *ipDifficultyAssessmentResp {
+	const (
+		responseRate    = 0.2
+		acceptanceRate  = 0.6
+		schedulingRate  = 0.8
+		flakeOutRate    = 0.85
+	)
+
+	if crowd.NumberRequested == nil || *crowd.NumberRequested == 0 {
+		return nil
+	}
+
+	population, err := h.irisSurveyRepo.CountMarketPopulation(ctx, crowd.MarketID)
+	if err != nil {
+		slog.Error("count market population failed", "error", err, "marketId", crowd.MarketID)
+		return nil
+	}
+
+	diffPercent, err := h.irisSurveyRepo.GetDifficultyLevelPercent(ctx, crowd.DifficultyLevel.ID)
+	if err != nil {
+		slog.Error("get difficulty level percent failed", "error", err, "levelId", crowd.DifficultyLevel.ID)
+		return nil
+	}
+
+	expectedResponse := float64(population) * responseRate
+	expectedIncidence := expectedResponse * diffPercent
+	expectedAcceptance := expectedIncidence * acceptanceRate
+	expectedScheduling := expectedAcceptance * schedulingRate
+	expectedAttendance := expectedScheduling * flakeOutRate
+	feasibilityScore := expectedAttendance / float64(*crowd.NumberRequested)
+
+	for _, a := range assessments {
+		minOK := a.MinPercent == nil || *a.MinPercent <= feasibilityScore
+		maxOK := a.MaxPercent == nil || feasibilityScore < *a.MaxPercent
+		if minOK && maxOK {
+			return &ipDifficultyAssessmentResp{
+				ID:         a.ID,
+				Name:       a.Name,
+				IsHardStop: a.IsHardStop,
+			}
+		}
+	}
+	return nil
 }
 
 // CreateCustomCrowdInquiry handles custom crowd inquiry submission with CSV upload.

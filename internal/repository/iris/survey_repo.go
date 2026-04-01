@@ -2160,3 +2160,156 @@ func (r *SurveyRepo) CountScreenOutCompletions(ctx context.Context, surveyID int
 	}
 	return count, nil
 }
+
+// ──────────────────────────────────────────────
+// Inquiry Preview — pricing, difficulty, lookups
+// ──────────────────────────────────────────────
+
+// QualProduct represents a qual-related product for pricing calculations.
+type QualProduct struct {
+	ID                   int64
+	Name                 string
+	PriceUSD             float64
+	IsSpecialized        bool
+	IsFlatFee            bool
+	IsHonorarium         bool
+	IsForService         bool
+	QualInterviewMinutes *int64
+	RelatedMarketIDs     []int64
+}
+
+// GetQualProducts returns all active qual-related products (excluding honorarium_custom_legacy).
+func (r *SurveyRepo) GetQualProducts(ctx context.Context) ([]QualProduct, error) {
+	q := `SELECT id, name, price_usd, is_specialized, is_flat_fee, is_honorarium, is_for_service, qual_interview_minutes
+	      FROM product WHERE is_qual_related = 1 AND NOT (natural_key <=> 'honorarium_custom_legacy') AND is_deleted = 0`
+	rows, err := r.ro().QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("get qual products: %w", err)
+	}
+	defer rows.Close()
+	var products []QualProduct
+	for rows.Next() {
+		var p QualProduct
+		var qim sql.NullInt64
+		if err := rows.Scan(&p.ID, &p.Name, &p.PriceUSD, &p.IsSpecialized, &p.IsFlatFee, &p.IsHonorarium, &p.IsForService, &qim); err != nil {
+			return nil, fmt.Errorf("scan qual product: %w", err)
+		}
+		if qim.Valid {
+			v := qim.Int64
+			p.QualInterviewMinutes = &v
+		}
+		products = append(products, p)
+	}
+	return products, rows.Err()
+}
+
+// GetProductRelatedMarketIDs returns the market IDs associated with a product.
+func (r *SurveyRepo) GetProductRelatedMarketIDs(ctx context.Context, productID int64) ([]int64, error) {
+	rows, err := r.ro().QueryContext(ctx, "SELECT market_id FROM market_product WHERE product_id = ?", productID)
+	if err != nil {
+		return nil, fmt.Errorf("get product market ids: %w", err)
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan market id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// GetSubscriptionServiceDiscount returns the service discount for a subscription.
+func (r *SurveyRepo) GetSubscriptionServiceDiscount(ctx context.Context, subscriptionID int64) (float64, error) {
+	var discount float64
+	err := r.ro().QueryRowContext(ctx, "SELECT COALESCE(service_discount, 0) FROM subscription WHERE id = ?", subscriptionID).Scan(&discount)
+	if err != nil {
+		return 0, fmt.Errorf("get subscription discount: %w", err)
+	}
+	return discount, nil
+}
+
+// CountMarketPopulation returns the count of validated incrowd panelists in a market.
+func (r *SurveyRepo) CountMarketPopulation(ctx context.Context, marketID int64) (int64, error) {
+	var count int64
+	err := r.ro().QueryRowContext(ctx, `SELECT COUNT(ic_user.id) FROM ic_user
+		INNER JOIN panelist_brand ON ic_user.id = panelist_brand.user_id
+		  AND panelist_brand.brand_id = COALESCE(ic_user.primary_brand, 1)
+		WHERE ic_user.market_id = ?
+		  AND ic_user.validated_on IS NOT NULL
+		  AND NOT panelist_brand.unsubscribed
+		  AND ic_user.responder_type_id = 1`, marketID).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count market population: %w", err)
+	}
+	return count, nil
+}
+
+// GetDifficultyLevelPercent returns the percent for a difficulty level.
+func (r *SurveyRepo) GetDifficultyLevelPercent(ctx context.Context, levelID int64) (float64, error) {
+	var percent float64
+	err := r.ro().QueryRowContext(ctx, "SELECT COALESCE(percent, 0) FROM difficulty_level WHERE id = ?", levelID).Scan(&percent)
+	if err != nil {
+		return 0, fmt.Errorf("get difficulty level percent: %w", err)
+	}
+	return percent, nil
+}
+
+// DifficultyAssessmentRow represents a row from the difficulty_assessment table.
+type DifficultyAssessmentRow struct {
+	ID         int64
+	Name       string
+	MinPercent *float64
+	MaxPercent *float64
+	IsHardStop bool
+}
+
+// GetDifficultyAssessments returns all difficulty assessment rows.
+func (r *SurveyRepo) GetDifficultyAssessments(ctx context.Context) ([]DifficultyAssessmentRow, error) {
+	rows, err := r.ro().QueryContext(ctx, "SELECT id, name, min_percent, max_percent, is_hard_stop FROM difficulty_assessment")
+	if err != nil {
+		return nil, fmt.Errorf("get difficulty assessments: %w", err)
+	}
+	defer rows.Close()
+	var result []DifficultyAssessmentRow
+	for rows.Next() {
+		var a DifficultyAssessmentRow
+		var minP, maxP sql.NullFloat64
+		if err := rows.Scan(&a.ID, &a.Name, &minP, &maxP, &a.IsHardStop); err != nil {
+			return nil, fmt.Errorf("scan difficulty assessment: %w", err)
+		}
+		if minP.Valid {
+			a.MinPercent = &minP.Float64
+		}
+		if maxP.Valid {
+			a.MaxPercent = &maxP.Float64
+		}
+		result = append(result, a)
+	}
+	return result, rows.Err()
+}
+
+// GetCrowdNameByID returns the name of a crowd by its ID.
+func (r *SurveyRepo) GetCrowdNameByID(ctx context.Context, crowdID int64) (string, error) {
+	var name string
+	err := r.ro().QueryRowContext(ctx, "SELECT COALESCE(name, '') FROM crowd WHERE id = ?", crowdID).Scan(&name)
+	if err != nil {
+		return "", fmt.Errorf("get crowd name: %w", err)
+	}
+	return name, nil
+}
+
+// GetSalesforceProjectByExtID returns the number and name for a salesforce project by external ID.
+func (r *SurveyRepo) GetSalesforceProjectByExtID(ctx context.Context, sfProjectID string) (string, string, error) {
+	var number, name string
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT COALESCE(number, ''), COALESCE(name, '') FROM salesforce_project WHERE salesforce_project_id = ? LIMIT 1",
+		sfProjectID).Scan(&number, &name)
+	if err != nil {
+		return "", "", fmt.Errorf("get salesforce project: %w", err)
+	}
+	return number, name, nil
+}
+
