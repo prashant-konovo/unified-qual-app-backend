@@ -1369,11 +1369,13 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UnlinkImportedModerator(w http.ResponseWriter, r *http.Request) {
 	modStr := chi.URLParam(r, "moderatorId")
 	moderatorID, _ := strconv.ParseInt(modStr, 10, 64)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"moderatorId": moderatorID,
-		"unlinked":    true,
-		"message":     "External calendar integration not active.",
-	})
+
+	if h.db.QS != nil {
+		_, _ = h.db.QS.ExecContext(r.Context(),
+			`DELETE FROM google_calendar_import WHERE moderator_id = ?`, moderatorID)
+	}
+
+	writeJSON(w, http.StatusOK, "Imported Moderator calendar has been unlinked")
 }
 
 func (h *Handler) UpdateGoogleSheetFirstDate(w http.ResponseWriter, r *http.Request) {

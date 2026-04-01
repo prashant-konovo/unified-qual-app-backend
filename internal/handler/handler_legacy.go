@@ -971,7 +971,20 @@ func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// QS: use moderator availability with project's client_id
+	// QS: get moderator availability for this project's moderators
+	if h.qsUserRepo != nil && h.qsProjectRepo != nil {
+		proj, _ := h.qsProjectRepo.GetByID(r.Context(), projectID)
+		clientID := int64(0)
+		if proj != nil && proj.ClientID.Valid {
+			clientID = proj.ClientID.Int64
+		}
+		avails, err := h.qsUserRepo.ListModeratorAvailability(r.Context(), 0, &clientID, "", "")
+		if err != nil {
+			slog.Error("get qs project avail failed", "error", err)
+		}
+		writeJSON(w, http.StatusOK, avails)
+		return
+	}
 	writeJSON(w, http.StatusOK, []any{})
 }
 
@@ -995,8 +1008,28 @@ func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// QS: moderators from moderator_time_slot for this project
-	writeJSON(w, http.StatusOK, map[string]any{"moderatorInfo": map[string]any{}})
+	// QS: get moderators from timeslots for this project
+	if h.qsTimeSlotRepo != nil {
+		tsRows, _, _ := h.qsTimeSlotRepo.ListByProject(r.Context(), projectID, 1, 1000)
+		modMap := map[int64]map[string]any{}
+		for _, ts := range tsRows {
+			mods, _ := h.qsTimeSlotRepo.GetModerators(r.Context(), ts.ID)
+			for _, m := range mods {
+				if _, ok := modMap[m.ModeratorID]; !ok {
+					modMap[m.ModeratorID] = map[string]any{
+						"id": m.ModeratorID, "isHost": m.IsHost,
+					}
+				}
+			}
+		}
+		result := make([]map[string]any, 0, len(modMap))
+		for _, v := range modMap {
+			result = append(result, v)
+		}
+		writeJSON(w, http.StatusOK, result)
+		return
+	}
+	writeJSON(w, http.StatusOK, []map[string]any{})
 }
 
 // GetProjectDashboard returns combined availability and timeslot data for dashboard.
@@ -1358,6 +1391,20 @@ func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Reque
 		}
 		if interviews == nil {
 			interviews = []map[string]any{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"interviews": interviews})
+		return
+	}
+	if h.qsTimeSlotRepo != nil {
+		tsRows, _, _ := h.qsTimeSlotRepo.ListByProject(r.Context(), subID, 1, 1000)
+		interviews := make([]map[string]any, 0)
+		for _, ts := range tsRows {
+			interviews = append(interviews, map[string]any{
+				"id": ts.ID, "projectId": ts.ProjectID,
+				"startTime": ts.StartTime.Format(time.RFC3339),
+				"endTime":   ts.EndTime.Format(time.RFC3339),
+				"statusId":  ts.StatusID,
+			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"interviews": interviews})
 		return
@@ -2085,6 +2132,14 @@ func (h *Handler) GetTimeslotModerators(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusOK, mods)
 		return
 	}
+	if h.qsTimeSlotRepo != nil {
+		mods, err := h.qsTimeSlotRepo.GetModerators(r.Context(), tsID)
+		if err != nil {
+			slog.Error("get qs ts mods failed", "error", err)
+		}
+		writeJSON(w, http.StatusOK, mods)
+		return
+	}
 	writeJSON(w, http.StatusOK, []any{})
 }
 
@@ -2106,6 +2161,28 @@ func (h *Handler) GetTimeslotModeratorOptionsExt(w http.ResponseWriter, r *http.
 			slog.Error("get possible mods failed", "error", err)
 		}
 		writeJSON(w, http.StatusOK, mods)
+		return
+	}
+	if h.qsUserRepo != nil {
+		allMods, err := h.qsUserRepo.GetModerators(r.Context())
+		if err != nil {
+			slog.Error("get qs moderators failed", "error", err)
+		}
+		assigned := map[int64]bool{}
+		if h.qsTimeSlotRepo != nil {
+			tsMods, _ := h.qsTimeSlotRepo.GetModerators(r.Context(), tsID)
+			for _, m := range tsMods {
+				assigned[m.ModeratorID] = true
+			}
+		}
+		result := make([]map[string]any, 0)
+		for _, m := range allMods {
+			result = append(result, map[string]any{
+				"id": m.ID, "firstName": m.FirstName.String, "lastName": m.LastName.String,
+				"isAssigned": assigned[m.ID],
+			})
+		}
+		writeJSON(w, http.StatusOK, result)
 		return
 	}
 	writeJSON(w, http.StatusOK, []any{})
@@ -2610,6 +2687,15 @@ func (h *Handler) UpdateModeratorAvailabilityExt(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusOK, map[string]any{"updated": true, "id": maID})
 		return
 	}
+	if h.qsUserRepo != nil {
+		if err := h.qsUserRepo.UpdateModeratorAvailability(r.Context(), maID, startTime, endTime); err != nil {
+			slog.Error("update qs avail failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"updated": true, "id": maID})
+		return
+	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
 }
 
@@ -2624,6 +2710,15 @@ func (h *Handler) DeleteModeratorAvailabilityExt(w http.ResponseWriter, r *http.
 	if source == "iris" && h.irisSurveyRepo != nil {
 		if err := h.irisSurveyRepo.DeleteModeratorAvailability(r.Context(), maID); err != nil {
 			slog.Error("delete iris avail failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": maID})
+		return
+	}
+	if h.qsUserRepo != nil {
+		if err := h.qsUserRepo.DeleteModeratorAvailability(r.Context(), maID); err != nil {
+			slog.Error("delete qs avail failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
 		}
@@ -2775,7 +2870,7 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 // Response: {"passwordMatches": bool}
 func (h *Handler) CheckPasswordMatches(w http.ResponseWriter, r *http.Request) {
 	// Password matching is handled by Cognito, not by direct DB comparison
-	writeJSON(w, http.StatusOK, map[string]any{"passwordMatches": true})
+	writeJSON(w, http.StatusOK, map[string]any{"passwordMatch": true})
 }
 
 // ──────────────────────────────────────────────
@@ -2803,6 +2898,14 @@ func (h *Handler) CreateEventLog(w http.ResponseWriter, r *http.Request) {
 	if h.db.IRIS != nil {
 		_, _ = h.db.IRIS.ExecContext(r.Context(),
 			`INSERT INTO activity_log (event_type, description, user_id, project_id, time_slot_id, meta_data, created_on)
+			 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+			req.EventType, req.Description, req.UserID, req.ProjectID, req.TimeSlotID, req.MetaData)
+	}
+
+	// Write to QS event_log table
+	if h.db.QS != nil {
+		_, _ = h.db.QS.ExecContext(r.Context(),
+			`INSERT INTO event_log (event_type, description, user_id, project_id, time_slot_id, meta_data, created_on)
 			 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
 			req.EventType, req.Description, req.UserID, req.ProjectID, req.TimeSlotID, req.MetaData)
 	}

@@ -252,7 +252,7 @@ func (h *Handler) AuthPassword(w http.ResponseWriter, r *http.Request) {
 	// When accessToken is present, the frontend should call Cognito directly.
 	// This endpoint acknowledges the request and logs the event.
 	slog.Info("password change requested", "userId", req.UserID)
-	writeJSON(w, http.StatusOK, map[string]any{"changed": true, "note": "password change delegated to Cognito"})
+	writeJSON(w, http.StatusOK, map[string]any{"changed": true})
 }
 
 // AuthMe returns the authenticated user's claims from the JWT.
