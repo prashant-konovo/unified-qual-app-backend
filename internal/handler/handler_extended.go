@@ -157,6 +157,37 @@ func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
 }
 
 // ──────────────────────────────────────────────
+// Get User Email by Cognito ID (MRA #8)
+// ──────────────────────────────────────────────
+
+// GetUserEmail returns just the email for a user looked up by Cognito user ID.
+// Contract-identical with legacy QS Tool: GET /user/get-email/{user_id}
+func (h *Handler) GetUserEmail(w http.ResponseWriter, r *http.Request) {
+	cognitoID := chi.URLParam(r, "id")
+
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "no database available",
+			"errorMessage": "no database available",
+		})
+		return
+	}
+
+	email, err := h.qsUserRepo.GetEmailByCognitoID(r.Context(), cognitoID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"email": email,
+	})
+}
+
+// ──────────────────────────────────────────────
 // Password Management (MRA #10, #11)
 // ──────────────────────────────────────────────
 

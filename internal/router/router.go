@@ -292,6 +292,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 			})
 
 			// ── User (authenticated) ──
+			r.Get("/user/get-email/{id}", h.GetUserEmail)
 			r.Get("/user/{id}", h.GetUser)
 			r.Put("/user/{id}", h.UpdateUser)
 			r.Put("/user/password_matches", h.CheckPasswordMatches)

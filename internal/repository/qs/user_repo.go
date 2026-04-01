@@ -470,6 +470,17 @@ func (r *UserRepo) CreateUserCommPrefs(ctx context.Context, userID int64, email,
 	return nil
 }
 
+// GetEmailByCognitoID returns the email for a user looked up by cognito_user_id.
+func (r *UserRepo) GetEmailByCognitoID(ctx context.Context, cognitoID string) (string, error) {
+	var email string
+	err := r.db.QueryRowContext(ctx,
+		"SELECT email FROM user WHERE cognito_user_id = ? LIMIT 1", cognitoID).Scan(&email)
+	if err != nil {
+		return "", fmt.Errorf("get email by cognito id %s: %w", cognitoID, err)
+	}
+	return email, nil
+}
+
 // CheckUserIsQsToolAndI2 checks if a user exists in QS and has I2 (IRIS) cross-reference.
 func (r *UserRepo) CheckUserIsQsToolAndI2(ctx context.Context, email string) (map[string]any, error) {
 	u, err := r.GetByEmail(ctx, email)
