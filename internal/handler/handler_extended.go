@@ -289,7 +289,10 @@ func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request)
 		Email string `json:"email"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
 		return
 	}
 
@@ -297,13 +300,27 @@ func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request)
 		result, err := h.qsUserRepo.CheckUserIsQsToolAndI2(r.Context(), req.Email)
 		if err != nil {
 			slog.Error("check qs/i2 failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": err.Error(),
+			})
 			return
 		}
-		writeJSON(w, http.StatusOK, result)
+		// Return legacy Lambda proxy result shape
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":          200,
+			"headers":         map[string]string{"Content-Type": "application/json"},
+			"body":            result,
+			"isBase64Encoded": false,
+		})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"isQsTool": false, "isI2": false, "exists": false})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":          200,
+		"headers":         map[string]string{"Content-Type": "application/json"},
+		"body":            map[string]any{"isQsTool": false, "isI2": false, "exists": false},
+		"isBase64Encoded": false,
+	})
 }
 
 // ──────────────────────────────────────────────
