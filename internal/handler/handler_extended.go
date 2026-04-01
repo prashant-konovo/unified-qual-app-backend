@@ -2136,3 +2136,48 @@ func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
 	// Legacy response: {data: undefined} → JSON.stringify → {}
 	writeJSON(w, http.StatusOK, map[string]any{})
 }
+
+// UpdateExternalSurveyIDMRA handles PUT /project/update-external-survey-id/{project_id} (MRA).
+// Contract-identical with legacy: updates external_survey_id + modified_on.
+// Request: {externalSurveyId}. Response: {} (empty object).
+func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "project_id")
+	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while updating external survey id",
+		})
+		return
+	}
+
+	if h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "database not configured",
+			"errorMessage": "An error occured while updating external survey id",
+		})
+		return
+	}
+
+	var body struct {
+		ExternalSurveyID string `json:"externalSurveyId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while updating external survey id",
+		})
+		return
+	}
+
+	if err := h.qsProjectRepo.UpdateExternalSurveyID(r.Context(), projectID, body.ExternalSurveyID); err != nil {
+		slog.Error("update external survey id failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while updating external survey id",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{})
+}

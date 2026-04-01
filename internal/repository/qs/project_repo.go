@@ -783,6 +783,17 @@ func (r *ProjectRepo) UpdateModeratorBufferMRA(ctx context.Context, projectID in
 	return nil
 }
 
+// UpdateExternalSurveyID updates external_survey_id and modified_on for a project.
+func (r *ProjectRepo) UpdateExternalSurveyID(ctx context.Context, projectID int64, surveyID string) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE project SET external_survey_id = ?, modified_on = ? WHERE id = ?",
+		surveyID, time.Now().UTC(), projectID)
+	if err != nil {
+		return fmt.Errorf("update external_survey_id: %w", err)
+	}
+	return nil
+}
+
 // Update modifies mutable QS project fields.
 func (r *ProjectRepo) Update(ctx context.Context, id int64, fields map[string]any) error {
 	if len(fields) == 0 {
