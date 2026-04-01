@@ -493,6 +493,264 @@ func (r *ProjectRepo) GetProjectDetailsMRA(ctx context.Context, projectID int64)
 	return record, nil
 }
 
+// GetProjectsMRA returns projects matching the legacy getProjects query.
+// Includes: project_status, time_slot counts, user (creator), external_client, topics.
+// Filters by externalClientsIds, creatorId, status, search, sort.
+func (r *ProjectRepo) GetProjectsMRA(ctx context.Context, creatorID, status int, sort, search string, externalClientIDs []string) ([]map[string]any, error) {
+	var q string
+	args := []any{}
+
+	baseSelect := `SELECT project.id, project.name, project_status.name AS project_status_name,
+	      salesforce_job_number, project.client_id, sample_size, created_on,
+	      project.created_by, interview_length, qual_moderator_id,
+	      project.modified_on, modified_by, project_status_id,
+	      IFNULL(c.scheduled, 0) AS scheduled,
+	      IFNULL(r.completed, 0) AS completed,
+	      user.first_name AS firstName, user.last_name AS lastName,
+	      project.project_external_client,
+	      topics.topic_name as topicName`
+
+	if search != "" {
+		baseSelect = `SELECT project.id, project.name, project_status.name AS project_status_name,
+		      external_survey_id, salesforce_job_number, project.client_id, sample_size, created_on,
+		      project.created_by, interview_length, qual_moderator_id,
+		      project.modified_on, modified_by, project_status_id,
+		      IFNULL(c.scheduled, 0) AS scheduled,
+		      IFNULL(r.completed, 0) AS completed,
+		      user.first_name AS firstName, user.last_name AS lastName,
+		      project.project_external_client,
+		      topics.topic_name as topicName`
+	}
+
+	baseJoins := ` FROM project
+	      LEFT JOIN topics ON project.id = topics.project_id AND topics.language_id = 1
+	      INNER JOIN project_status ON project.project_status_id = project_status.id
+	      LEFT JOIN (SELECT project_id AS time_slot_project_id, COUNT(*) AS scheduled
+	                 FROM time_slot WHERE time_slot.status_id = 2 AND time_slot.is_invalid = FALSE
+	                 AND time_slot.end_time >= UTC_TIMESTAMP()
+	                 GROUP BY project_id ORDER BY scheduled DESC) c ON c.time_slot_project_id = project.id
+	      LEFT JOIN (SELECT project_id AS time_slot_project_id, COUNT(*) AS completed
+	                 FROM time_slot WHERE time_slot.status_id = 9 AND time_slot.is_invalid = FALSE
+	                 AND time_slot.is_invalidated_interview = 0
+	                 GROUP BY project_id ORDER BY completed DESC) r ON r.time_slot_project_id = project.id
+	      INNER JOIN user ON project.created_by = user.id
+	      INNER JOIN external_client ON project.project_external_client = external_client.id`
+
+	// Build IN clause for externalClientIDs
+	placeholders := make([]string, len(externalClientIDs))
+	for i, id := range externalClientIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	inClause := "(" + strings.Join(placeholders, ",") + ")"
+
+	if search != "" {
+		q = baseSelect + baseJoins +
+			` WHERE (? = -1 OR project.created_by = ?) AND (? = -1 OR project.project_status_id = ?)` +
+			` AND ((project.name LIKE ? OR project.external_survey_id LIKE ? OR project.salesforce_job_number LIKE ?))` +
+			` AND external_client.external_client_account_id IN ` + inClause +
+			` AND project.client_id = 1 ORDER BY modified_on DESC`
+		searchPattern := "%" + search + "%"
+		args = append([]any{creatorID, creatorID, status, status, searchPattern, searchPattern, searchPattern}, args...)
+	} else {
+		q = baseSelect + baseJoins +
+			` WHERE project.client_id = 1` +
+			` AND external_client.external_client_account_id IN ` + inClause +
+			` AND (? = -1 OR project.created_by = ?)` +
+			` AND (? = -1 OR project.project_status_id = ?)` +
+			` ORDER BY ` + sort + ` DESC`
+		args = append(args, creatorID, creatorID, status, status)
+	}
+
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get projects mra: %w", err)
+	}
+	defer rows.Close()
+
+	var results []map[string]any
+	for rows.Next() {
+		var (
+			id, clientID, createdBy, qualModeratorID, modifiedBy, projectStatusID int64
+			sampleSize, interviewLength, scheduled, completed                     sql.NullInt64
+			projectExternalClient                                                 sql.NullInt64
+			name, projectStatusName                                               string
+			sfJobNumber, firstName, lastName, topicName                            sql.NullString
+			createdOn, modifiedOn                                                 sql.NullString
+		)
+
+		if search != "" {
+			var externalSurveyID sql.NullString
+			if err := rows.Scan(&id, &name, &projectStatusName, &externalSurveyID,
+				&sfJobNumber, &clientID, &sampleSize, &createdOn,
+				&createdBy, &interviewLength, &qualModeratorID,
+				&modifiedOn, &modifiedBy, &projectStatusID,
+				&scheduled, &completed, &firstName, &lastName,
+				&projectExternalClient, &topicName); err != nil {
+				return nil, fmt.Errorf("scan project row: %w", err)
+			}
+			results = append(results, map[string]any{
+				"id": id, "name": name, "project_status_name": projectStatusName,
+				"external_survey_id": externalSurveyID.String,
+				"salesforce_job_number": sfJobNumber.String, "client_id": clientID,
+				"sample_size": sampleSize.Int64, "created_on": createdOn.String,
+				"created_by": createdBy, "interview_length": interviewLength.Int64,
+				"qual_moderator_id": qualModeratorID, "modified_on": modifiedOn.String,
+				"modified_by": modifiedBy, "project_status_id": projectStatusID,
+				"scheduled": scheduled.Int64, "completed": completed.Int64,
+				"firstName": firstName.String, "lastName": lastName.String,
+				"project_external_client": projectExternalClient.Int64,
+				"topicName": topicName.String,
+			})
+		} else {
+			if err := rows.Scan(&id, &name, &projectStatusName,
+				&sfJobNumber, &clientID, &sampleSize, &createdOn,
+				&createdBy, &interviewLength, &qualModeratorID,
+				&modifiedOn, &modifiedBy, &projectStatusID,
+				&scheduled, &completed, &firstName, &lastName,
+				&projectExternalClient, &topicName); err != nil {
+				return nil, fmt.Errorf("scan project row: %w", err)
+			}
+			results = append(results, map[string]any{
+				"id": id, "name": name, "project_status_name": projectStatusName,
+				"salesforce_job_number": sfJobNumber.String, "client_id": clientID,
+				"sample_size": sampleSize.Int64, "created_on": createdOn.String,
+				"created_by": createdBy, "interview_length": interviewLength.Int64,
+				"qual_moderator_id": qualModeratorID, "modified_on": modifiedOn.String,
+				"modified_by": modifiedBy, "project_status_id": projectStatusID,
+				"scheduled": scheduled.Int64, "completed": completed.Int64,
+				"firstName": firstName.String, "lastName": lastName.String,
+				"project_external_client": projectExternalClient.Int64,
+				"topicName": topicName.String,
+			})
+		}
+	}
+	if results == nil {
+		results = []map[string]any{}
+	}
+	return results, rows.Err()
+}
+
+// GetProjectsForModsMRA returns projects matching the legacy getProjectsForMods query.
+// Simpler variant for when request body is empty.
+func (r *ProjectRepo) GetProjectsForModsMRA(ctx context.Context, clientID int64) ([]map[string]any, error) {
+	q := `SELECT project.id, project.name, project_status.name as project_status_name,
+	      external_survey_id, salesforce_job_number, client_id, sample_size, created_on,
+	      created_by, interview_length, qual_moderator_id, project.modified_on,
+	      modified_by, project_status_id,
+	      ifnull(c.scheduled, 0) as scheduled,
+	      ifnull(r.completed, 0) as completed,
+	      user.first_name as firstName, user.last_name as lastName
+	      FROM project
+	      INNER JOIN project_status ON project.project_status_id = project_status.id
+	      LEFT JOIN (SELECT project_id as time_slot_project_id, COUNT(*) as scheduled
+	                 FROM time_slot WHERE time_slot.status_id=2 AND time_slot.is_invalid=false
+	                 AND time_slot.end_time >= UTC_TIMESTAMP()
+	                 GROUP BY project_id ORDER BY scheduled DESC) c ON c.time_slot_project_id = project.id
+	      LEFT JOIN (SELECT project_id as time_slot_project_id, COUNT(*) as completed
+	                 FROM time_slot WHERE time_slot.status_id=9 AND time_slot.is_invalid=false
+	                 AND time_slot.is_invalidated_interview = 0
+	                 GROUP BY project_id ORDER BY completed DESC) r ON r.time_slot_project_id = project.id
+	      INNER JOIN user ON project.created_by = user.id
+	      WHERE client_id = ?`
+
+	rows, err := r.db.QueryContext(ctx, q, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get projects for mods mra: %w", err)
+	}
+	defer rows.Close()
+
+	var results []map[string]any
+	for rows.Next() {
+		var (
+			id, cID, createdBy, qualModeratorID, modifiedBy, projectStatusID int64
+			sampleSize, interviewLength, scheduled, completed                sql.NullInt64
+			name, projectStatusName                                          string
+			externalSurveyID, sfJobNumber, firstName, lastName               sql.NullString
+			createdOn, modifiedOn                                            sql.NullString
+		)
+		if err := rows.Scan(&id, &name, &projectStatusName, &externalSurveyID,
+			&sfJobNumber, &cID, &sampleSize, &createdOn,
+			&createdBy, &interviewLength, &qualModeratorID, &modifiedOn,
+			&modifiedBy, &projectStatusID, &scheduled, &completed,
+			&firstName, &lastName); err != nil {
+			return nil, fmt.Errorf("scan project for mods row: %w", err)
+		}
+		results = append(results, map[string]any{
+			"id": id, "name": name, "project_status_name": projectStatusName,
+			"external_survey_id": externalSurveyID.String,
+			"salesforce_job_number": sfJobNumber.String, "client_id": cID,
+			"sample_size": sampleSize.Int64, "created_on": createdOn.String,
+			"created_by": createdBy, "interview_length": interviewLength.Int64,
+			"qual_moderator_id": qualModeratorID, "modified_on": modifiedOn.String,
+			"modified_by": modifiedBy, "project_status_id": projectStatusID,
+			"scheduled": scheduled.Int64, "completed": completed.Int64,
+			"firstName": firstName.String, "lastName": lastName.String,
+		})
+	}
+	if results == nil {
+		results = []map[string]any{}
+	}
+	return results, rows.Err()
+}
+
+// SaveUserSelection saves user account/client selections matching legacy side effect.
+// Deletes existing selections and inserts new ones in a transaction.
+func (r *ProjectRepo) SaveUserSelection(ctx context.Context, userID int64, accountIDs, clientIDs []string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// Delete existing account selections
+	_, err = tx.ExecContext(ctx, "DELETE FROM user_account_selection WHERE userid = ?", userID)
+	if err != nil {
+		return fmt.Errorf("delete account selections: %w", err)
+	}
+
+	// Insert account selections
+	for _, accID := range accountIDs {
+		accID = strings.TrimSpace(accID)
+		if accID == "" || accID == "''" {
+			continue
+		}
+		accID = strings.Trim(accID, "'")
+		_, err = tx.ExecContext(ctx, "INSERT INTO user_account_selection (account_selection_account_id, userid) VALUES (?, ?)", accID, userID)
+		if err != nil {
+			return fmt.Errorf("insert account selection: %w", err)
+		}
+	}
+
+	// Delete existing client selections
+	_, err = tx.ExecContext(ctx, "DELETE FROM user_client_selection WHERE userid = ?", userID)
+	if err != nil {
+		return fmt.Errorf("delete client selections: %w", err)
+	}
+
+	// Insert client selections
+	for _, clID := range clientIDs {
+		clID = strings.TrimSpace(clID)
+		if clID == "" || clID == "''" {
+			continue
+		}
+		clID = strings.Trim(clID, "'")
+		_, err = tx.ExecContext(ctx, "INSERT INTO user_client_selection (client_selection_account_id, userid) VALUES (?, ?)", clID, userID)
+		if err != nil {
+			return fmt.Errorf("insert client selection: %w", err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
 // Update modifies mutable QS project fields.
 func (r *ProjectRepo) Update(ctx context.Context, id int64, fields map[string]any) error {
 	if len(fields) == 0 {

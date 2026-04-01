@@ -1954,3 +1954,116 @@ func (h *Handler) GetProjectMRA(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, record)
 }
+
+// ListProjectsMRA handles POST /project/get-projects/client/{client_id} (MRA).
+// Contract-identical with legacy QS Tool getProjects factory.
+// Two code paths:
+// 1. Body has keys (externalClientsIds, projectAccountId, userId) → filtered query + saveUserSelection
+// 2. Empty body → simpler getProjectsForMods query
+// Response: {clientId: <id>, data: records}
+func (h *Handler) ListProjectsMRA(w http.ResponseWriter, r *http.Request) {
+	clientIDStr := chi.URLParam(r, "client_id")
+
+	if h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
+		return
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		body = map[string]any{}
+	}
+
+	q := r.URL.Query()
+	creatorIDStr := q.Get("creatorId")
+	statusStr := q.Get("status")
+	sortBy := q.Get("sortBy")
+	search := q.Get("q")
+
+	creatorID := -1
+	if creatorIDStr != "" {
+		if v, err := strconv.Atoi(creatorIDStr); err == nil {
+			creatorID = v
+		}
+	}
+	status := -1
+	if statusStr != "" {
+		if v, err := strconv.Atoi(statusStr); err == nil {
+			status = v
+		}
+	}
+	if sortBy == "" {
+		sortBy = "modifiedDate"
+	}
+	sort := "project.modified_on"
+	if sortBy != "modifiedDate" {
+		sort = "project.created_on"
+	}
+
+	var records []map[string]any
+	var err error
+
+	if len(body) > 0 {
+		// Path 1: filtered query with externalClientsIds
+		externalClientsIDsRaw, _ := body["externalClientsIds"].(string)
+		cleaned := strings.Trim(externalClientsIDsRaw, "()")
+		var externalIDs []string
+		for _, part := range strings.Split(cleaned, ",") {
+			part = strings.TrimSpace(part)
+			part = strings.Trim(part, "'")
+			if part != "" {
+				externalIDs = append(externalIDs, part)
+			}
+		}
+		if len(externalIDs) == 0 {
+			externalIDs = []string{""}
+		}
+
+		records, err = h.qsProjectRepo.GetProjectsMRA(r.Context(), creatorID, status, sort, search, externalIDs)
+		if err != nil {
+			slog.Error("get projects mra failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+			return
+		}
+
+		// Side effect: save user selections (legacy wraps in try/catch, failures logged only)
+		if userIDRaw, ok := body["userId"]; ok {
+			projectAccountID, _ := body["projectAccountId"].(string)
+			var userID int64
+			switch v := userIDRaw.(type) {
+			case float64:
+				userID = int64(v)
+			case string:
+				userID, _ = strconv.ParseInt(v, 10, 64)
+			}
+			if userID > 0 {
+				accCleaned := strings.Trim(projectAccountID, "()")
+				var accountIDs []string
+				for _, part := range strings.Split(accCleaned, ",") {
+					part = strings.TrimSpace(part)
+					if part != "" {
+						accountIDs = append(accountIDs, part)
+					}
+				}
+				if saveErr := h.qsProjectRepo.SaveUserSelection(r.Context(), userID, accountIDs, externalIDs); saveErr != nil {
+					slog.Error("save user selection failed", "error", saveErr)
+				}
+			}
+		}
+	} else {
+		// Path 2: empty body → getProjectsForMods
+		clientID, _ := strconv.ParseInt(clientIDStr, 10, 64)
+		records, err = h.qsProjectRepo.GetProjectsForModsMRA(r.Context(), clientID)
+		if err != nil {
+			slog.Error("get projects for mods mra failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+			return
+		}
+	}
+
+	output := map[string]any{
+		"clientId": clientIDStr,
+		"data":     records,
+	}
+	writeJSON(w, http.StatusOK, output)
+}

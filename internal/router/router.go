@@ -70,6 +70,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Post("/project", h.CreateProject)
 				r.Post("/project/create-project", h.CreateProjectMRA)
 				r.Get("/project/get-project-details/{id}", h.GetProjectMRA)
+				r.Post("/project/get-projects/client/{client_id}", h.ListProjectsMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)
