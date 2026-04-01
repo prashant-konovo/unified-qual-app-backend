@@ -669,3 +669,53 @@ func (r *UserRepo) GetAllUsersAdmin(ctx context.Context, cognitoUserID string) (
 	}
 	return records, rows.Err()
 }
+
+// GetAllModeratorsListMRA returns all moderators for a client with interview count,
+// matching legacy getAllModeratorsList SQL exactly.
+func (r *UserRepo) GetAllModeratorsListMRA(ctx context.Context, clientID int64) ([]map[string]any, error) {
+	q := `SELECT DISTINCT
+		user.first_name AS firstName,
+		user.last_name AS lastName,
+		user.id AS id,
+		COUNT(DISTINCT moderator_time_slot.id) AS interviewCount
+	FROM user
+	INNER JOIN user_client ON user.id = user_client.user_id
+	INNER JOIN user_role ON user.id = user_role.user_id
+	LEFT OUTER JOIN (
+		SELECT moderator_time_slot.*
+		FROM moderator_time_slot
+		INNER JOIN time_slot ON time_slot.id = moderator_time_slot.time_slot_id
+			AND time_slot.status_id = 2
+			AND time_slot.is_invalid = FALSE
+	) moderator_time_slot ON user.id = moderator_time_slot.moderator_id
+	WHERE user_client.client_id = ?
+		AND user_role.role_id = 1
+		AND user.deleted = 0
+	GROUP BY user.id
+	ORDER BY firstName, lastName ASC`
+
+	rows, err := r.db.QueryContext(ctx, q, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get all moderators list: %w", err)
+	}
+	defer rows.Close()
+
+	var records []map[string]any
+	for rows.Next() {
+		var firstName, lastName string
+		var id, interviewCount int64
+		if err := rows.Scan(&firstName, &lastName, &id, &interviewCount); err != nil {
+			return nil, fmt.Errorf("scan moderator row: %w", err)
+		}
+		records = append(records, map[string]any{
+			"firstName":      firstName,
+			"lastName":       lastName,
+			"id":             id,
+			"interviewCount": interviewCount,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
+}

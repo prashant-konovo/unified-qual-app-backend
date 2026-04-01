@@ -3570,3 +3570,31 @@ func (h *Handler) GetConfLinkByTimeSlotMRA(w http.ResponseWriter, r *http.Reques
 
 	writeJSON(w, http.StatusOK, result)
 }
+
+// GetAllModeratorsMRA handles GET /user/get_all_moderators/{client_id} (MRA).
+// Contract-identical with legacy: returns moderators for a client with interview count.
+// Response: [{id, firstName, lastName, interviewCount}]
+// No side effects — pure read API.
+func (h *Handler) GetAllModeratorsMRA(w http.ResponseWriter, r *http.Request) {
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "user repository not available"})
+		return
+	}
+
+	clientIDStr := chi.URLParam(r, "client_id")
+	clientID, err := strconv.ParseInt(clientIDStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "invalid client_id"})
+		return
+	}
+
+	records, err := h.qsUserRepo.GetAllModeratorsListMRA(r.Context(), clientID)
+	if err != nil {
+		slog.Error("get all moderators failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	// Legacy returns result.records directly as array
+	writeJSON(w, http.StatusOK, records)
+}

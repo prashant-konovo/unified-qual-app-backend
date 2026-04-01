@@ -89,6 +89,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Put("/update-conference-link/project/{project_id}/participant-group/{participant_group_id}", h.UpdateConferenceLinkMRA)
 				r.Get("/get-conference-link/{participant_group_id}", h.GetConferenceLinkMRA)
 				r.Get("/get-conf-link-time-slot-id/{timeslot_id}", h.GetConfLinkByTimeSlotMRA)
+				r.Get("/user/get_all_moderators/{client_id}", h.GetAllModeratorsMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)
