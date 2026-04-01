@@ -74,6 +74,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Put("/project/update-project-details/{project_id}", h.UpdateProjectMRA)
 				r.Put("/project/update-external-survey-id/{project_id}", h.UpdateExternalSurveyIDMRA)
 				r.Post("/project/{project_id}/moderators_reset", h.ResetProjectModeratorsMRA)
+				r.Get("/project/{project_id}/get_email_template", h.GetEmailTemplateMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)

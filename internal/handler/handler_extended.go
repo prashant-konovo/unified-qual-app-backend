@@ -2277,3 +2277,57 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 		})
 	}
 }
+
+// GetEmailTemplateMRA handles GET /project/{project_id}/get_email_template (MRA).
+// Contract-identical with legacy: routes by reschedule/addLink/editLink/invalidateReschedule
+// query params to communication_type_id, queries by language_code.
+// Response: {body_content: "..."} (records[0]).
+func (h *Handler) GetEmailTemplateMRA(w http.ResponseWriter, r *http.Request) {
+	if h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "database not configured",
+			"errorMessage": "An error occured while getting the email template",
+		})
+		return
+	}
+
+	q := r.URL.Query()
+	reschedule := q.Get("reschedule")
+	invalidateReschedule := q.Get("invalidateReschedule")
+	addLink := q.Get("addLink")
+	editLink := q.Get("editLink")
+	responderLanguage := q.Get("responderLanguage")
+
+	var typeID int
+	if reschedule == "true" {
+		typeID = 2
+	} else if invalidateReschedule == "true" {
+		typeID = 17
+	} else if reschedule == "false" && addLink == "false" && editLink == "false" {
+		typeID = 4 // cancel
+	} else if addLink == "true" {
+		typeID = 1 // schedule
+	} else if editLink == "true" {
+		typeID = 3 // update
+	}
+
+	if typeID == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{})
+		return
+	}
+
+	record, err := h.qsProjectRepo.GetEmailTemplateMRA(r.Context(), typeID, responderLanguage)
+	if err != nil {
+		slog.Error("get email template failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while getting the email template",
+		})
+		return
+	}
+	if record == nil {
+		record = map[string]any{}
+	}
+
+	writeJSON(w, http.StatusOK, record)
+}

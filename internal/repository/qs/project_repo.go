@@ -980,6 +980,24 @@ func (r *ProjectRepo) GetModeratorsList(ctx context.Context, projectID int64) ([
 	return results, rows.Err()
 }
 
+// GetEmailTemplateMRA returns body_content from communication_template by type_id and language.
+func (r *ProjectRepo) GetEmailTemplateMRA(ctx context.Context, typeID int, language string) (map[string]any, error) {
+	if language == "" {
+		language = "en_us"
+	}
+	var bodyContent sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		"SELECT body_content FROM communication_template WHERE communication_type_id = ? AND language_code = ?",
+		typeID, language).Scan(&bodyContent)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get email template: %w", err)
+	}
+	return map[string]any{"body_content": bodyContent.String}, nil
+}
+
 // Update modifies mutable QS project fields.
 func (r *ProjectRepo) Update(ctx context.Context, id int64, fields map[string]any) error {
 	if len(fields) == 0 {
