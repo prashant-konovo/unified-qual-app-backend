@@ -323,6 +323,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 			r.Post("/reset-user-password/check-qsTool-i2", h.CheckUserIsQsToolAndI2)
 			r.Patch("/reset-user-password/patch-user/{user_id}", h.PatchUser)
 			r.Patch("/reset-user-password/patch-user-from-profile/{user_id}", h.PatchUserFromProfile)
+			r.Put("/reset-user-password/check-if-password-matches/{user_id}", h.CheckPasswordMatchesMRA)
 
 			// ── Unsubscribe / Comm Preferences (admin + manager) ──
 			r.Group(func(r chi.Router) {
