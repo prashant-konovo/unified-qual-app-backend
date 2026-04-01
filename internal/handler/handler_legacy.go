@@ -1628,35 +1628,124 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 }
 
 // GetSubscriptionProjectInquiry returns a specific inquiry for a subscription/project.
+// Contract-identical with legacy InCrowdAPI: GET /v1/subscription/:subscriptionId/project/:projectId/inquiry
+// Response: SavedProposal {project, crowds, proposal, costs} + isHardStop
 func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.Request) {
 	subStr := chi.URLParam(r, "subId")
 	pidStr := chi.URLParam(r, "pid")
 	subID, _ := strconv.ParseInt(subStr, 10, 64)
 	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
 
-	if h.irisSurveyRepo != nil {
-		pi, err := h.irisSurveyRepo.GetProjectInquiry(r.Context(), subID, projectID)
-		if err != nil {
-			slog.Error("get inquiry failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
-			return
-		}
-		if pi == nil {
-			writeJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
-			return
-		}
-		success(w, map[string]any{
-			"id": pi.ID, "description": pi.Description,
-			"subscriptionId": pi.SubscriptionID, "projectId": pi.ProjectID,
-			"inquiryTypeId": pi.InquiryTypeID, "interviewLength": pi.InterviewLength,
-			"requiredCompletionDate": ntVal(pi.RequiredCompletionDate),
-			"underReview": pi.UnderReview,
-			"transcriptsRequested": pi.TranscriptsRequested,
-			"requiresStimuli": pi.RequiresStimuli,
-		})
+	if h.irisSurveyRepo == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
 		return
 	}
-	writeJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
+
+	// 1. Get inquiry
+	pi, err := h.irisSurveyRepo.GetProjectInquiry(r.Context(), subID, projectID)
+	if err != nil {
+		slog.Error("get inquiry failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		return
+	}
+	if pi == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
+		return
+	}
+
+	// 2. Get project
+	project, err := h.irisSurveyRepo.GetProjectForInquiry(r.Context(), projectID)
+	if err != nil || project == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "project not found"})
+		return
+	}
+
+	// 3. Get inquiry crowds (standard + custom + crowd objects)
+	standardCrowds, customCrowds, crowdObjects, err := h.irisSurveyRepo.GetProjectInquiryCrowds(r.Context(), pi.ID)
+	if err != nil {
+		slog.Error("get inquiry crowds failed", "error", err)
+		standardCrowds = []map[string]any{}
+		customCrowds = []map[string]any{}
+		crowdObjects = []map[string]any{}
+	}
+
+	// 4. Build proposal
+	var completionDate any
+	if pi.RequiredCompletionDate.Valid {
+		completionDate = pi.RequiredCompletionDate.Time.Format(time.RFC3339)
+	}
+	var sfProjectID any
+	if pi.SalesforceProjectID != "" {
+		sfProjectID = pi.SalesforceProjectID
+	}
+
+	proposal := map[string]any{
+		"interviewLength":      pi.InterviewLength,
+		"name":                 project["name"],
+		"salesforceProjectId":  sfProjectID,
+		"completionDate":       completionDate,
+		"notes":                nsVal(pi.Notes),
+		"crowds":               standardCrowds,
+		"customCrowds":         customCrowds,
+		"projectId":            projectID,
+		"underReview":          pi.UnderReview,
+		"transcriptsRequested": pi.TranscriptsRequested,
+		"requiresStimuli":      pi.RequiresStimuli,
+		"isDynamicStimulus":    pi.IsDynamicStimulus,
+	}
+
+	// 5. Get costs
+	var projectStatusID int64
+	if v, ok := project["projectStatusId"]; ok {
+		if id, ok2 := v.(int64); ok2 {
+			projectStatusID = id
+		}
+	}
+
+	var fees []map[string]any
+	if projectStatusID == 1 {
+		fees = []map[string]any{}
+	} else {
+		fees, err = h.irisSurveyRepo.GetProjectFees(r.Context(), projectID)
+		if err != nil {
+			fees = []map[string]any{}
+		}
+	}
+
+	grossTotal := 0.0
+	netTotal := 0.0
+	for _, f := range fees {
+		if g, ok := f["grossSubtotal"].(float64); ok {
+			grossTotal += g
+		}
+		if n, ok := f["netSubtotal"].(float64); ok {
+			netTotal += n
+		}
+	}
+	costs := map[string]any{
+		"grossTotal": grossTotal,
+		"netTotal":   netTotal,
+		"fees":       fees,
+	}
+
+	// 6. Check isHardStop
+	isHardStop := false
+	for _, cs := range standardCrowds {
+		if da, ok := cs["difficultyAssessment"].(map[string]any); ok && da != nil {
+			if hs, ok := da["isHardStop"].(bool); ok && hs {
+				isHardStop = true
+				break
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"project":    project,
+		"crowds":     crowdObjects,
+		"proposal":   proposal,
+		"costs":      costs,
+		"isHardStop": isHardStop,
+	})
 }
 
 // GetSubscriptionProjectSurveys returns projects and their surveys for a subscription.

@@ -190,6 +190,7 @@ type ICProjectInquiry struct {
 	TranscriptsRequested   bool           `json:"transcriptsRequested"`
 	RequiresStimuli        bool           `json:"requiresStimuli"`
 	IsDynamicStimulus      bool           `json:"isDynamicStimulus"`
+	SalesforceProjectID    string         `json:"salesforceProjectId"`
 }
 
 // SurveyRepo handles IRIS survey/crowd/market/observer queries.
@@ -1485,13 +1486,15 @@ func (r *SurveyRepo) GetInquiryTypeName(ctx context.Context, typeID int64) strin
 func (r *SurveyRepo) GetProjectInquiry(ctx context.Context, subscriptionID, projectID int64) (*ICProjectInquiry, error) {
 	q := `SELECT id, description, notes, subscription_id, project_id, inquiry_type_id,
 	       interview_length, required_completion_date, created_on, created_by,
-	       under_review, transcripts_requested, requires_stimuli
+	       under_review, transcripts_requested, requires_stimuli,
+	       COALESCE(is_dynamic_stimulus, 0), COALESCE(salesforce_project_id, '')
 	      FROM project_inquiry WHERE subscription_id = ? AND project_id = ? LIMIT 1`
 	var pi ICProjectInquiry
 	err := r.ro().QueryRowContext(ctx, q, subscriptionID, projectID).Scan(
 		&pi.ID, &pi.Description, &pi.Notes, &pi.SubscriptionID, &pi.ProjectID,
 		&pi.InquiryTypeID, &pi.InterviewLength, &pi.RequiredCompletionDate, &pi.CreatedOn,
-		&pi.CreatedBy, &pi.UnderReview, &pi.TranscriptsRequested, &pi.RequiresStimuli)
+		&pi.CreatedBy, &pi.UnderReview, &pi.TranscriptsRequested, &pi.RequiresStimuli,
+		&pi.IsDynamicStimulus, &pi.SalesforceProjectID)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -2441,5 +2444,290 @@ func nullFloat(v sql.NullFloat64) any {
 		return v.Float64
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Inquiry-specific repo methods (SavedProposal contract)
+// ---------------------------------------------------------------------------
+
+// GetProjectForInquiry returns project details for the SavedProposal.project field.
+func (r *SurveyRepo) GetProjectForInquiry(ctx context.Context, projectID int64) (map[string]any, error) {
+	q := `SELECT id, name, COALESCE(description,''), subscription_id,
+	       created_on, created_by, modified_on, COALESCE(budget,0),
+	       COALESCE(is_private,0), COALESCE(qual_moderator_id,0),
+	       project_status_id, COALESCE(salesforce_project_id,''),
+	       COALESCE(project_type_id,0), completed_on, COALESCE(is_archived,0)
+	      FROM project WHERE id = ?`
+	var (
+		id, subID, createdBy, qualModID, statusID, typeID int64
+		name, description, sfID                           string
+		budget                                            float64
+		isPrivate, isArchived                             bool
+		createdOn, modifiedOn                             time.Time
+		completedOn                                       sql.NullTime
+	)
+	err := r.ro().QueryRowContext(ctx, q, projectID).Scan(
+		&id, &name, &description, &subID,
+		&createdOn, &createdBy, &modifiedOn, &budget,
+		&isPrivate, &qualModID, &statusID, &sfID,
+		&typeID, &completedOn, &isArchived)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get project for inquiry: %w", err)
+	}
+
+	// Fees
+	fees, _ := r.GetProjectFees(ctx, projectID)
+	if fees == nil {
+		fees = []map[string]any{}
+	}
+
+	// Availability count
+	var availCount int64
+	_ = r.ro().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM moderator_availability ma
+		 JOIN user_project up ON up.user_id = ma.moderator_id
+		 WHERE up.project_id = ?`, projectID).Scan(&availCount)
+
+	var completedOnVal any
+	if completedOn.Valid {
+		completedOnVal = completedOn.Time.Format(time.RFC3339)
+	}
+
+	return map[string]any{
+		"id":                  id,
+		"name":                name,
+		"description":         description,
+		"subscriptionId":      subID,
+		"createdOn":           createdOn.Format(time.RFC3339),
+		"createdBy":           createdBy,
+		"modifiedOn":          modifiedOn.Format(time.RFC3339),
+		"budget":              budget,
+		"isPrivate":           isPrivate,
+		"qualModeratorId":     qualModID,
+		"projectStatusId":     statusID,
+		"salesforceProjectId": sfID,
+		"projectTypeId":       typeID,
+		"completedOn":         completedOnVal,
+		"isArchived":          isArchived,
+		"fees":                fees,
+		"availabilityCount":   availCount,
+	}, nil
+}
+
+// GetProjectFees returns saved project fees in the legacy cost shape.
+func (r *SurveyRepo) GetProjectFees(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	q := `SELECT pf.gross_subtotal, pf.net_subtotal, pf.discount,
+	       pf.applied_fee_per_unit, pf.units_charged,
+	       COALESCE(p.is_honorarium,0), COALESCE(p.name,''), pf.product_id
+	      FROM project_fee pf
+	      JOIN product p ON p.id = pf.product_id
+	      WHERE pf.project_id = ? AND pf.is_removed = 0`
+	rows, err := r.ro().QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get project fees: %w", err)
+	}
+	defer rows.Close()
+
+	var fees []map[string]any
+	for rows.Next() {
+		var gross, net, discount, perUnit float64
+		var count int64
+		var isHon bool
+		var prodName string
+		var prodID int64
+		if err := rows.Scan(&gross, &net, &discount, &perUnit, &count,
+			&isHon, &prodName, &prodID); err != nil {
+			return nil, fmt.Errorf("scan project fee: %w", err)
+		}
+		fees = append(fees, map[string]any{
+			"grossSubtotal": gross,
+			"netSubtotal":   net,
+			"discountRate":  discount,
+			"pricePerUnit":  perUnit,
+			"count":         count,
+			"isHonorarium":  isHon,
+			"name":          prodName,
+			"productId":     prodID,
+		})
+	}
+	if fees == nil {
+		fees = []map[string]any{}
+	}
+	return fees, nil
+}
+
+// GetProjectInquiryCrowds returns standard crowd specs, custom crowd specs,
+// and crowd objects for the given inquiry.
+func (r *SurveyRepo) GetProjectInquiryCrowds(ctx context.Context, inquiryID int64) (
+	standardCrowds []map[string]any, customCrowds []map[string]any,
+	crowdObjects []map[string]any, err error) {
+
+	q := `SELECT pic.id, pic.crowd_id, pic.number_requested, COALESCE(pic.notes,''),
+	       COALESCE(pic.difficulty_level_id,0),
+	       COALESCE(pic.difficulty_assessment_id,0),
+	       c.name, c.type_id, c.market_id, m.name,
+	       COALESCE(c.subscription_id,0), COALESCE(c.deleted,0)
+	      FROM project_inquiry_crowd pic
+	      JOIN crowd c ON c.id = pic.crowd_id
+	      JOIN market m ON m.id = c.market_id
+	      WHERE pic.project_inquiry_id = ?`
+	rows, err := r.ro().QueryContext(ctx, q, inquiryID)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("get inquiry crowds: %w", err)
+	}
+	defer rows.Close()
+
+	standardCrowds = []map[string]any{}
+	customCrowds = []map[string]any{}
+	crowdObjects = []map[string]any{}
+
+	for rows.Next() {
+		var picID, crowdID, numReq, diffLevelID, diffAssessID int64
+		var notes, crowdName, marketName string
+		var typeID, marketID, subID int64
+		var deleted bool
+		if err := rows.Scan(&picID, &crowdID, &numReq, &notes,
+			&diffLevelID, &diffAssessID,
+			&crowdName, &typeID, &marketID, &marketName,
+			&subID, &deleted); err != nil {
+			return nil, nil, nil, fmt.Errorf("scan inquiry crowd: %w", err)
+		}
+
+		isCustom := typeID == 3 || typeID == 5
+
+		// Difficulty level
+		var diffLevel any
+		if diffLevelID > 0 {
+			var dlName string
+			var dlPercent float64
+			e := r.ro().QueryRowContext(ctx,
+				`SELECT name, percent FROM difficulty_level WHERE id = ?`, diffLevelID).
+				Scan(&dlName, &dlPercent)
+			if e == nil {
+				diffLevel = map[string]any{"id": diffLevelID, "name": dlName, "percent": dlPercent}
+			}
+		}
+
+		// Difficulty assessment
+		var diffAssessment any
+		if diffAssessID > 0 {
+			var daIsHardStop bool
+			var daCrowdID int64
+			e := r.ro().QueryRowContext(ctx,
+				`SELECT is_hard_stop, crowd_id FROM difficulty_assessment WHERE id = ?`, diffAssessID).
+				Scan(&daIsHardStop, &daCrowdID)
+			if e == nil {
+				diffAssessment = map[string]any{
+					"id":         diffAssessID,
+					"isHardStop": daIsHardStop,
+					"crowdId":    daCrowdID,
+				}
+			}
+		}
+
+		// Crowd size
+		crowdSize := r.GetCrowdSize(ctx, crowdID)
+
+		// Attributes (for standard crowds)
+		var attrs []map[string]any
+		if !isCustom {
+			attrs, _ = r.getCrowdAttributesForInquiry(ctx, crowdID, marketID)
+		}
+		if attrs == nil {
+			attrs = []map[string]any{}
+		}
+
+		spec := map[string]any{
+			"name":                 crowdName,
+			"numberRequested":      numReq,
+			"notes":                notes,
+			"attributes":           attrs,
+			"marketId":             marketID,
+			"marketName":           marketName,
+			"difficultyLevel":      diffLevel,
+			"difficultyAssessment": diffAssessment,
+			"crowdId":              crowdID,
+			"isCustom":             isCustom,
+			"validRespondersCount": crowdSize,
+		}
+
+		if isCustom {
+			customCrowds = append(customCrowds, spec)
+		} else {
+			standardCrowds = append(standardCrowds, spec)
+		}
+
+		// Crowd object (flatWithExtendedAttributeJson shape, simplified)
+		crowdObjects = append(crowdObjects, map[string]any{
+			"id":             crowdID,
+			"name":           crowdName,
+			"marketId":       marketID,
+			"marketName":     marketName,
+			"typeId":         typeID,
+			"subscriptionId": subID,
+			"deleted":        deleted,
+			"size":           crowdSize,
+		})
+	}
+	return standardCrowds, customCrowds, crowdObjects, nil
+}
+
+// getCrowdAttributesForInquiry returns crowd attributes with choice IDs and qualRequired.
+func (r *SurveyRepo) getCrowdAttributesForInquiry(ctx context.Context, crowdID, marketID int64) ([]map[string]any, error) {
+	q := `SELECT ca.id, ca.attribute_id, ca.numeric_min, ca.numeric_max,
+	       COALESCE(ma.qual_required,0)
+	      FROM crowd_attribute ca
+	      LEFT JOIN market_attribute ma ON ma.attribute_id = ca.attribute_id AND ma.market_id = ?
+	      WHERE ca.crowd_id = ?`
+	rows, err := r.ro().QueryContext(ctx, q, marketID, crowdID)
+	if err != nil {
+		return nil, fmt.Errorf("get crowd attrs for inquiry: %w", err)
+	}
+	defer rows.Close()
+
+	var attrs []map[string]any
+	for rows.Next() {
+		var caID, attrID int64
+		var numMin, numMax sql.NullFloat64
+		var qualReq bool
+		if err := rows.Scan(&caID, &attrID, &numMin, &numMax, &qualReq); err != nil {
+			return nil, fmt.Errorf("scan crowd attr: %w", err)
+		}
+		choiceIDs, _ := r.GetCrowdAttributeChoiceIDs(ctx, caID)
+		if choiceIDs == nil {
+			choiceIDs = []int64{}
+		}
+		attrs = append(attrs, map[string]any{
+			"attributeId":  attrID,
+			"numericMin":   nullFloat(numMin),
+			"numericMax":   nullFloat(numMax),
+			"choiceIds":    choiceIDs,
+			"qualRequired": qualReq,
+		})
+	}
+	return attrs, nil
+}
+
+// GetCrowdAttributeChoiceIDs returns choice IDs for a crowd attribute.
+func (r *SurveyRepo) GetCrowdAttributeChoiceIDs(ctx context.Context, crowdAttributeID int64) ([]int64, error) {
+	q := `SELECT attribute_choice_id FROM crowd_attribute_attribute_choice WHERE crowd_attribute_id = ?`
+	rows, err := r.ro().QueryContext(ctx, q, crowdAttributeID)
+	if err != nil {
+		return nil, fmt.Errorf("get crowd attr choices: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan choice id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
 }
 
