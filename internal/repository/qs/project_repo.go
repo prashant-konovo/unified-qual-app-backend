@@ -1219,3 +1219,55 @@ func (r *ProjectRepo) UpdateSampleSizeProjectStatusMRA(ctx context.Context, proj
 	}
 	return nil
 }
+
+// ModeratorTimeRange represents a row from moderator_time_range.
+type ModeratorTimeRange struct {
+	ModeratorID int64
+	StartTime   string
+	EndTime     string
+	Timezone    string
+}
+
+// GetModeratorsTimeRangePerProject returns moderator_time_range rows for a project.
+func (r *ProjectRepo) GetModeratorsTimeRangePerProject(ctx context.Context, projectID int64) ([]ModeratorTimeRange, error) {
+	q := `SELECT moderator_id, start_time, end_time, timezone FROM moderator_time_range WHERE project_id = ?`
+	rows, err := r.db.QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get moderators time range: %w", err)
+	}
+	defer rows.Close()
+
+	var results []ModeratorTimeRange
+	for rows.Next() {
+		var mtr ModeratorTimeRange
+		if err := rows.Scan(&mtr.ModeratorID, &mtr.StartTime, &mtr.EndTime, &mtr.Timezone); err != nil {
+			return nil, fmt.Errorf("scan moderator time range: %w", err)
+		}
+		results = append(results, mtr)
+	}
+	return results, rows.Err()
+}
+
+// GetAllModeratorsAvailabilityPerClient returns moderator availability for all moderators
+// assigned to a project, filtered by client.
+func (r *ProjectRepo) GetAllModeratorsAvailabilityPerClient(ctx context.Context, clientID int64, projectID int64) ([]ModeratorAvailability, error) {
+	q := `SELECT moderator_availability.id, moderator_id, client_id, start_time, end_time
+	      FROM moderator_availability
+	      INNER JOIN projects_users ON moderator_availability.moderator_id = projects_users.user_id
+	      WHERE client_id = ? AND project_id = ?`
+	rows, err := r.db.QueryContext(ctx, q, clientID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get moderators availability: %w", err)
+	}
+	defer rows.Close()
+
+	var results []ModeratorAvailability
+	for rows.Next() {
+		var ma ModeratorAvailability
+		if err := rows.Scan(&ma.ID, &ma.ModeratorID, &ma.ClientID, &ma.StartTime, &ma.EndTime); err != nil {
+			return nil, fmt.Errorf("scan moderator availability: %w", err)
+		}
+		results = append(results, ma)
+	}
+	return results, rows.Err()
+}

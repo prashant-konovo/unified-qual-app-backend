@@ -77,6 +77,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Get("/project/{project_id}/get_email_template", h.GetEmailTemplateMRA)
 				r.Post("/project/{project_id}/handle-export", h.HandleProjectExportMRA)
 				r.Put("/project/{project_id}/update-sample-size", h.UpdateSampleSizeMRA)
+				r.Get("/project/{project_id}/get-unavailable-moderators", h.GetUnavailableModeratorsMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)

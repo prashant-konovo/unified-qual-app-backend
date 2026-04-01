@@ -14,6 +14,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
+	qs "github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/go-chi/chi/v5"
 	"github.com/xuri/excelize/v2"
 )
@@ -2559,4 +2560,164 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Brand", "mra")
 	w.WriteHeader(http.StatusOK)
+}
+
+// GetUnavailableModeratorsMRA handles GET /project/{project_id}/get-unavailable-moderators (MRA).
+// Contract-identical with legacy: checks moderator availability against project settings,
+// returns {displayError, displayWarning} flags.
+func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Request) {
+	pidStr := chi.URLParam(r, "project_id")
+	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while getting available and unavailable moderators assigned to the project",
+		})
+		return
+	}
+
+	if h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "database not configured",
+			"errorMessage": "An error occured while getting available and unavailable moderators assigned to the project",
+		})
+		return
+	}
+
+	// 1. Get project details
+	project, err := h.qsProjectRepo.GetProjectDetailsMRA(r.Context(), projectID)
+	if err != nil || project == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"errorMessage": "An error occured while getting project details",
+		})
+		return
+	}
+
+	clientID, _ := project["clientId"].(int64)
+	interviewLength, _ := project["interviewLength"].(int64)
+	postScreeninBuffer, _ := project["postScreeninBuffer"].(string)
+
+	bufferHours := 0.0
+	if postScreeninBuffer != "" {
+		fmt.Sscanf(postScreeninBuffer, "%f", &bufferHours)
+	}
+
+	// 2. Get moderator time ranges per project
+	timeRanges, err := h.qsProjectRepo.GetModeratorsTimeRangePerProject(r.Context(), projectID)
+	if err != nil {
+		slog.Error("get moderator time ranges failed", "error", err)
+	}
+	timeRangeMap := map[int64]qs.ModeratorTimeRange{}
+	for _, tr := range timeRanges {
+		timeRangeMap[tr.ModeratorID] = tr
+	}
+
+	// 3. Get project moderator IDs
+	modIDs, err := h.qsProjectRepo.GetProjectModeratorIDs(r.Context(), projectID)
+	if err != nil || len(modIDs) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"errorMessage": "No moderators assigned to the project ",
+		})
+		return
+	}
+
+	// 4. Get all moderator availability per client
+	availabilities, err := h.qsProjectRepo.GetAllModeratorsAvailabilityPerClient(r.Context(), clientID, projectID)
+	if err != nil {
+		slog.Error("get moderator availability failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while getting available and unavailable moderators assigned to the project",
+		})
+		return
+	}
+
+	output := map[string]any{
+		"displayError":   false,
+		"displayWarning": false,
+	}
+
+	if len(availabilities) == 0 {
+		output["displayError"] = true
+		writeJSON(w, http.StatusOK, output)
+		return
+	}
+
+	// 5. Compute available/unavailable sets
+	availableMods := map[int64]bool{}
+	unavailableMods := map[int64]bool{}
+
+	now := time.Now().UTC()
+	bufferDuration := time.Duration(bufferHours * float64(time.Hour))
+
+	for _, av := range availabilities {
+		startTime := av.StartTime
+		endTime := av.EndTime
+
+		minutes := int(endTime.Sub(startTime).Minutes())
+		for i := 1; i <= minutes/15; i++ {
+			offset := time.Duration((i - 1) * 15) * time.Minute
+			newStart := startTime.Add(offset)
+			newEnd := newStart.Add(time.Duration(interviewLength) * time.Minute)
+			respectsBuffer := newStart.After(now.Add(bufferDuration)) || newStart.Equal(now.Add(bufferDuration))
+
+			isWithin := true
+			if tr, ok := timeRangeMap[av.ModeratorID]; ok {
+				isWithin = isWithinTimeRange(tr, newStart, newEnd)
+			}
+
+			if (newStart.Equal(startTime) || newStart.After(startTime)) && (newEnd.Equal(endTime) || newEnd.Before(endTime)) && respectsBuffer && isWithin {
+				availableMods[av.ModeratorID] = true
+				delete(unavailableMods, av.ModeratorID)
+			} else {
+				if !availableMods[av.ModeratorID] {
+					unavailableMods[av.ModeratorID] = true
+				}
+			}
+		}
+	}
+
+	if len(availableMods) == 0 {
+		output["displayError"] = true
+		writeJSON(w, http.StatusOK, output)
+		return
+	}
+
+	if len(unavailableMods) > 0 {
+		output["displayWarning"] = true
+		writeJSON(w, http.StatusOK, output)
+		return
+	}
+
+	// Check if any assigned moderator has no availability
+	for _, modID := range modIDs {
+		if !availableMods[modID] {
+			output["displayWarning"] = true
+			break
+		}
+	}
+
+	writeJSON(w, http.StatusOK, output)
+}
+
+// isWithinTimeRange checks if a time slot falls within a moderator's configured time range.
+// Mirrors legacy isWithinTimeRange helper: compares HHmm formatted times.
+func isWithinTimeRange(tr qs.ModeratorTimeRange, newStart, newEnd time.Time) bool {
+	loc, err := time.LoadLocation(tr.Timezone)
+	if err != nil {
+		return true // default to allowing if timezone unknown
+	}
+	convertedStart := newStart.In(loc)
+	convertedEnd := newEnd.In(loc)
+
+	startHHMM, _ := strconv.Atoi(convertedStart.Format("1504"))
+	endHHMM, _ := strconv.Atoi(convertedEnd.Format("1504"))
+	if endHHMM == 0 {
+		endHHMM = 2400
+	}
+
+	rangeStart, _ := strconv.Atoi(tr.StartTime)
+	rangeEnd, _ := strconv.Atoi(tr.EndTime)
+
+	return rangeStart <= startHHMM && rangeEnd >= endHHMM
 }
