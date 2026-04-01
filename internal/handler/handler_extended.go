@@ -3315,3 +3315,72 @@ func (h *Handler) SendInvalidateRescheduleMailMRA(w http.ResponseWriter, r *http
 
 	writeJSON(w, http.StatusOK, map[string]any{"status": "SUCCESS"})
 }
+
+// AddConferenceLinkMRA handles POST /add-conference-link/project/{project_id}/participant_group/{participant_group_id} (MRA).
+// Contract-identical with legacy: inserts meeting info per language, inserts conference_invitation,
+// updates project.modified_on. All side effects fully implemented.
+func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
+	if h.qsConferenceRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "conference repository not available",
+			"errorMessage": "conference repository not available",
+		})
+		return
+	}
+
+	projectIDStr := chi.URLParam(r, "project_id")
+	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "invalid project_id",
+			"errorMessage": "invalid project_id",
+		})
+		return
+	}
+
+	pgIDStr := chi.URLParam(r, "participant_group_id")
+	participantGroupID, err := strconv.ParseInt(pgIDStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "invalid participant_group_id",
+			"errorMessage": "invalid participant_group_id",
+		})
+		return
+	}
+
+	var body struct {
+		ConferenceLink     string  `json:"conferenceLink"`
+		MeetingInformation [][]any `json:"meetingInformation"`
+		UserID             any     `json:"userId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
+		return
+	}
+
+	var userID int64
+	switch v := body.UserID.(type) {
+	case float64:
+		userID = int64(v)
+	case string:
+		userID, _ = strconv.ParseInt(v, 10, 64)
+	}
+
+	result, err := h.qsConferenceRepo.AddConferenceLinkMRA(
+		r.Context(), projectID, participantGroupID, userID, body.ConferenceLink, body.MeetingInformation,
+	)
+	if err != nil {
+		slog.Error("add conference link failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
+		return
+	}
+
+	// Legacy returns the result of the last addMeetingInfo transaction call
+	writeJSON(w, http.StatusOK, result)
+}

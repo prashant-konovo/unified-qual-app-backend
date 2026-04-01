@@ -222,3 +222,70 @@ func (r *ConferenceRepo) UpdateRecordingStatus(ctx context.Context, meetingID, s
 	}
 	return nil
 }
+
+// AddConferenceLinkMRA inserts meeting information per language, inserts conference link,
+// and updates project modified_on — matching legacy addConferenceLinkService exactly.
+func (r *ConferenceRepo) AddConferenceLinkMRA(ctx context.Context, projectID int64, participantGroupID int64, userID int64, conferenceLink string, meetingInformation [][]any) (map[string]any, error) {
+	// Language code → language_id mapping (matches legacy switch)
+	langMap := map[string]int{
+		"en_us": 1, "fr_fr": 2, "fr_ca": 3,
+		"de_de": 4, "es_es": 5, "it_it": 6, "pt_br": 7,
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var lastResult map[string]any
+	for _, entry := range meetingInformation {
+		if len(entry) < 2 {
+			continue
+		}
+		langCode, _ := entry[0].(string)
+		meetingInfo, _ := entry[1].(string)
+		langID, ok := langMap[langCode]
+		if !ok {
+			continue
+		}
+
+		// INSERT INTO project_meeting_translation
+		res, err := tx.ExecContext(ctx,
+			`INSERT INTO project_meeting_translation(project_id, language_id, meeting_information, created_by) VALUES (?, ?, ?, ?)`,
+			projectID, langID, meetingInfo, userID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("insert meeting translation: %w", err)
+		}
+
+		// UPDATE project modified_on (legacy does this in each transaction iteration)
+		_, err = tx.ExecContext(ctx,
+			`UPDATE project SET modified_on = NOW() WHERE id = ?`, projectID,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("update project modified_on: %w", err)
+		}
+
+		insertID, _ := res.LastInsertId()
+		lastResult = map[string]any{
+			"numberOfRecordsUpdated": 1,
+			"insertId":              insertID,
+		}
+	}
+
+	// INSERT INTO conference_invitation (legacy columns)
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO conference_invitation(conference_link, participant_group_id, user_id) VALUES (?, ?, ?)`,
+		conferenceLink, participantGroupID, userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("insert conference invitation: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+
+	return lastResult, nil
+}
