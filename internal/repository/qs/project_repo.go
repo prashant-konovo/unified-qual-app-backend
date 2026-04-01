@@ -1271,3 +1271,25 @@ func (r *ProjectRepo) GetAllModeratorsAvailabilityPerClient(ctx context.Context,
 	}
 	return results, rows.Err()
 }
+
+// GetProjectStatusByID returns the project_status_id for a project.
+func (r *ProjectRepo) GetProjectStatusByID(ctx context.Context, projectID int64) (int64, error) {
+	var statusID int64
+	err := r.db.QueryRowContext(ctx, `SELECT project_status_id FROM project WHERE id = ?`, projectID).Scan(&statusID)
+	if err != nil {
+		return 0, fmt.Errorf("get project status: %w", err)
+	}
+	return statusID, nil
+}
+
+// UpsertModeratorTimeRangePerProject inserts or updates a moderator_time_range record.
+func (r *ProjectRepo) UpsertModeratorTimeRangePerProject(ctx context.Context, projectID, moderatorID int64, startTime, endTime, timezone string) error {
+	q := `INSERT INTO moderator_time_range (moderator_id, project_id, start_time, end_time, timezone)
+	      VALUES (?, ?, ?, ?, ?)
+	      ON DUPLICATE KEY UPDATE start_time = VALUES(start_time), end_time = VALUES(end_time), timezone = VALUES(timezone)`
+	_, err := r.db.ExecContext(ctx, q, moderatorID, projectID, startTime, endTime, timezone)
+	if err != nil {
+		return fmt.Errorf("upsert moderator time range: %w", err)
+	}
+	return nil
+}

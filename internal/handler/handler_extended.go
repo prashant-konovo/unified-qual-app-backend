@@ -2721,3 +2721,59 @@ func isWithinTimeRange(tr qs.ModeratorTimeRange, newStart, newEnd time.Time) boo
 
 	return rangeStart <= startHHMM && rangeEnd >= endHHMM
 }
+
+// UpsertModeratorTimeRangeMRA handles POST /project/{project_id}/time_range/moderator/{moderator_id} (MRA).
+// Contract-identical with legacy: checks project status is Defining (1), then upserts moderator_time_range.
+// Response: transaction result (serialized as the upsert response).
+func (h *Handler) UpsertModeratorTimeRangeMRA(w http.ResponseWriter, r *http.Request) {
+	pidStr := chi.URLParam(r, "project_id")
+	modStr := chi.URLParam(r, "moderator_id")
+	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	moderatorID, err := strconv.ParseInt(modStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	if h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
+		return
+	}
+
+	var body struct {
+		StartTime string `json:"startTime"`
+		EndTime   string `json:"endTime"`
+		Timezone  string `json:"timezone"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	// Check project status is Defining (1)
+	statusID, err := h.qsProjectRepo.GetProjectStatusByID(r.Context(), projectID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	if statusID != 1 {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{
+			"error": "Can't update moderator time range because the project status is not defining",
+		})
+		return
+	}
+
+	// Upsert
+	if err := h.qsProjectRepo.UpsertModeratorTimeRangePerProject(r.Context(), projectID, moderatorID, body.StartTime, body.EndTime, body.Timezone); err != nil {
+		slog.Error("upsert moderator time range failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	// Legacy returns the transaction result which includes numberOfRecordsUpdated
+	writeJSON(w, http.StatusOK, map[string]any{"numberOfRecordsUpdated": 1})
+}
