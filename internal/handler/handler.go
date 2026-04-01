@@ -54,33 +54,6 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func success(w http.ResponseWriter, data any) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"data":    data,
-	})
-}
-
-func created(w http.ResponseWriter, data any) {
-	writeJSON(w, http.StatusCreated, map[string]any{
-		"success": true,
-		"data":    data,
-	})
-}
-
-func successList(w http.ResponseWriter, data any, total int) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"data":    data,
-		"meta": map[string]any{
-			"page":       1,
-			"pageSize":   20,
-			"totalCount": total,
-			"totalPages": 1,
-		},
-	})
-}
-
 func id() string { return uuid.New().String() }
 
 func now() string { return time.Now().UTC().Format(time.RFC3339) }

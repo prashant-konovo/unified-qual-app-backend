@@ -1188,7 +1188,7 @@ func (h *Handler) DownloadMediaPDF(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
 	}
 	w.WriteHeader(http.StatusOK)
-	io.Copy(w, body)
+	_, _ = io.Copy(w, body)
 }
 
 // DownloadMediaPage streams a single page PDF from S3.
@@ -1227,7 +1227,7 @@ func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
 	}
 	w.WriteHeader(http.StatusOK)
-	io.Copy(w, body)
+	_, _ = io.Copy(w, body)
 }
 
 // GetMediaPageForConference serves a media page PDF for conference participants.
@@ -1307,7 +1307,7 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
 	}
 	w.WriteHeader(http.StatusOK)
-	io.Copy(w, body)
+	_, _ = io.Copy(w, body)
 }
 
 // DeleteProjectMedia deletes interview media from S3 and database.
