@@ -396,6 +396,16 @@ func (r *UserRepo) SetUnsubscribed(ctx context.Context, userID int64) error {
 	return nil
 }
 
+// AcceptTerms sets terms_accepted = 1 for a QS user.
+func (r *UserRepo) AcceptTerms(ctx context.Context, userID int64) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE user SET terms_accepted = 1 WHERE id = ?", userID)
+	if err != nil {
+		return fmt.Errorf("accept terms user %d: %w", userID, err)
+	}
+	slog.InfoContext(ctx, "accepted terms for QS user", "id", userID)
+	return nil
+}
+
 // ListByRole returns QS users filtered by role.
 func (r *UserRepo) ListByRole(ctx context.Context, roleID int, page, pageSize int) ([]UserListRow, int, error) {
 	return r.List(ctx, page, pageSize, &roleID, "")

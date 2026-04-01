@@ -103,8 +103,9 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 type loginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email         string `json:"email"`
+	Password      string `json:"password"`
+	TermsAccepted *bool  `json:"termsAccepted"`
 }
 
 type centralAuthLoginRequest struct {
@@ -131,7 +132,10 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try central auth service first
+	// Authenticate via Cognito (central service first, direct fallback)
+	var cognitoBody []byte
+	var cognitoStatus int
+
 	if h.cfg.AuthAPIURL != "" {
 		payload := centralAuthLoginRequest{
 			UserName:   req.Email,
@@ -141,23 +145,85 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		body, status, err := h.callAuthService(r.Context(), "/authentication/qs/login", payload)
 		if err == nil && status >= 200 && status < 500 {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(status)
-			_, _ = w.Write(body)
-			return
+			cognitoBody = body
+			cognitoStatus = status
+		} else {
+			slog.Warn("central auth service failed, falling back to direct Cognito", "status", status, "error", err)
 		}
-		slog.Warn("central auth service failed, falling back to direct Cognito", "status", status, "error", err)
 	}
 
-	// Fallback: call Cognito ADMIN_USER_PASSWORD_AUTH directly via HTTP
-	body, status, err := h.cognitoAdminAuth(r.Context(), req.Email, req.Password)
-	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("cognito auth error: %v", err)})
+	if cognitoBody == nil {
+		body, status, err := h.cognitoAdminAuth(r.Context(), req.Email, req.Password)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        "An error occured while log in",
+				"errorMessage": "An error occured while log in",
+			})
+			return
+		}
+		cognitoBody = body
+		cognitoStatus = status
+	}
+
+	// Non-200 from Cognito → forward error in legacy format
+	if cognitoStatus != http.StatusOK {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "An error occured while log in",
+			"errorMessage": "An error occured while log in",
+		})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = w.Write(body)
+
+	// Parse Cognito tokens from response
+	var tokens map[string]any
+	_ = json.Unmarshal(cognitoBody, &tokens)
+
+	// Enrich with user profile from QS DB (legacy side effect)
+	var userInfo map[string]any
+	if tokens != nil {
+		userInfo = map[string]any{}
+		for k, v := range tokens {
+			userInfo[k] = v
+		}
+	} else {
+		userInfo = map[string]any{}
+	}
+
+	if h.qsUserRepo != nil {
+		u, err := h.qsUserRepo.GetByEmail(r.Context(), req.Email)
+		if err == nil && u != nil {
+			userInfo["id"] = u.ID
+			userInfo["firstName"] = nullStr(u.FirstName)
+			userInfo["lastName"] = nullStr(u.LastName)
+
+			// Handle termsAccepted: update DB if accepted, check status if not
+			if req.TermsAccepted != nil && *req.TermsAccepted {
+				_ = h.qsUserRepo.AcceptTerms(r.Context(), u.ID)
+			} else if u.TermsAccepted != 1 {
+				writeJSON(w, 203, map[string]any{
+					"termsAcceptedRes": map[string]any{
+						"termsAccepted": false,
+						"userId":        u.ID,
+					},
+				})
+				return
+			}
+		}
+	}
+
+	// Build legacy-shaped response: nested {statusCode, body: {statusCode, body: {userInfo, apiKey}}}
+	legacyResp := map[string]any{
+		"statusCode": 200,
+		"body": map[string]any{
+			"statusCode": 200,
+			"body": map[string]any{
+				"userInfo": userInfo,
+				"apiKey":   h.cfg.AuthAPIKey,
+			},
+		},
+	}
+
+	writeJSON(w, http.StatusOK, legacyResp)
 }
 
 func (h *Handler) AuthMagicLink(w http.ResponseWriter, r *http.Request) {
