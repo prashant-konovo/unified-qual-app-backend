@@ -3106,11 +3106,17 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 		RoleIDs   []int  `json:"roleIds"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err,
+			"errorMessage": "An error occured while creating a new user",
+		})
 		return
 	}
 	if req.Email == "" || req.FirstName == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "email and firstName required"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "email and firstName required",
+			"errorMessage": "An error occured while creating a new user",
+		})
 		return
 	}
 	if len(req.RoleIDs) == 0 {
@@ -3122,15 +3128,27 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 		uid, err := h.qsUserRepo.Create(r.Context(), req.FirstName, req.LastName, req.Email, req.TimeZone, req.RoleIDs)
 		if err != nil {
 			slog.Error("create admin user failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed: " + err.Error()})
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while creating a new user",
+			})
 			return
 		}
-		writeJSON(w, http.StatusCreated, map[string]any{
-			"id": uid, "email": req.Email, "firstName": req.FirstName, "lastName": req.LastName,
-			"roles": req.RoleIDs, "source": "qs",
-			"cognitoStatus": "Cognito user must be created separately via Cognito console or AWS CLI",
+		// Legacy side effect: create user_communication_preferences row
+		if h.db.QS != nil {
+			_, _ = h.db.QS.ExecContext(r.Context(),
+				`INSERT INTO user_communication_preferences (user_id, email, allow_contact_by_email, modified_by, created_by) VALUES (?, ?, 0, ?, ?)`,
+				uid, req.Email, uid, uid)
+		}
+		// Legacy returns created user row with HTTP 200
+		writeJSON(w, http.StatusOK, map[string]any{
+			"id": uid, "first_name": req.FirstName, "last_name": req.LastName,
+			"email": req.Email,
 		})
 		return
 	}
-	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	writeJSON(w, http.StatusInternalServerError, map[string]any{
+		"error":        "no database available",
+		"errorMessage": "An error occured while creating a new user",
+	})
 }
