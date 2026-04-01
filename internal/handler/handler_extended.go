@@ -1098,15 +1098,28 @@ func (h *Handler) assessCrowdDifficulty(ctx context.Context, crowd *ipCrowdSpec,
 // Contract-identical with legacy InCrowdAPI: POST /v1/custom_crowd_inquiry
 // Request: multipart/form-data with file + crowdName + completionDate + sampleSize + subscriptionId + marketId(optional)
 // Response: {} (empty JSON object)
+// Side effects: S3 upload (public/ prefix), email notification (async)
 func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Request) {
+	// Legacy error helper: wraps in {"error": {"userMessage":..., "developerMessage":..., "status":"BAD REQUEST", "code":400}}
+	badRequest := func(reason string) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": map[string]any{
+				"userMessage":      "Something sent doesn't make sense, please check your request",
+				"developerMessage": reason,
+				"status":           "BAD REQUEST",
+				"code":             400,
+			},
+		})
+	}
+
 	if err := r.ParseMultipartForm(32 << 20); err != nil { // 32 MB max
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "not valid multipart-form-data, or labeled as such"})
+		badRequest("not valid multipart-form-data, or labeled as such")
 		return
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "no file upload was found, or named \"file\""})
+		badRequest("no file upload was found, or named \"file\"")
 		return
 	}
 	defer file.Close()
@@ -1118,30 +1131,36 @@ func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Reques
 	marketID := r.FormValue("marketId")
 
 	if crowdName == "" || completionDate == "" || sampleSizeStr == "" || subscriptionIDStr == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid form data for list match inquiry"})
+		badRequest("invalid form data for list match inquiry")
 		return
 	}
 
 	subscriptionID, err := strconv.ParseInt(subscriptionIDStr, 10, 64)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid form data for list match inquiry"})
+		badRequest("invalid form data for list match inquiry")
 		return
 	}
 
 	sampleSize, err := strconv.Atoi(sampleSizeStr)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid form data for list match inquiry"})
+		badRequest("invalid form data for list match inquiry")
 		return
 	}
 
-	// Resolve calling user ID for filename
+	// Resolve calling user's numeric IRIS ID for filename (legacy uses user.id)
+	var userID int64
+	if user := middleware.GetUser(r); user != nil && user.Email != "" && h.irisSurveyRepo != nil {
+		if id, lookupErr := h.irisSurveyRepo.GetUserIDByEmail(r.Context(), user.Email); lookupErr == nil {
+			userID = id
+		}
+	}
 	userIDStr := "unknown"
-	if user := middleware.GetUser(r); user != nil {
-		userIDStr = user.Username
+	if userID > 0 {
+		userIDStr = strconv.FormatInt(userID, 10)
 	}
 
-	// Upload file to S3
-	fileName := fmt.Sprintf("custom_crowd_inquiry%d_%s.csv", time.Now().UnixMilli(), userIDStr)
+	// Upload file to S3 with public/ prefix (legacy: s3Gateway.uploadAndGetPublicUrl)
+	fileName := fmt.Sprintf("public/custom_crowd_inquiry%d_%s.csv", time.Now().UnixMilli(), userIDStr)
 	var downloadLink string
 	if h.services.S3 != nil && h.services.S3.Configured() {
 		url, uploadErr := h.services.S3.UploadFile(r.Context(), h.services.S3.InquiryBucket(), fileName, file, header.Header.Get("Content-Type"))
@@ -1156,18 +1175,16 @@ func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Reques
 
 	// Determine inquiry type (List Match vs Prevalidated List)
 	isListMatch := marketID != ""
-	subject := "A Prevalidated List was submitted"
-	requestType := "Prevalidated List Request"
-	if isListMatch {
-		subject = "A List Match crowd was submitted"
-		requestType = "List Match Request"
-	}
 
-	// Look up subscription company name
+	// Look up subscription company name + shortCode
 	companyName := "Unknown"
+	shortCode := ""
 	if h.irisSurveyRepo != nil {
-		if name, lookupErr := h.irisSurveyRepo.GetSubscriptionCompany(r.Context(), subscriptionID); lookupErr == nil && name != "" {
-			companyName = name
+		if name, sc, lookupErr := h.irisSurveyRepo.GetSubscriptionCompanyAndShortCode(r.Context(), subscriptionID); lookupErr == nil {
+			if name != "" {
+				companyName = name
+			}
+			shortCode = sc
 		}
 	}
 
@@ -1181,37 +1198,63 @@ func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	// Send email notification
+	// Build email matching legacy template (qualCustomCrowdSubmitted.scala.html)
+	subject := "A Prevalidated List was submitted"
+	requestType := "Prevalidated List Request"
+	listDesc := "A subscriber has submitted a prevalidated list"
+	if isListMatch {
+		subject = "A List Match crowd was submitted"
+		requestType = "List Match Request"
+		listDesc = "A subscriber has submitted a file to be list matched"
+	}
+
+	// Send email notification asynchronously (legacy uses Future{...})
 	if h.services.Notification != nil && h.services.Notification.Configured() {
 		emailBody := fmt.Sprintf(
 			"<h2>%s</h2>"+
-				"<p><strong>Company:</strong> %s</p>"+
-				"<p><strong>Crowd Name:</strong> %s</p>"+
-				"<p><strong>Sample Size:</strong> %d</p>"+
-				"<p><strong>Completion Date:</strong> %s</p>",
-			requestType, companyName, crowdName, sampleSize, completionDate,
+				"<p>%s</p>"+
+				"<p><strong>Subscription:</strong> %s</p>"+
+				"<p><strong>Short Code:</strong> %s</p>"+
+				"<p><strong>Requested Crowd Name:</strong> %s</p>",
+			requestType, listDesc, companyName, shortCode, crowdName,
 		)
 		if isListMatch && marketName != "" {
-			emailBody += fmt.Sprintf("<p><strong>Market:</strong> %s</p>", marketName)
+			emailBody += fmt.Sprintf("<p><strong>Crowd Market:</strong> %s</p>", marketName)
+		}
+		emailBody += fmt.Sprintf(
+			"<p><strong>Sample Size:</strong> %d</p>"+
+				"<p><strong>Required Recruitment Completion Date:</strong> %s</p>",
+			sampleSize, completionDate,
+		)
+		if !isListMatch {
+			emailBody += "<p>User attested that all potential recipients consented to third party contact.</p>"
 		}
 		if downloadLink != "" {
-			emailBody += fmt.Sprintf("<p><strong>File:</strong> <a href=\"%s\">Download CSV</a></p>", downloadLink)
+			linkLabel := "Download Prevalidated List CSV"
+			if isListMatch {
+				linkLabel = "Download List Match CSV"
+			}
+			emailBody += fmt.Sprintf("<p><a href=\"%s\">%s</a></p>", downloadLink, linkLabel)
 		} else {
-			emailBody += "<p><em>Warning: File upload failed — CSV was not uploaded to S3.</em></p>"
+			emailBody += "<p><strong>There was an error uploading the file to S3. Please file a PS ticket to retrieve the file.</strong></p>"
 		}
 
 		recipient := h.cfg.InquiryEmailRecipient
 		if recipient == "" {
 			recipient = "dev-ni@incrowdnow.com"
 		}
-		if emailErr := h.services.Notification.SendEmail(r.Context(), integration.EmailMessage{
-			To:          []string{recipient},
-			Subject:     subject,
-			Body:        emailBody,
-			ContentType: "text/html",
-		}); emailErr != nil {
-			slog.Error("failed to send custom crowd inquiry email", "error", emailErr, "userId", userIDStr)
-		}
+
+		// Fire-and-forget (legacy returns Ok before email completes)
+		go func() {
+			if emailErr := h.services.Notification.SendEmail(r.Context(), integration.EmailMessage{
+				To:          []string{recipient},
+				Subject:     subject,
+				Body:        emailBody,
+				ContentType: "text/html",
+			}); emailErr != nil {
+				slog.Error("failed to send custom crowd inquiry email", "error", emailErr, "userId", userIDStr)
+			}
+		}()
 	}
 
 	// Contract-identical: legacy returns empty JSON object

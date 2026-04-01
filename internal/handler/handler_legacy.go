@@ -1199,6 +1199,8 @@ func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
 
 // GetMediaPageForConference serves a media page PDF for conference participants.
 // Contract-identical with legacy InCrowdAPI: GET /v1/interview_media/:conferenceHash/:mediaId/pages/:page/media.pdf
+// GetMediaPageForConference serves a media page for a conference participant.
+// Contract-identical with legacy InCrowdAPI: validates participant cookie
 func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Request) {
 	confHash := chi.URLParam(r, "confHash")
 	midStr := chi.URLParam(r, "mediaId")
@@ -1211,11 +1213,44 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Legacy validates participant via cookie: ic-participant → participantHash
+	// Then checks ConferenceInvitation.readWhere(participantHash, timeSlotId)
+	participantHash := ""
+	if cookie, cErr := r.Cookie("ic-participant"); cErr == nil {
+		participantHash = cookie.Value
+	}
+
 	// Look up timeslot by conference hash to verify access and get project ID
 	projectID, err := h.irisSurveyRepo.GetProjectIDByConferenceHash(r.Context(), confHash)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 		return
+	}
+
+	// Validate participant if cookie is present (legacy security check)
+	if participantHash != "" && h.qsConferenceRepo != nil {
+		ci, ciErr := h.qsConferenceRepo.GetByHash(r.Context(), confHash)
+		if ciErr != nil || ci == nil {
+			writeJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
+			return
+		}
+		// Verify participant belongs to this conference timeslot
+		participants, pErr := h.qsConferenceRepo.GetParticipants(r.Context(), ci.TimeSlotID)
+		if pErr != nil {
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": "access denied"})
+			return
+		}
+		found := false
+		for _, p := range participants {
+			if ph, ok := p["participantHash"].(string); ok && ph == participantHash {
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": "access denied"})
+			return
+		}
 	}
 
 	m, err := h.irisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)

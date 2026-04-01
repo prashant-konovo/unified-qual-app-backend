@@ -2081,14 +2081,31 @@ func (r *SurveyRepo) IsSurveyFavoriteOf(ctx context.Context, surveyID, userID in
 }
 
 // GetSubscriptionCompany returns the company name for a subscription.
-func (r *SurveyRepo) GetSubscriptionCompany(ctx context.Context, subscriptionID int64) (string, error) {
-	var company string
+// GetSubscriptionCompanyAndShortCode returns the company name and short code for a subscription.
+func (r *SurveyRepo) GetSubscriptionCompanyAndShortCode(ctx context.Context, subscriptionID int64) (string, string, error) {
+	var company, shortCode string
 	err := r.ro().QueryRowContext(ctx,
-		"SELECT COALESCE(company, '') FROM subscription WHERE id = ?", subscriptionID).Scan(&company)
+		"SELECT COALESCE(company, ''), COALESCE(short_code, '') FROM subscription WHERE id = ?", subscriptionID).Scan(&company, &shortCode)
 	if err != nil {
-		return "", fmt.Errorf("get subscription company: %w", err)
+		return "", "", fmt.Errorf("get subscription company+shortcode: %w", err)
 	}
-	return company, nil
+	return company, shortCode, nil
+}
+
+func (r *SurveyRepo) GetSubscriptionCompany(ctx context.Context, subscriptionID int64) (string, error) {
+	company, _, err := r.GetSubscriptionCompanyAndShortCode(ctx, subscriptionID)
+	return company, err
+}
+
+// GetUserIDByEmail returns the IRIS numeric user ID for an email address.
+func (r *SurveyRepo) GetUserIDByEmail(ctx context.Context, email string) (int64, error) {
+	var id int64
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT id FROM ic_user WHERE LOWER(email) = LOWER(?) LIMIT 1", email).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("get user id by email: %w", err)
+	}
+	return id, nil
 }
 
 // GetProjectName returns the name of a project.
