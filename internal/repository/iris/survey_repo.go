@@ -1505,42 +1505,58 @@ func (r *SurveyRepo) GetProjectInquiry(ctx context.Context, subscriptionID, proj
 }
 
 // GetAvailabilityAndTimeslotsForProject returns combined data for project dashboard.
-func (r *SurveyRepo) GetAvailabilityAndTimeslotsForProject(ctx context.Context, projectID int64) (map[string]any, error) {
-	// Time slots for this project
-	var totalSlots, openSlots, bookedSlots int
-	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND is_invalid = 0", projectID).Scan(&totalSlots)
-	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND is_invalid = 0 AND status_id = 1", projectID).Scan(&openSlots)
-	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND is_invalid = 0 AND status_id IN (2,3,4,7,8,9)", projectID).Scan(&bookedSlots)
+// GetProjectDashboardInfo returns dashboard data matching legacy shape.
+// Legacy returns: {scheduled, completed, moderatorInfo: {<modId>: {id, firstName, lastName, interviewCount}}}
+func (r *SurveyRepo) GetProjectDashboardInfo(ctx context.Context, projectID int64) (map[string]any, error) {
+	// scheduled = upcoming interviews (status_id=2, start_time > NOW, is_invalid=0)
+	var scheduled int64
+	_ = r.ro().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND status_id = 2 AND start_time > NOW() AND is_invalid = 0`,
+		projectID).Scan(&scheduled)
 
-	// Moderator availability — get moderators assigned to this project
-	avails := []map[string]any{}
-	q := `SELECT ma.id, ma.moderator_id, ma.start_time, ma.end_time,
-	       CONCAT(u.first_name, ' ', u.last_name) AS moderator_name
+	// completed = completed interviews
+	var completed int64
+	_ = r.ro().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM time_slot WHERE project_id = ? AND status_id IN (4,7,8) AND is_invalid = 0`,
+		projectID).Scan(&completed)
+
+	// moderatorInfo: per-moderator interview counts (only status_id=2 scheduled)
+	modInfo := map[string]any{}
+	q := `SELECT DISTINCT u.id, u.first_name, u.last_name,
+	       COUNT(DISTINCT mts.id) AS interview_count
 	      FROM moderator_availability ma
-	      JOIN user_project upx ON upx.user_id = ma.moderator_id AND upx.project_id = ?
 	      JOIN ic_user u ON u.id = ma.moderator_id
-	      ORDER BY ma.start_time`
-	rows, err := r.ro().QueryContext(ctx, q, projectID)
+	      LEFT JOIN (
+	        SELECT mts2.*
+	        FROM moderator_time_slot mts2
+	        JOIN time_slot ts ON ts.id = mts2.time_slot_id
+	          AND ts.project_id = ? AND ts.status_id = 2 AND ts.is_invalid = 0
+	      ) mts ON mts.moderator_id = ma.moderator_id
+	      WHERE ma.moderator_id IN (
+	        SELECT up.user_id FROM user_project up WHERE up.project_id = ?
+	      )
+	      GROUP BY u.id, u.first_name, u.last_name`
+	rows, err := r.ro().QueryContext(ctx, q, projectID, projectID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
-			var id, modID int64
-			var st, et time.Time
-			var mName string
-			if rows.Scan(&id, &modID, &st, &et, &mName) == nil {
-				avails = append(avails, map[string]any{
-					"id": id, "moderatorId": modID, "startTime": st.Format(time.RFC3339),
-					"endTime": et.Format(time.RFC3339), "moderatorName": mName,
-				})
+			var modID, interviewCount int64
+			var firstName, lastName string
+			if rows.Scan(&modID, &firstName, &lastName, &interviewCount) == nil {
+				modInfo[fmt.Sprintf("%d", modID)] = map[string]any{
+					"id":             modID,
+					"firstName":      firstName,
+					"lastName":       lastName,
+					"interviewCount": interviewCount,
+				}
 			}
 		}
 	}
 
 	return map[string]any{
-		"totalSlots":    totalSlots,
-		"openSlots":     openSlots,
-		"bookedSlots":   bookedSlots,
-		"availabilities": avails,
+		"scheduled":     scheduled,
+		"completed":     completed,
+		"moderatorInfo": modInfo,
 	}, nil
 }
 

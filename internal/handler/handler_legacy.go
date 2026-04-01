@@ -971,6 +971,9 @@ func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.R
 }
 
 // GetProjectDashboard returns combined availability and timeslot data for dashboard.
+// GetProjectDashboard returns dashboard data for a project.
+// Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/dashboard/availability_and_time_slots
+// Response: {"scheduled": N, "completed": N, "moderatorInfo": {"<modId>": {id, firstName, lastName, interviewCount}}}
 func (h *Handler) GetProjectDashboard(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "pid")
 	projectID, err := strconv.ParseInt(idStr, 10, 64)
@@ -979,34 +982,17 @@ func (h *Handler) GetProjectDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.irisSurveyRepo != nil && h.resolveSource(r) == "iris" {
-		data, err := h.irisSurveyRepo.GetAvailabilityAndTimeslotsForProject(r.Context(), projectID)
+	if h.irisSurveyRepo != nil {
+		data, err := h.irisSurveyRepo.GetProjectDashboardInfo(r.Context(), projectID)
 		if err != nil {
 			slog.Error("project dashboard failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			return
 		}
-		success(w, data)
+		writeJSON(w, http.StatusOK, data)
 		return
 	}
-
-	// QS fallback
-	if h.qsTimeSlotRepo != nil {
-		slots, _, _ := h.qsTimeSlotRepo.List(r.Context(), 1, 500, &projectID, nil, nil, nil, nil)
-		var open, booked, total int
-		for _, s := range slots {
-			total++
-			if s.StatusID == 1 {
-				open++
-			} else if s.StatusID >= 2 {
-				booked++
-			}
-		}
-		success(w, map[string]any{
-			"totalSlots": total, "openSlots": open, "bookedSlots": booked,
-			"availabilities": []any{},
-		})
-		return
-	}
-	success(w, map[string]any{"totalSlots": 0, "openSlots": 0, "bookedSlots": 0, "availabilities": []any{}})
+	writeJSON(w, http.StatusOK, map[string]any{"scheduled": 0, "completed": 0, "moderatorInfo": map[string]any{}})
 }
 
 // GetProjectMedia returns interview media for a project.
