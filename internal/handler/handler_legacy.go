@@ -2931,7 +2931,7 @@ func (h *Handler) CreatePaymentReal(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
-		created(w, map[string]any{"id": id, "timeSlotId": req.TimeSlotID})
+		writeJSON(w, http.StatusCreated, map[string]any{"id": id, "timeSlotId": req.TimeSlotID})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
@@ -2956,7 +2956,7 @@ func (h *Handler) CreateCustomHonorariumReal(w http.ResponseWriter, r *http.Requ
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
-		created(w, map[string]any{"id": id, "timeSlotId": req.TimeSlotID})
+		writeJSON(w, http.StatusCreated, map[string]any{"id": id, "timeSlotId": req.TimeSlotID})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})

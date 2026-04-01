@@ -47,7 +47,7 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		roles, _ := h.qsUserRepo.GetRoles(r.Context(), req.UserID)
-		success(w, map[string]any{"userId": req.UserID, "roles": roles, "source": "qs"})
+		writeJSON(w, http.StatusOK, map[string]any{"userId": req.UserID, "roles": roles, "source": "qs"})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
@@ -74,7 +74,7 @@ func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		roles, _ := h.qsUserRepo.GetRoles(r.Context(), req.UserID)
-		success(w, map[string]any{"userId": req.UserID, "roles": roles, "source": "qs"})
+		writeJSON(w, http.StatusOK, map[string]any{"userId": req.UserID, "roles": roles, "source": "qs"})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
@@ -122,7 +122,7 @@ func (h *Handler) SendPasswordResetEmail(w http.ResponseWriter, r *http.Request)
 
 	// Always return success to not leak user existence.
 	slog.Info("password reset requested", "email", req.Email)
-	success(w, map[string]any{"sent": true, "email": req.Email})
+	writeJSON(w, http.StatusOK, map[string]any{"sent": true, "email": req.Email})
 }
 
 func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request) {
@@ -141,10 +141,10 @@ func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request)
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
 			return
 		}
-		success(w, result)
+		writeJSON(w, http.StatusOK, result)
 		return
 	}
-	success(w, map[string]any{"isQsTool": false, "isI2": false, "exists": false})
+	writeJSON(w, http.StatusOK, map[string]any{"isQsTool": false, "isI2": false, "exists": false})
 }
 
 // ──────────────────────────────────────────────
@@ -172,7 +172,7 @@ func (h *Handler) CheckUserCommPreference(w http.ResponseWriter, r *http.Request
 			return
 		}
 		pref["source"] = "qs"
-		success(w, pref)
+		writeJSON(w, http.StatusOK, pref)
 		return
 	}
 
@@ -182,7 +182,7 @@ func (h *Handler) CheckUserCommPreference(w http.ResponseWriter, r *http.Request
 			writeJSON(w, http.StatusNotFound, map[string]any{"error": "user not found"})
 			return
 		}
-		success(w, map[string]any{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"userId": u.ID, "email": u.Email.String,
 			"optedIn": true, "canUnsubscribe": true, "source": "iris",
 		})
@@ -206,14 +206,14 @@ func (h *Handler) UnsubscribeUser(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "unsubscribe failed"})
 			return
 		}
-		success(w, map[string]any{"userId": userID, "unsubscribed": true, "source": "qs"})
+		writeJSON(w, http.StatusOK, map[string]any{"userId": userID, "unsubscribed": true, "source": "qs"})
 		return
 	}
 
 	if source == "iris" && h.db.IRIS != nil {
 		_, _ = h.db.IRIS.ExecContext(r.Context(),
 			"UPDATE ic_user SET comm_opt_out = 1 WHERE id = ?", userID)
-		success(w, map[string]any{"userId": userID, "unsubscribed": true, "source": "iris"})
+		writeJSON(w, http.StatusOK, map[string]any{"userId": userID, "unsubscribed": true, "source": "iris"})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
@@ -239,7 +239,7 @@ func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request)
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
 			return
 		}
-		success(w, map[string]any{"projectId": projectID, "removedAssignments": count, "source": "iris"})
+		writeJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": count, "source": "iris"})
 		return
 	}
 
@@ -254,7 +254,7 @@ func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		n, _ := res.RowsAffected()
-		success(w, map[string]any{"projectId": projectID, "removedAssignments": n, "source": "qs"})
+		writeJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": n, "source": "qs"})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
@@ -317,7 +317,7 @@ func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	success(w, map[string]any{"projectId": projectID, "rows": data, "count": len(data)})
+	writeJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "rows": data, "count": len(data)})
 }
 
 // ──────────────────────────────────────────────
@@ -338,7 +338,7 @@ func (h *Handler) GetAvailableModeratorsCount(w http.ResponseWriter, r *http.Req
 		if err != nil {
 			slog.Error("count mods failed", "error", err)
 		}
-		success(w, map[string]any{"projectId": projectID, "availableCount": count, "source": "iris"})
+		writeJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "iris"})
 		return
 	}
 
@@ -348,11 +348,11 @@ func (h *Handler) GetAvailableModeratorsCount(w http.ResponseWriter, r *http.Req
 			`SELECT COUNT(DISTINCT mts.moderator_id) FROM moderator_time_slot mts
 			 INNER JOIN time_slot ts ON ts.id = mts.time_slot_id
 			 WHERE ts.project_id = ? AND ts.status_id = 1`, projectID).Scan(&count)
-		success(w, map[string]any{"projectId": projectID, "availableCount": count, "source": "qs"})
+		writeJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "qs"})
 		return
 	}
 
-	success(w, map[string]any{"projectId": projectID, "availableCount": 0})
+	writeJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": 0})
 }
 
 func (h *Handler) GetUnavailableModerators(w http.ResponseWriter, r *http.Request) {
@@ -369,11 +369,11 @@ func (h *Handler) GetUnavailableModerators(w http.ResponseWriter, r *http.Reques
 		if err != nil {
 			slog.Error("get unavail mods failed", "error", err)
 		}
-		success(w, map[string]any{"moderators": mods, "source": "iris"})
+		writeJSON(w, http.StatusOK, map[string]any{"moderators": mods, "source": "iris"})
 		return
 	}
 
-	success(w, map[string]any{"moderators": []any{}, "source": "qs"})
+	writeJSON(w, http.StatusOK, map[string]any{"moderators": []any{}, "source": "qs"})
 }
 
 // ──────────────────────────────────────────────
@@ -406,7 +406,7 @@ func (h *Handler) SendNotificationEmail(w http.ResponseWriter, r *http.Request) 
 		} else {
 			slog.Info("notification email sent via service",
 				"type", req.Type, "recipients", len(req.Recipients), "projectId", req.ProjectID)
-			success(w, map[string]any{
+			writeJSON(w, http.StatusOK, map[string]any{
 				"sent": true, "recipientCount": len(req.Recipients),
 				"type": req.Type, "projectId": req.ProjectID, "via": "notification-service",
 			})
@@ -417,7 +417,7 @@ func (h *Handler) SendNotificationEmail(w http.ResponseWriter, r *http.Request) 
 	// Fallback: log-only
 	slog.Info("notification email logged (service not configured or failed)",
 		"type", req.Type, "recipients", len(req.Recipients), "projectId", req.ProjectID)
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"sent": true, "recipientCount": len(req.Recipients),
 		"type": req.Type, "projectId": req.ProjectID,
 	})
@@ -450,7 +450,7 @@ func (h *Handler) AddConferenceLink(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
-		created(w, map[string]any{
+		writeJSON(w, http.StatusCreated, map[string]any{
 			"id": linkID, "projectId": projectID,
 			"timeSlotId": req.TimeSlotID, "conferenceHash": req.ConferenceHash,
 		})
@@ -476,7 +476,7 @@ func (h *Handler) UpdateConferenceLinkHandler(w http.ResponseWriter, r *http.Req
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
-		success(w, map[string]any{"updated": true, "timeSlotId": req.TimeSlotID})
+		writeJSON(w, http.StatusOK, map[string]any{"updated": true, "timeSlotId": req.TimeSlotID})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
@@ -501,7 +501,7 @@ func (h *Handler) GetConferenceLinkByTimeSlot(w http.ResponseWriter, r *http.Req
 			writeJSON(w, http.StatusNotFound, map[string]any{"error": "conference link not found"})
 			return
 		}
-		success(w, link)
+		writeJSON(w, http.StatusOK, link)
 		return
 	}
 	writeJSON(w, http.StatusNotFound, map[string]any{"error": "conference link not found"})
@@ -557,7 +557,7 @@ func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	success(w, []any{})
+	writeJSON(w, http.StatusOK, []any{})
 }
 
 // ──────────────────────────────────────────────
@@ -578,7 +578,7 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("decipher respondent data failed", "surveyId", surveyID, "error", err)
 		} else {
 			slog.Info("decipher data retrieved", "surveyId", surveyID, "records", len(data))
-			success(w, map[string]any{
+			writeJSON(w, http.StatusOK, map[string]any{
 				"accepted":   true,
 				"source":     "decipher",
 				"surveyId":   surveyID,
@@ -595,7 +595,7 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("third-party integration received", "payload_keys", len(req))
-	success(w, map[string]any{"accepted": true, "timestamp": now()})
+	writeJSON(w, http.StatusOK, map[string]any{"accepted": true, "timestamp": now()})
 }
 
 // ──────────────────────────────────────────────
@@ -620,18 +620,18 @@ func (h *Handler) CheckQualEligibility(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if result == nil {
-			success(w, map[string]any{
+			writeJSON(w, http.StatusOK, map[string]any{
 				"eligible": true, "responderId": req.ResponderID,
 				"projectId": req.ProjectID, "source": "qs",
 			})
 			return
 		}
 		result["source"] = "qs"
-		success(w, result)
+		writeJSON(w, http.StatusOK, result)
 		return
 	}
 
-	success(w, map[string]any{"eligible": true, "responderId": req.ResponderID, "projectId": req.ProjectID})
+	writeJSON(w, http.StatusOK, map[string]any{"eligible": true, "responderId": req.ResponderID, "projectId": req.ProjectID})
 }
 
 // ──────────────────────────────────────────────
@@ -657,7 +657,7 @@ func (h *Handler) DeleteTopicTranslation(w http.ResponseWriter, r *http.Request)
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
 		}
-		success(w, map[string]any{"deleted": true, "projectId": projectID, "topicId": topicID, "languageCode": langCode})
+		writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "projectId": projectID, "topicId": topicID, "languageCode": langCode})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
@@ -674,7 +674,7 @@ func (h *Handler) DeleteTranslation(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
 		}
-		success(w, map[string]any{"deleted": true, "projectId": projectID, "languageCode": langCode})
+		writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "projectId": projectID, "languageCode": langCode})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
@@ -703,7 +703,7 @@ func (h *Handler) CreateExternalPayment(w http.ResponseWriter, r *http.Request) 
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
-		created(w, map[string]any{"id": payID, "timeSlotId": req.TimeSlotID, "external": true})
+		writeJSON(w, http.StatusCreated, map[string]any{"id": payID, "timeSlotId": req.TimeSlotID, "external": true})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
@@ -715,10 +715,10 @@ func (h *Handler) GetHonorariumReasons(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			slog.Error("list hono reasons failed", "error", err)
 		}
-		success(w, reasons)
+		writeJSON(w, http.StatusOK, reasons)
 		return
 	}
-	success(w, []map[string]any{
+	writeJSON(w, http.StatusOK, []map[string]any{
 		{"id": 1, "name": "Interview Completed"},
 		{"id": 2, "name": "Partial Completion"},
 		{"id": 3, "name": "No Show Compensation"},
@@ -733,10 +733,10 @@ func (h *Handler) GetInterviewPaymentStatusList(w http.ResponseWriter, r *http.R
 		if err != nil {
 			slog.Error("list payment statuses failed", "error", err)
 		}
-		success(w, statuses)
+		writeJSON(w, http.StatusOK, statuses)
 		return
 	}
-	success(w, []map[string]any{
+	writeJSON(w, http.StatusOK, []map[string]any{
 		{"id": 1, "name": "Pending"}, {"id": 2, "name": "Approved"},
 		{"id": 3, "name": "Paid"}, {"id": 4, "name": "Failed"},
 		{"id": 5, "name": "Cancelled"}, {"id": 6, "name": "On Hold"},
@@ -1275,7 +1275,7 @@ func (h *Handler) StartModeratorImport(w http.ResponseWriter, r *http.Request) {
 		events, err := h.services.GoogleCal.ListEvents(r.Context(), "", now, now.AddDate(0, 3, 0))
 		if err != nil {
 			slog.Warn("google calendar list events failed", "moderatorId", moderatorID, "error", err)
-			success(w, map[string]any{
+			writeJSON(w, http.StatusOK, map[string]any{
 				"moderatorId": moderatorID,
 				"importId":    id()[:8],
 				"status":      "error",
@@ -1285,7 +1285,7 @@ func (h *Handler) StartModeratorImport(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Info("google calendar events fetched for import",
 			"moderatorId", moderatorID, "eventCount", len(events))
-		success(w, map[string]any{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"moderatorId":  moderatorID,
 			"importId":     id()[:8],
 			"status":       "completed",
@@ -1295,7 +1295,7 @@ func (h *Handler) StartModeratorImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"moderatorId": moderatorID,
 		"importId":    id()[:8],
 		"status":      "not_configured",
@@ -1323,7 +1323,7 @@ func (h *Handler) GetImportedAvailability(w http.ResponseWriter, r *http.Request
 					"source":      "google_calendar",
 				})
 			}
-			success(w, map[string]any{"moderatorId": moderatorID, "availabilities": result, "importSource": "google_calendar"})
+			writeJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": result, "importSource": "google_calendar"})
 			return
 		}
 	}
@@ -1340,10 +1340,10 @@ func (h *Handler) GetImportedAvailability(w http.ResponseWriter, r *http.Request
 				"source":    "database",
 			})
 		}
-		success(w, map[string]any{"moderatorId": moderatorID, "availabilities": result, "importSource": "database"})
+		writeJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": result, "importSource": "database"})
 		return
 	}
-	success(w, map[string]any{"moderatorId": moderatorID, "availabilities": []any{}, "importSource": "none"})
+	writeJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": []any{}, "importSource": "none"})
 }
 
 func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
@@ -1351,7 +1351,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 	moderatorID, _ := strconv.ParseInt(modStr, 10, 64)
 
 	if h.services.GoogleCal.Configured() {
-		success(w, map[string]any{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"moderatorId": moderatorID,
 			"status":      "configured",
 			"message":     "Google Calendar integration is configured and active.",
@@ -1359,7 +1359,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"moderatorId": moderatorID,
 		"status":      "not_configured",
 		"message":     "Google Calendar import not yet configured. Use manual availability entry.",
@@ -1369,7 +1369,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UnlinkImportedModerator(w http.ResponseWriter, r *http.Request) {
 	modStr := chi.URLParam(r, "moderatorId")
 	moderatorID, _ := strconv.ParseInt(modStr, 10, 64)
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"moderatorId": moderatorID,
 		"unlinked":    true,
 		"message":     "External calendar integration not active.",
@@ -1399,14 +1399,14 @@ func (h *Handler) UpdateGoogleSheetFirstDate(w http.ResponseWriter, r *http.Requ
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "google sheets update failed: " + err.Error()})
 			return
 		}
-		success(w, map[string]any{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"updated": true,
 			"message": "Google Sheets first date updated successfully.",
 		})
 		return
 	}
 
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"updated": false,
 		"message": "Google Sheets integration not configured.",
 	})
@@ -1473,7 +1473,7 @@ func (h *Handler) RecordingUploadCallback(w http.ResponseWriter, r *http.Request
 		_ = h.qsConferenceRepo.UpdateRecordingStatus(r.Context(), meetingID, "available", req.Bucket, req.Key)
 	}
 
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"meetingId":    meetingID,
 		"recorded":    true,
 		"status":      "available",
@@ -1522,7 +1522,7 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 			_, _ = h.qsConferenceRepo.CreateConferenceLink(r.Context(), req.TimeSlotID, req.ProjectID, resp.MeetingID)
 		}
 
-		created(w, map[string]any{
+		writeJSON(w, http.StatusCreated, map[string]any{
 			"meetingId":    resp.MeetingID,
 			"joinUrl":      resp.JoinURL,
 			"phoneNumber": resp.PhoneNumber,
@@ -1557,7 +1557,7 @@ func (h *Handler) CreateTranscriptionOrder(w http.ResponseWriter, r *http.Reques
 			writeJSON(w, http.StatusBadGateway, map[string]any{"error": "transcription order failed: " + err.Error()})
 			return
 		}
-		created(w, map[string]any{
+		writeJSON(w, http.StatusCreated, map[string]any{
 			"orderId":   order.OrderID,
 			"meetingId": req.MeetingID,
 			"status":    order.Status,
@@ -1576,7 +1576,7 @@ func (h *Handler) GetTranscriptionStatus(w http.ResponseWriter, r *http.Request)
 			writeJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to get status"})
 			return
 		}
-		success(w, order)
+		writeJSON(w, http.StatusOK, order)
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
@@ -1591,7 +1591,7 @@ func (h *Handler) GetTranscript(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to get transcript"})
 			return
 		}
-		success(w, map[string]any{"orderId": orderID, "transcript": transcript})
+		writeJSON(w, http.StatusOK, map[string]any{"orderId": orderID, "transcript": transcript})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
@@ -1619,7 +1619,7 @@ func (h *Handler) SendSMS(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadGateway, map[string]any{"error": "sms send failed: " + err.Error()})
 			return
 		}
-		success(w, map[string]any{"sent": true, "to": req.To})
+		writeJSON(w, http.StatusOK, map[string]any{"sent": true, "to": req.To})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "sms service not configured"})

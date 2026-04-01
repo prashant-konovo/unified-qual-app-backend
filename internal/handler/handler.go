@@ -252,7 +252,7 @@ func (h *Handler) AuthPassword(w http.ResponseWriter, r *http.Request) {
 	// When accessToken is present, the frontend should call Cognito directly.
 	// This endpoint acknowledges the request and logs the event.
 	slog.Info("password change requested", "userId", req.UserID)
-	success(w, map[string]any{"changed": true, "note": "password change delegated to Cognito"})
+	writeJSON(w, http.StatusOK, map[string]any{"changed": true, "note": "password change delegated to Cognito"})
 }
 
 // AuthMe returns the authenticated user's claims from the JWT.
@@ -262,7 +262,7 @@ func (h *Handler) AuthMe(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "not authenticated"})
 		return
 	}
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"sub":      user.Sub,
 		"email":    user.Email,
 		"username": user.Username,
@@ -288,7 +288,7 @@ func (h *Handler) AuthSSOConfig(w http.ResponseWriter, r *http.Request) {
 		c.Domain, c.SSOClientID, c.SSORedirectURI,
 	)
 
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"authorizeUrl": authorizeURL,
 		"clientId":     c.SSOClientID,
 		"redirectUri":  c.SSORedirectURI,
@@ -764,7 +764,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create project"})
 			return
 		}
-		created(w, map[string]any{"id": id, "source": "iris", "serviceCategory": "LS"})
+		writeJSON(w, http.StatusCreated, map[string]any{"id": id, "source": "iris", "serviceCategory": "LS"})
 		return
 	}
 
@@ -785,7 +785,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create project"})
 			return
 		}
-		created(w, map[string]any{"id": id, "source": "qs", "serviceCategory": "MRA"})
+		writeJSON(w, http.StatusCreated, map[string]any{"id": id, "source": "qs", "serviceCategory": "MRA"})
 		return
 	}
 
@@ -924,7 +924,7 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
-		success(w, map[string]any{"id": projectID, "updated": true, "source": "iris"})
+		writeJSON(w, http.StatusOK, map[string]any{"id": projectID, "updated": true, "source": "iris"})
 		return
 	}
 
@@ -941,7 +941,7 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
-		success(w, map[string]any{"id": projectID, "updated": true, "source": "qs"})
+		writeJSON(w, http.StatusOK, map[string]any{"id": projectID, "updated": true, "source": "qs"})
 		return
 	}
 
@@ -966,7 +966,7 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "archive failed"})
 			return
 		}
-		success(w, map[string]any{"archived": true, "id": projectID, "source": "qs"})
+		writeJSON(w, http.StatusOK, map[string]any{"archived": true, "id": projectID, "source": "qs"})
 		return
 	}
 
@@ -977,7 +977,7 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	success(w, map[string]any{"archived": true, "id": projectID, "source": "iris"})
+	writeJSON(w, http.StatusOK, map[string]any{"archived": true, "id": projectID, "source": "iris"})
 }
 
 // Null-safe helpers for JSON serialization
@@ -1072,7 +1072,7 @@ func (h *Handler) ListSurveys(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		out = append(out, surveyToMap(&row))
 	}
-	successList(w, out, len(out))
+	writeJSON(w, http.StatusOK, out)
 }
 
 type createSurveyRequest struct {
@@ -1114,10 +1114,10 @@ func (h *Handler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
 	}
 	row, err := h.qsSurveyRepo.GetByID(ctx, newID)
 	if err != nil || row == nil {
-		created(w, map[string]any{"id": fmt.Sprintf("%d", newID)})
+		writeJSON(w, http.StatusCreated, map[string]any{"id": fmt.Sprintf("%d", newID)})
 		return
 	}
-	created(w, surveyToMap(row))
+	writeJSON(w, http.StatusCreated, surveyToMap(row))
 }
 
 func (h *Handler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
@@ -1150,10 +1150,10 @@ func (h *Handler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
 	}
 	row, err := h.qsSurveyRepo.GetByID(ctx, surveyID)
 	if err != nil || row == nil {
-		success(w, map[string]any{"id": sid, "updatedAt": now()})
+		writeJSON(w, http.StatusOK, map[string]any{"id": sid, "updatedAt": now()})
 		return
 	}
-	success(w, surveyToMap(row))
+	writeJSON(w, http.StatusOK, surveyToMap(row))
 }
 
 func (h *Handler) DeleteSurvey(w http.ResponseWriter, r *http.Request) {
@@ -1173,7 +1173,7 @@ func (h *Handler) DeleteSurvey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete survey"})
 		return
 	}
-	success(w, map[string]any{"deleted": true})
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 func (h *Handler) GetPublicSurvey(w http.ResponseWriter, r *http.Request) {
@@ -1198,7 +1198,7 @@ func (h *Handler) GetPublicSurvey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 		return
 	}
-	success(w, surveyToMap(row))
+	writeJSON(w, http.StatusOK, surveyToMap(row))
 }
 
 // ──────────────────────────────────────────────
@@ -1216,13 +1216,13 @@ func (h *Handler) GetSurveyResponses(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SubmitSurveyResponse(w http.ResponseWriter, r *http.Request) {
-	created(w, map[string]any{
+	writeJSON(w, http.StatusCreated, map[string]any{
 		"id": "resp-" + id()[:8], "status": "qualified", "submittedAt": now(),
 	})
 }
 
 func (h *Handler) SubmitParticipantSurvey(w http.ResponseWriter, r *http.Request) {
-	created(w, map[string]any{
+	writeJSON(w, http.StatusCreated, map[string]any{
 		"id": "resp-" + id()[:8], "status": "qualified", "submittedAt": now(),
 	})
 }
@@ -1406,7 +1406,7 @@ func (h *Handler) CreateTimeslot(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	created(w, map[string]any{"id": tsID, "projectId": body.ProjectID, "statusId": 1, "source": "qs"})
+	writeJSON(w, http.StatusCreated, map[string]any{"id": tsID, "projectId": body.ProjectID, "statusId": 1, "source": "qs"})
 }
 
 func (h *Handler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
@@ -1491,7 +1491,7 @@ func (h *Handler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	success(w, result)
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) UpdateTimeslot(w http.ResponseWriter, r *http.Request) {
@@ -1550,7 +1550,7 @@ func (h *Handler) UpdateTimeslot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	success(w, map[string]any{"id": tsID, "updated": true, "source": "qs"})
+	writeJSON(w, http.StatusOK, map[string]any{"id": tsID, "updated": true, "source": "qs"})
 }
 
 func (h *Handler) DeleteTimeslot(w http.ResponseWriter, r *http.Request) {
@@ -1572,7 +1572,7 @@ func (h *Handler) DeleteTimeslot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	success(w, map[string]any{"deleted": true, "id": tsID})
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": tsID})
 }
 
 // ──────────────────────────────────────────────
@@ -1743,7 +1743,7 @@ func (h *Handler) CreateModerator(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create moderator"})
 		return
 	}
-	created(w, map[string]any{
+	writeJSON(w, http.StatusCreated, map[string]any{
 		"id":        uid,
 		"firstName": req.FirstName,
 		"lastName":  req.LastName,
@@ -1875,7 +1875,7 @@ func (h *Handler) UpdateModerator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	success(w, map[string]any{"updated": true, "id": nid})
+	writeJSON(w, http.StatusOK, map[string]any{"updated": true, "id": nid})
 }
 
 func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
@@ -1894,7 +1894,7 @@ func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete moderator"})
 		return
 	}
-	success(w, map[string]any{"deleted": true, "id": modID})
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": modID})
 }
 
 func (h *Handler) BulkUploadModerators(w http.ResponseWriter, r *http.Request) {
@@ -2081,7 +2081,7 @@ func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	created(w, map[string]any{"id": respID, "source": "qs"})
+	writeJSON(w, http.StatusCreated, map[string]any{"id": respID, "source": "qs"})
 }
 
 func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
@@ -2155,7 +2155,7 @@ func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
 		result["contacts"] = contacts
 	}
 
-	success(w, result)
+	writeJSON(w, http.StatusOK, result)
 }
 
 // ──────────────────────────────────────────────
@@ -2238,7 +2238,7 @@ func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 	// Booking creation is handled via ScheduleInterview which links respondent to timeslot
-	created(w, map[string]any{"message": "use POST /interviews/schedule to create bookings"})
+	writeJSON(w, http.StatusCreated, map[string]any{"message": "use POST /interviews/schedule to create bookings"})
 }
 
 func (h *Handler) GetBookingsByUser(w http.ResponseWriter, r *http.Request) {
@@ -2290,7 +2290,7 @@ func (h *Handler) UpdateBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	success(w, map[string]any{"id": tsID, "updated": true, "source": "qs"})
+	writeJSON(w, http.StatusOK, map[string]any{"id": tsID, "updated": true, "source": "qs"})
 }
 
 func (h *Handler) UpdateBookingReward(w http.ResponseWriter, r *http.Request) {
@@ -2320,7 +2320,7 @@ func (h *Handler) UpdateBookingReward(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to update reward"})
 		return
 	}
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"id":           bookingID,
 		"rewardPoints": req.RewardPoints,
 		"rewardStatus": req.RewardStatus,
@@ -2364,7 +2364,7 @@ func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
-	created(w, map[string]any{"message": "subscription creation not yet implemented"})
+	writeJSON(w, http.StatusCreated, map[string]any{"message": "subscription creation not yet implemented"})
 }
 
 func (h *Handler) GetSubscription(w http.ResponseWriter, r *http.Request) {
@@ -2384,7 +2384,7 @@ func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{"deleted": true})
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 // ──────────────────────────────────────────────
@@ -2415,13 +2415,13 @@ func (h *Handler) GetWaitingQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) AddToWaitingQueue(w http.ResponseWriter, r *http.Request) {
-	created(w, map[string]any{
+	writeJSON(w, http.StatusCreated, map[string]any{
 		"id": "wq-" + id()[:8], "status": "waiting", "waitingSince": now(),
 	})
 }
 
 func (h *Handler) RemoveFromWaitingQueue(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{"deleted": true})
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 func (h *Handler) TriggerMatching(w http.ResponseWriter, r *http.Request) {
@@ -2469,7 +2469,7 @@ func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	created(w, map[string]any{
+	writeJSON(w, http.StatusCreated, map[string]any{
 		"timeSlotId": body.TimeSlotID,
 		"statusId":   2,
 		"status":     "PENDING",
@@ -2520,7 +2520,7 @@ func (h *Handler) CancelInterview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	success(w, map[string]any{"timeSlotId": tsID, "statusId": cancelStatusID, "status": "CANCELLED"})
+	writeJSON(w, http.StatusOK, map[string]any{"timeSlotId": tsID, "statusId": cancelStatusID, "status": "CANCELLED"})
 }
 
 func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
@@ -2578,7 +2578,7 @@ func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	success(w, map[string]any{"timeSlotId": tsID, "statusId": rescheduleStatusID, "status": "RESCHEDULED"})
+	writeJSON(w, http.StatusOK, map[string]any{"timeSlotId": tsID, "statusId": rescheduleStatusID, "status": "RESCHEDULED"})
 }
 
 // ──────────────────────────────────────────────
@@ -2627,7 +2627,7 @@ func (h *Handler) GetModeratorAvailability(w http.ResponseWriter, r *http.Reques
 			"isImported":  false,
 		})
 	}
-	success(w, map[string]any{"availabilities": items})
+	writeJSON(w, http.StatusOK, map[string]any{"availabilities": items})
 }
 
 func (h *Handler) PostModeratorAvailability(w http.ResponseWriter, r *http.Request) {
@@ -2672,7 +2672,7 @@ func (h *Handler) PostModeratorAvailability(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	created(w, map[string]any{
+	writeJSON(w, http.StatusCreated, map[string]any{
 		"id":          avail.ID,
 		"moderatorId": avail.ModeratorID,
 		"startTime":   avail.StartTime.Format(time.RFC3339),
@@ -2700,11 +2700,11 @@ func (h *Handler) DeleteModeratorAvailability(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	success(w, map[string]any{"deleted": true, "availabilityId": nid})
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "availabilityId": nid})
 }
 
 func (h *Handler) GetTimeslotModeratorOptions(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"availableModerators": []map[string]any{
 			{"id": "mod-201", "firstName": "Jane", "lastName": "Smith",
 				"hasConflict": false, "availabilityId": 801},
@@ -2839,15 +2839,15 @@ func extractBearerToken(r *http.Request) string {
 // ──────────────────────────────────────────────
 
 func (h *Handler) CreatePayment(w http.ResponseWriter, r *http.Request) {
-	created(w, map[string]any{"paymentId": 7001, "status": "PENDING"})
+	writeJSON(w, http.StatusCreated, map[string]any{"paymentId": 7001, "status": "PENDING"})
 }
 
 func (h *Handler) CreateCustomHonorarium(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{"timeSlotId": 301, "honorarium": 200.00, "reasonId": 2})
+	writeJSON(w, http.StatusOK, map[string]any{"timeSlotId": 301, "honorarium": 200.00, "reasonId": 2})
 }
 
 func (h *Handler) GetPaymentStatusList(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"payments": []map[string]any{
 			{"timeSlotId": 301, "respondentName": "Alice Johnson", "amount": 150.00,
 				"currency": "USD", "status": "PENDING", "source": "QS",
@@ -2861,7 +2861,7 @@ func (h *Handler) GetPaymentStatusList(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) GetLocales(w http.ResponseWriter, r *http.Request) {
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"locales": []map[string]string{
 			{"code": "en_us", "name": "English (US)"},
 			{"code": "es_es", "name": "Spanish"},
@@ -2896,7 +2896,7 @@ func (h *Handler) UpdateTopicTranslations(w http.ResponseWriter, r *http.Request
 				slog.Error("update translation failed", "topicId", t.TopicID, "error", err)
 			}
 		}
-		success(w, map[string]any{"projectId": projectID, "updatedCount": len(req.Translations)})
+		writeJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "updatedCount": len(req.Translations)})
 		return
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
@@ -2921,7 +2921,7 @@ func (h *Handler) GetEmailTemplate(w http.ResponseWriter, r *http.Request) {
 			if tpl != nil {
 				tpl["source"] = "iris"
 				tpl["templateType"] = templateType
-				success(w, tpl)
+				writeJSON(w, http.StatusOK, tpl)
 				return
 			}
 		}
@@ -2934,7 +2934,7 @@ func (h *Handler) GetEmailTemplate(w http.ResponseWriter, r *http.Request) {
 		}
 		tpl, _ := h.qsAnswerRepo.GetCommunicationTemplate(r.Context(), name)
 		if tpl != nil {
-			success(w, map[string]any{
+			writeJSON(w, http.StatusOK, map[string]any{
 				"subject": tpl.Subject, "body": tpl.Body,
 				"templateType": name, "source": "qs",
 			})
@@ -2942,7 +2942,7 @@ func (h *Handler) GetEmailTemplate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"subject":      "Your Interview Has Been Rescheduled",
 		"body":         "<html><body><p>Dear {{.Name}}, your interview has been rescheduled.</p></body></html>",
 		"templateType": templateType,
@@ -2960,7 +2960,7 @@ func (h *Handler) SendReminder(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		// If no body, treat as simple reminder
-		success(w, map[string]any{"sent": true, "recipientCount": 0})
+		writeJSON(w, http.StatusOK, map[string]any{"sent": true, "recipientCount": 0})
 		return
 	}
 
@@ -2984,7 +2984,7 @@ func (h *Handler) SendReminder(w http.ResponseWriter, r *http.Request) {
 			"type", req.Type, "recipients", len(req.Recipients), "projectId", req.ProjectID)
 	}
 
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"sent": true, "recipientCount": len(req.Recipients),
 		"type": req.Type, "projectId": req.ProjectID,
 	})
@@ -3055,7 +3055,7 @@ func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	successList(w, map[string]any{"users": allUsers}, len(allUsers))
+	writeJSON(w, http.StatusOK, map[string]any{"users": allUsers})
 }
 
 func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
@@ -3086,7 +3086,7 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed: " + err.Error()})
 			return
 		}
-		created(w, map[string]any{
+		writeJSON(w, http.StatusCreated, map[string]any{
 			"id": uid, "email": req.Email, "firstName": req.FirstName, "lastName": req.LastName,
 			"roles": req.RoleIDs, "source": "qs",
 			"cognitoStatus": "Cognito user must be created separately via Cognito console or AWS CLI",
