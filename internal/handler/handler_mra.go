@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	qs "github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -92,7 +93,8 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 // MRA #35 — CancelRescheduleAction
 // POST /v1/project/{pid}/time_slot/{tsId}/{action}
 // Legacy: cancel-resch-interview.js
-// action = "cancel" → status_id 6, "reschedule" → status_id 7
+// Actions: cancel→5(ModeratorCancel), reschedule→3(ModeratorReschedule),
+//   pmCancel→12, pmReschedule→11, respondentReschedule→4, respondentCancel→6
 // ──────────────────────────────────────────────
 
 func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request) {
@@ -104,47 +106,103 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var statusID int
-	switch action {
-	case "cancel":
-		statusID = 6 // Cancelled
-	case "reschedule":
-		statusID = 7 // Rescheduled
-	default:
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "action must be cancel or reschedule"})
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "timeslot repository not available",
+			"errorMessage": "An error occured while rescheduling or canceling the interview",
+		})
 		return
 	}
 
-	if h.qsTimeSlotRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "timeslot repository not available"})
+	// Map action to status_id matching legacy exactly
+	var statusID int
+	switch action {
+	case "cancel":
+		statusID = 5 // ModeratorCancel
+	case "reschedule":
+		statusID = 3 // ModeratorReschedule
+	case "pmCancel":
+		statusID = 12 // ProjectManagerCancel
+	case "pmReschedule":
+		statusID = 11 // ProjectManagerReschedule
+	case "respondentReschedule":
+		statusID = 4 // RespondentReschedule
+	case "respondentCancel":
+		statusID = 6 // RespondentCancel
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "action must be cancel, reschedule, pmCancel, pmReschedule, respondentReschedule, or respondentCancel"})
 		return
 	}
 
 	ctx := r.Context()
 
-	if err := h.qsTimeSlotRepo.Update(ctx, tsID, map[string]any{"status_id": statusID}); err != nil {
-		slog.Error("cancel/reschedule update failed", "tsId", tsID, "action", action, "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
-		return
-	}
-
+	// Fetch timeslot first (legacy does this before any action)
 	ts, err := h.qsTimeSlotRepo.GetByID(ctx, tsID)
 	if err != nil || ts == nil {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "timeslot not found after update"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "timeslot not found",
+			"errorMessage": "An error occured while rescheduling or canceling the interview",
+		})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":               ts.ID,
-		"projectId":        ts.ProjectID,
-		"startTime":        ts.StartTime,
-		"endTime":          ts.EndTime,
-		"confirmed":        ts.Confirmed,
-		"conferenceHash":   nullStr(ts.ConferenceHash),
-		"participantHash":  nullStr(ts.ParticipantHash),
-		"statusId":         ts.StatusID,
-		"duration":         ts.Duration,
-		"isInvalid":        ts.IsInvalid,
-		"modifiedOn":       ts.ModifiedOn,
-	})
+	// Legacy: if timeslot already cancelled/rescheduled (statusId in [3,4,5,6,11,12]), return 200 with timeslot data (no-op)
+	alreadyActioned := map[int]bool{3: true, 4: true, 5: true, 6: true, 11: true, 12: true}
+	if alreadyActioned[ts.StatusID] {
+		writeJSON(w, http.StatusOK, buildTimeSlotResponse(ts))
+		return
+	}
+
+	// PARTIAL: Legacy checks moderator external calendar import status.
+	// If 'In Progress' and action != respondentReschedule, returns 405.
+	// Full implementation requires moderator_external_calendar table query.
+
+	// Parse request body (legacy parses body for responderLanguage etc.)
+	var body struct {
+		ResponderLanguage string `json:"responderLanguage"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+
+	// Update status_id
+	if err := h.qsTimeSlotRepo.Update(ctx, tsID, map[string]any{"status_id": statusID}); err != nil {
+		slog.Error("cancel/reschedule update failed", "tsId", tsID, "action", action, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while rescheduling or canceling the interview",
+		})
+		return
+	}
+
+	// PARTIAL: Full implementation requires:
+	// - Send cancel/reschedule email to respondent (SES, template rendering, timezone conversion)
+	// - Send PM notification email (if not respondentReschedule and PM allows email)
+	// - handleCancelOrRescheduleService (moderator availability cleanup, Google Calendar removal)
+	slog.Info("CancelRescheduleAction (PARTIAL)", "tsId", tsID, "action", action, "statusId", statusID)
+
+	// Re-fetch to return updated timeslot — legacy returns timeSlotRes.records[0]
+	tsUpdated, err := h.qsTimeSlotRepo.GetByID(ctx, tsID)
+	if err != nil || tsUpdated == nil {
+		// Fallback: update was successful, return original with new statusId
+		ts.StatusID = statusID
+		writeJSON(w, http.StatusOK, buildTimeSlotResponse(ts))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, buildTimeSlotResponse(tsUpdated))
+}
+
+// buildTimeSlotResponse returns the timeslot fields matching legacy getTimeSlotByIdForCancelReschedule response.
+func buildTimeSlotResponse(ts *qs.TimeSlot) map[string]any {
+	return map[string]any{
+		"id":                       ts.ID,
+		"projectId":                ts.ProjectID,
+		"isInvalidatedInterview":   ts.IsInvalidatedInterview,
+		"isInvalidateEmailSent":    ts.IsInvalidateEmailSent,
+		"invalidationReasonCode":   nullStr(ts.InvalidationReasonCode),
+		"startTime":                ts.StartTime,
+		"endTime":                  ts.EndTime,
+		"statusId":                 ts.StatusID,
+		"duration":                 ts.Duration,
+		"isInvalid":                ts.IsInvalid,
+	}
 }
