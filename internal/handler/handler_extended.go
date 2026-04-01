@@ -1924,3 +1924,33 @@ func (h *Handler) CreateProjectMRA(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, record)
 }
+
+// GetProjectMRA handles GET /project/get-project-details/{project_id} (MRA).
+// Contract-identical with legacy QS Tool: complex JOIN returning 24-field flat project object.
+// Response: getProjectDetails.records[0] equivalent.
+func (h *Handler) GetProjectMRA(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	if h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
+		return
+	}
+
+	record, err := h.qsProjectRepo.GetProjectDetailsMRA(r.Context(), projectID)
+	if err != nil {
+		slog.Error("get project details failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	if record == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "project not found"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, record)
+}

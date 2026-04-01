@@ -394,6 +394,105 @@ func (r *ProjectRepo) GetSalesForceJobNumberText(ctx context.Context, sfProjectI
 	return jobNumber.String, nil
 }
 
+// GetProjectDetailsMRA returns project details matching the legacy getProjectDetails query exactly.
+// Complex JOIN: project + project_status + survey + participant_group + external_client +
+// salesforce_account + time_slot counts + topics (language filtered).
+func (r *ProjectRepo) GetProjectDetailsMRA(ctx context.Context, projectID int64) (map[string]any, error) {
+	q := `SELECT project.id, participant_group.id as participantGroupId, project.name,
+	      project.client_id as clientId, project.created_on as createdOn,
+	      project.created_by as createdBy, project.modified_on as modifiedOn,
+	      project.qual_moderator_id as qualModeratorId,
+	      project.project_status_id as projectStatusId,
+	      project.interview_length as interviewLength,
+	      project.sample_size as sampleSize,
+	      project.salesforce_job_number as salesForceJobNumber,
+	      project.external_survey_id as externalSurveyId,
+	      project_status.name as projectStatus,
+	      survey.id as surveyId,
+	      scheduler_generated as schedulerGenerated,
+	      ifnull(c.scheduled, 0) as scheduled,
+	      ifnull(r.completed, 0) as completed,
+	      post_screenin_buffer as postScreeninBuffer,
+	      project.moderator_buffer as moderatorBuffer,
+	      project.shghash,
+	      salesaccount.salesforce_account_id as salesForceAccountId,
+	      salesaccount.name as salesForceAccountName,
+	      t.topic_name as topicName
+	      FROM project
+	      INNER JOIN project_status ON project.project_status_id = project_status.id
+	      INNER JOIN survey ON project.id = survey.project_id
+	      INNER JOIN participant_group ON survey.id = participant_group.survey_id
+	      LEFT JOIN external_client exc ON exc.id = project.project_external_client
+	      LEFT JOIN salesforce_account salesaccount ON salesaccount.salesforce_account_id = exc.external_client_account_id
+	      LEFT JOIN (SELECT project_id as time_slot_project_id, COUNT(*) as scheduled
+	                 FROM time_slot WHERE time_slot.status_id=2 AND time_slot.is_invalid=false
+	                 AND time_slot.end_time >= UTC_TIMESTAMP()
+	                 GROUP BY project_id ORDER BY scheduled DESC) c ON c.time_slot_project_id = project.id
+	      LEFT JOIN (SELECT project_id as time_slot_project_id, COUNT(*) as completed
+	                 FROM time_slot WHERE time_slot.status_id=9 AND time_slot.is_invalid=false
+	                 AND time_slot.is_invalidated_interview = 0
+	                 GROUP BY project_id ORDER BY completed DESC) r ON r.time_slot_project_id = project.id
+	      LEFT JOIN (SELECT topic_name, project_id FROM topics t
+	                 JOIN language_localisation l ON t.language_id = l.id
+	                 WHERE langCode_countryCode = 'en_us') t ON t.project_id = project.id
+	      WHERE project.id = ?`
+
+	var (
+		id, participantGroupID                                                int64
+		clientID, createdBy, qualModeratorID, projectStatusID, surveyID      sql.NullInt64
+		interviewLength, sampleSize, scheduled, completed                    sql.NullInt64
+		name, projectStatus                                                  string
+		salesForceJobNumber, externalSurveyID, postScreeninBuffer            sql.NullString
+		moderatorBuffer, shghash, salesForceAccountId, salesForceAccountName sql.NullString
+		topicName                                                            sql.NullString
+		createdOn, modifiedOn                                                sql.NullString
+		schedulerGenerated                                                   sql.NullBool
+	)
+
+	err := r.db.QueryRowContext(ctx, q, projectID).Scan(
+		&id, &participantGroupID, &name, &clientID, &createdOn, &createdBy,
+		&modifiedOn, &qualModeratorID, &projectStatusID, &interviewLength,
+		&sampleSize, &salesForceJobNumber, &externalSurveyID, &projectStatus,
+		&surveyID, &schedulerGenerated, &scheduled, &completed,
+		&postScreeninBuffer, &moderatorBuffer, &shghash,
+		&salesForceAccountId, &salesForceAccountName, &topicName,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get project details mra %d: %w", projectID, err)
+	}
+
+	record := map[string]any{
+		"id":                    id,
+		"participantGroupId":    participantGroupID,
+		"name":                  name,
+		"clientId":              clientID.Int64,
+		"createdOn":             createdOn.String,
+		"createdBy":             createdBy.Int64,
+		"modifiedOn":            modifiedOn.String,
+		"qualModeratorId":       qualModeratorID.Int64,
+		"projectStatusId":       projectStatusID.Int64,
+		"interviewLength":       interviewLength.Int64,
+		"sampleSize":            sampleSize.Int64,
+		"salesForceJobNumber":   salesForceJobNumber.String,
+		"externalSurveyId":      externalSurveyID.String,
+		"projectStatus":         projectStatus,
+		"surveyId":              surveyID.Int64,
+		"schedulerGenerated":    schedulerGenerated.Bool,
+		"scheduled":             scheduled.Int64,
+		"completed":             completed.Int64,
+		"postScreeninBuffer":    postScreeninBuffer.String,
+		"moderatorBuffer":       moderatorBuffer.String,
+		"shghash":               shghash.String,
+		"salesForceAccountId":   salesForceAccountId.String,
+		"salesForceAccountName": salesForceAccountName.String,
+		"topicName":             topicName.String,
+	}
+	return record, nil
+}
+
 // Update modifies mutable QS project fields.
 func (r *ProjectRepo) Update(ctx context.Context, id int64, fields map[string]any) error {
 	if len(fields) == 0 {
