@@ -17,9 +17,12 @@ import (
 
 func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "user_id")
-	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	_, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid user_id"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "invalid user_id",
+			"errorMessage": "invalid user_id",
+		})
 		return
 	}
 
@@ -28,31 +31,19 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 		Token    string `json:"token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
 		return
 	}
 
 	// Password changes are handled by Cognito; log the request.
-	slog.Info("patch user password requested (admin)", "userId", userID)
+	slog.Info("patch user password requested (admin)", "userId", userIDStr)
 
-	if h.qsUserRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "user repository not available"})
-		return
-	}
-
-	u, err := h.qsUserRepo.GetByID(r.Context(), userID)
-	if err != nil || u == nil {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "user not found"})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":        u.ID,
-		"firstName": nullStr(u.FirstName),
-		"lastName":  nullStr(u.LastName),
-		"email":     nullStr(u.Email),
-		"roleIds":   u.RoleIDs,
-	})
+	// Legacy returns parsedJson[0] on Lambda proxy result object → undefined → empty body.
+	// Match with empty response for contract-identical compliance.
+	writeJSON(w, http.StatusOK, map[string]any{})
 }
 
 // ──────────────────────────────────────────────
