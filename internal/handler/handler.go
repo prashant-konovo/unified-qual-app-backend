@@ -792,6 +792,9 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
+// GetProject returns a project by ID.
+// Contract-identical with legacy InCrowdAPI: GET /v1/project/:id
+// Response: flat project adminJson object
 func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	projectID, err := strconv.ParseInt(idStr, 10, 64)
@@ -817,7 +820,7 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 			for _, t := range topics {
 				topicNames = append(topicNames, t.TopicName)
 			}
-			success(w, map[string]any{
+			writeJSON(w, http.StatusOK, map[string]any{
 				"id":                    p.ID,
 				"name":                  p.Name,
 				"externalSurveyId":      nullStr(p.ExternalSurveyID),
@@ -850,7 +853,7 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if p != nil {
-			success(w, map[string]any{
+			writeJSON(w, http.StatusOK, map[string]any{
 				"id":                  p.ID,
 				"name":                p.Name,
 				"description":         nullStr(p.Description),
@@ -2715,6 +2718,9 @@ func (h *Handler) GetTimeslotModeratorOptions(w http.ResponseWriter, r *http.Req
 // Conference (LLD endpoints)
 // ──────────────────────────────────────────────
 
+// MeetingAction handles meeting actions (end, start_recording, etc).
+// Contract-identical with legacy InCrowdAPI: POST /v1/meeting/:meetingId/:action
+// Response: {} for end/disableAutomute actions
 func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 	meetingID := chi.URLParam(r, "meetingId")
 	action := chi.URLParam(r, "action")
@@ -2752,7 +2758,7 @@ func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 			meta["action"] = action
 			meta["actionResult"] = "success"
 			meta["actionTimestamp"] = now()
-			success(w, meta)
+			writeJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
@@ -2764,17 +2770,20 @@ func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 			meta["action"] = action
 			meta["actionResult"] = "success"
 			meta["actionTimestamp"] = now()
-			success(w, meta)
+			writeJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
 
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"meetingId": meetingID, "action": action,
 		"result": "success", "timestamp": now(),
 	})
 }
 
+// MeetingUniversalJoin handles universal join for a meeting.
+// Contract-identical with legacy InCrowdAPI: POST /v1/meeting/:meetingId/universal_join
+// Response: passthrough from conference service
 func (h *Handler) MeetingUniversalJoin(w http.ResponseWriter, r *http.Request) {
 	meetingID := chi.URLParam(r, "meetingId")
 	bearerToken := extractBearerToken(r)
@@ -2784,7 +2793,7 @@ func (h *Handler) MeetingUniversalJoin(w http.ResponseWriter, r *http.Request) {
 		joinResp, err := h.services.Conference.UniversalJoin(r.Context(), meetingID, bearerToken)
 		if err == nil && joinResp != nil {
 			joinResp["joinTimestamp"] = now()
-			success(w, joinResp)
+			writeJSON(w, http.StatusOK, joinResp)
 			return
 		}
 		slog.Warn("conference universal join failed", "meetingId", meetingID, "error", err)
@@ -2796,12 +2805,12 @@ func (h *Handler) MeetingUniversalJoin(w http.ResponseWriter, r *http.Request) {
 		if err == nil && meta != nil {
 			meta["joinUrl"] = fmt.Sprintf("https://chime.aws/join/%s", meetingID)
 			meta["joinTimestamp"] = now()
-			success(w, meta)
+			writeJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
 
-	success(w, map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"meetingId":  meetingID,
 		"joinUrl":    fmt.Sprintf("https://chime.aws/join/%s", meetingID),
 		"attendeeId": "att-" + id()[:8],
