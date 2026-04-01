@@ -406,30 +406,45 @@ func (h *Handler) CheckUserCommPreference(w http.ResponseWriter, r *http.Request
 
 func (h *Handler) UnsubscribeUser(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "userId")
-	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+
+	var req struct {
+		PmUserID            string `json:"pmUserId"`
+		AllowContactByEmail int    `json:"allowContactByEmail"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
+		return
+	}
+
+	// Legacy: if pmUserId is empty, default to userId
+	if req.PmUserID == "" {
+		req.PmUserID = userIDStr
+	}
+
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "no database available",
+			"errorMessage": "no database available",
+		})
+		return
+	}
+
+	// Legacy: 4-query transaction on user_communication_preferences using cognito_user_id
+	result, err := h.qsUserRepo.UpdateUserCommPreference(r.Context(), userIDStr, req.PmUserID, req.AllowContactByEmail)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid user id"})
-		return
-	}
-	source := h.resolveSource(r)
-
-	if (source == "" || source == "qs") && h.qsUserRepo != nil {
-		if err := h.qsUserRepo.SetUnsubscribed(r.Context(), userID); err != nil {
-			slog.Error("unsubscribe failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "unsubscribe failed"})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"userId": userID, "unsubscribed": true, "source": "qs"})
+		slog.Error("unsubscribe failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
 		return
 	}
 
-	if source == "iris" && h.db.IRIS != nil {
-		_, _ = h.db.IRIS.ExecContext(r.Context(),
-			"UPDATE ic_user SET comm_opt_out = 1 WHERE id = ?", userID)
-		writeJSON(w, http.StatusOK, map[string]any{"userId": userID, "unsubscribed": true, "source": "iris"})
-		return
-	}
-	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	// Legacy returns full transaction result array
+	writeJSON(w, http.StatusOK, result)
 }
 
 // ──────────────────────────────────────────────

@@ -402,14 +402,88 @@ func (r *UserRepo) GetUserCommPreference(ctx context.Context, userID int64) ([]m
 	return records, rows.Err()
 }
 
-// SetUnsubscribed marks a user as unsubscribed (terms_accepted = 0).
-func (r *UserRepo) SetUnsubscribed(ctx context.Context, userID int64) error {
-	_, err := r.db.ExecContext(ctx, "UPDATE user SET terms_accepted = 0 WHERE id = ?", userID)
+// UpdateUserCommPreference performs the legacy 4-query transaction on user_communication_preferences.
+// Uses cognito_user_id as the lookup key (matching legacy QS Tool behavior).
+func (r *UserRepo) UpdateUserCommPreference(ctx context.Context, cognitoUserID string, pmUserID string, allowContactByEmail int) ([]map[string]any, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("unsubscribe user %d: %w", userID, err)
+		return nil, fmt.Errorf("begin tx: %w", err)
 	}
-	slog.InfoContext(ctx, "unsubscribed QS user", "id", userID)
-	return nil
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// 1. SET created_by where null
+	res1, err := tx.ExecContext(ctx,
+		"UPDATE user_communication_preferences SET created_by = ? WHERE created_by IS NULL AND cognito_user_id = ?",
+		pmUserID, cognitoUserID)
+	if err != nil {
+		return nil, fmt.Errorf("update created_by: %w", err)
+	}
+	n1, _ := res1.RowsAffected()
+
+	// 2. SET allow_contact_by_email
+	res2, err := tx.ExecContext(ctx,
+		"UPDATE user_communication_preferences SET allow_contact_by_email = ? WHERE cognito_user_id = ?",
+		allowContactByEmail, cognitoUserID)
+	if err != nil {
+		return nil, fmt.Errorf("update allow_contact: %w", err)
+	}
+	n2, _ := res2.RowsAffected()
+
+	// 3. SET modified_by
+	res3, err := tx.ExecContext(ctx,
+		"UPDATE user_communication_preferences SET modified_by = ? WHERE cognito_user_id = ?",
+		pmUserID, cognitoUserID)
+	if err != nil {
+		return nil, fmt.Errorf("update modified_by: %w", err)
+	}
+	n3, _ := res3.RowsAffected()
+
+	// 4. SELECT *
+	rows, err := tx.QueryContext(ctx,
+		"SELECT * FROM user_communication_preferences WHERE cognito_user_id = ?", cognitoUserID)
+	if err != nil {
+		return nil, fmt.Errorf("select comm prefs: %w", err)
+	}
+	cols, _ := rows.Columns()
+	var records []map[string]any
+	for rows.Next() {
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		row := make(map[string]any, len(cols))
+		for i, col := range cols {
+			row[col] = vals[i]
+		}
+		records = append(records, row)
+	}
+	rows.Close()
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+
+	// Return transaction result array matching legacy data-api-client format
+	result := []map[string]any{
+		{"numberOfRecordsUpdated": n1},
+		{"numberOfRecordsUpdated": n2},
+		{"numberOfRecordsUpdated": n3},
+	}
+	if len(records) > 0 {
+		result = append(result, map[string]any{"records": records})
+	} else {
+		result = append(result, map[string]any{"records": []map[string]any{}})
+	}
+	return result, nil
 }
 
 // AcceptTerms sets terms_accepted = 1 for a QS user.
