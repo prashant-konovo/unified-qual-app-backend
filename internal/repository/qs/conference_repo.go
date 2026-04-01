@@ -289,3 +289,117 @@ func (r *ConferenceRepo) AddConferenceLinkMRA(ctx context.Context, projectID int
 
 	return lastResult, nil
 }
+
+// GetExistingMeetingLanguagesMRA returns language codes that already have meeting info for a project.
+func (r *ConferenceRepo) GetExistingMeetingLanguagesMRA(ctx context.Context, projectID int64) (map[string]bool, error) {
+	q := `SELECT l.langCode_countryCode
+		FROM project_meeting_translation pmt
+		JOIN language_localisation l ON l.id = pmt.language_id
+		WHERE pmt.project_id = ?`
+	rows, err := r.db.QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get existing meeting languages: %w", err)
+	}
+	defer rows.Close()
+	result := make(map[string]bool)
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			return nil, fmt.Errorf("scan language code: %w", err)
+		}
+		result[code] = true
+	}
+	return result, rows.Err()
+}
+
+// UpdateConferenceLinkMRA updates conference_invitation + project_meeting_translation
+// matching legacy updateConferenceLinkService exactly.
+// For each meetingInformation entry:
+//   - If language exists: UPDATE conference_invitation, UPDATE project.modified_on, UPDATE project_meeting_translation
+//   - If new language: INSERT project_meeting_translation, UPDATE project.modified_on
+func (r *ConferenceRepo) UpdateConferenceLinkMRA(ctx context.Context, projectID, participantGroupID int64, userID int64, conferenceLink string, meetingInformation [][]any, existingLangs map[string]bool) error {
+	langMap := map[string]int{
+		"en_us": 1, "fr_fr": 2, "fr_ca": 3,
+		"de_de": 4, "es_es": 5, "it_it": 6, "pt_br": 7,
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for _, entry := range meetingInformation {
+		if len(entry) < 2 {
+			continue
+		}
+		langCode, _ := entry[0].(string)
+		meetingInfo, _ := entry[1].(string)
+		langID, ok := langMap[langCode]
+		if !ok {
+			continue
+		}
+
+		if existingLangs[langCode] {
+			// Legacy updateConferenceLink transaction:
+			// 1. UPDATE conference_invitation SET conference_link WHERE participant_group_id
+			_, err = tx.ExecContext(ctx,
+				`UPDATE conference_invitation SET conference_link = ? WHERE participant_group_id = ?`,
+				conferenceLink, participantGroupID,
+			)
+			if err != nil {
+				return fmt.Errorf("update conference_invitation: %w", err)
+			}
+
+			// 2. UPDATE project.modified_on
+			_, err = tx.ExecContext(ctx,
+				`UPDATE project SET modified_on = NOW() WHERE id = ?`, projectID,
+			)
+			if err != nil {
+				return fmt.Errorf("update project modified_on: %w", err)
+			}
+
+			// 3. UPDATE project_meeting_translation
+			_, err = tx.ExecContext(ctx,
+				`UPDATE project_meeting_translation SET meeting_information = ? WHERE project_id = ? AND language_id = ?`,
+				meetingInfo, projectID, langID,
+			)
+			if err != nil {
+				return fmt.Errorf("update meeting translation: %w", err)
+			}
+		} else {
+			// Legacy addMeetingInfo transaction:
+			// 1. INSERT project_meeting_translation
+			_, err = tx.ExecContext(ctx,
+				`INSERT INTO project_meeting_translation(project_id, language_id, meeting_information, created_by) VALUES (?, ?, ?, ?)`,
+				projectID, langID, meetingInfo, userID,
+			)
+			if err != nil {
+				return fmt.Errorf("insert meeting translation: %w", err)
+			}
+
+			// 2. UPDATE project.modified_on
+			_, err = tx.ExecContext(ctx,
+				`UPDATE project SET modified_on = NOW() WHERE id = ?`, projectID,
+			)
+			if err != nil {
+				return fmt.Errorf("update project modified_on: %w", err)
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
+// GetPendingTimeSlotsCountMRA returns count of pending (status_id=2) non-invalidated timeslots for a project.
+func (r *ConferenceRepo) GetPendingTimeSlotsCountMRA(ctx context.Context, projectID int64) (int64, error) {
+	q := `SELECT count(*) FROM time_slot WHERE project_id = ? AND status_id = 2 AND is_invalidated_interview = 0`
+	var count int64
+	if err := r.db.QueryRowContext(ctx, q, projectID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("get pending timeslots count: %w", err)
+	}
+	return count, nil
+}

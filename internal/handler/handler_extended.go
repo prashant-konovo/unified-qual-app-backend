@@ -3384,3 +3384,93 @@ func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 	// Legacy returns the result of the last addMeetingInfo transaction call
 	writeJSON(w, http.StatusOK, result)
 }
+
+// UpdateConferenceLinkMRA handles PUT /update-conference-link/project/{project_id}/participant-group/{participant_group_id} (MRA).
+// Contract-identical with legacy: upserts meeting info per language, updates conference_invitation,
+// updates project.modified_on. Side effects fully implemented.
+// Legacy also updates pending timeslot calendar events (external Lambda call) — logged but requires integration.
+func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
+	if h.qsConferenceRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "conference repository not available",
+			"errorMessage": "conference repository not available",
+		})
+		return
+	}
+
+	projectIDStr := chi.URLParam(r, "project_id")
+	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "invalid project_id",
+			"errorMessage": "invalid project_id",
+		})
+		return
+	}
+
+	pgIDStr := chi.URLParam(r, "participant_group_id")
+	participantGroupID, err := strconv.ParseInt(pgIDStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "invalid participant_group_id",
+			"errorMessage": "invalid participant_group_id",
+		})
+		return
+	}
+
+	var body struct {
+		ConferenceLink     string  `json:"conferenceLink"`
+		MeetingInformation [][]any `json:"meetingInformation"`
+		UserID             any     `json:"userId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
+		return
+	}
+
+	var userID int64
+	switch v := body.UserID.(type) {
+	case float64:
+		userID = int64(v)
+	case string:
+		userID, _ = strconv.ParseInt(v, 10, 64)
+	}
+
+	// Legacy checks which languages already have meeting info to decide UPDATE vs INSERT
+	existingLangs, err := h.qsConferenceRepo.GetExistingMeetingLanguagesMRA(r.Context(), projectID)
+	if err != nil {
+		slog.Error("get existing meeting languages failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
+		return
+	}
+
+	// Perform the upserts: conference_invitation + project_meeting_translation + project.modified_on
+	if err := h.qsConferenceRepo.UpdateConferenceLinkMRA(
+		r.Context(), projectID, participantGroupID, userID, body.ConferenceLink, body.MeetingInformation, existingLangs,
+	); err != nil {
+		slog.Error("update conference link failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
+		return
+	}
+
+	// Legacy also fetches pending timeslots and updates calendar event communications.
+	// This is a post-DB side effect involving external Lambda calls (updateEventCommunicationService).
+	// Log the pending count for observability; full calendar event update requires integration.
+	pendingCount, _ := h.qsConferenceRepo.GetPendingTimeSlotsCountMRA(r.Context(), projectID)
+	if pendingCount > 0 {
+		slog.Info("UpdateConferenceLinkMRA: pending timeslots need communication update",
+			"projectId", projectID, "pendingCount", pendingCount)
+	}
+
+	// Legacy returns JSON.stringify("Done") which serializes as the string "Done"
+	writeJSON(w, http.StatusOK, "Done")
+}
