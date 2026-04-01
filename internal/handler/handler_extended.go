@@ -2599,7 +2599,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 
 	bufferHours := 0.0
 	if postScreeninBuffer != "" {
-		fmt.Sscanf(postScreeninBuffer, "%f", &bufferHours)
+		_, _ = fmt.Sscanf(postScreeninBuffer, "%f", &bufferHours)
 	}
 
 	// 2. Get moderator time ranges per project
