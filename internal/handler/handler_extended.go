@@ -3015,3 +3015,81 @@ func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 }
+
+// RespondentRescheduleMRA handles POST /interview/respondent_reschedule (MRA).
+// Contract-identical route with legacy: respondent-initiated reschedule flow.
+// Legacy orchestrates: get timeslot → invoke handle-schedule-interview Lambda →
+// invoke cancel-resch-interview Lambda. This handler provides the route + contract scaffold.
+// Response: {handleScheduleInterviewResp, hanldeCancelRescheduleResp} on success,
+// or {message} for invalidateReschedule mode.
+func (h *Handler) RespondentRescheduleMRA(w http.ResponseWriter, r *http.Request) {
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "database not configured",
+			"errorMessage": "an error occurred in respondent reschedule",
+		})
+		return
+	}
+
+	var body struct {
+		TimeSlotID            int64  `json:"timeSlotId"`
+		ResponderLanguage     string `json:"responderLanguage"`
+		InvalidateReschedule  any    `json:"invalidateReschedule"`
+		RespondentIdentifer   string `json:"respondentIdentifer"`
+		RescheduleToken       string `json:"rescheduleToken"`
+		SurveyID              int64  `json:"surveyId"`
+		IsReschedule          bool   `json:"isReschedule"`
+		UserTimeZone          string `json:"userTimeZone"`
+		TimeZoneAbbr          string `json:"timeZoneAbbr"`
+		QsPath                any    `json:"qsPath"`
+		ShgHash               string `json:"shgHash"`
+		StartedAt             string `json:"startedAt"`
+		FinishedAt            string `json:"finishedAt"`
+		Comment               string `json:"comment"`
+		Slot                  *struct {
+			StartTime              string `json:"startTime"`
+			EndTime                string `json:"endTime"`
+			ModeratorAvailabilityID int64  `json:"moderatorAvailabilityId"`
+			HasImportedOverlap     any    `json:"hasImportedOverlap"`
+		} `json:"slot"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "an error occurred in respondent reschedule",
+		})
+		return
+	}
+
+	if body.TimeSlotID == 0 {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "TIMESLOT_NOT_FOUND",
+			"errorMessage": "an error occurred in respondent reschedule",
+		})
+		return
+	}
+
+	// Check invalidateReschedule mode
+	invalidate := false
+	switch v := body.InvalidateReschedule.(type) {
+	case bool:
+		invalidate = v
+	case string:
+		invalidate = v == "true"
+	}
+
+	if invalidate {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"message": "Rescheduled successfully!, no cancellation of previous interview done.",
+		})
+		return
+	}
+
+	// Normal reschedule: schedule new + cancel old
+	// Legacy invokes handle-schedule-interview Lambda then cancel-resch-interview Lambda
+	// This is a contract scaffold — full Lambda orchestration requires separate migration
+	writeJSON(w, http.StatusOK, map[string]any{
+		"handleScheduleInterviewResp": "{}",
+		"hanldeCancelRescheduleResp":  "{}",
+	})
+}

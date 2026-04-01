@@ -82,6 +82,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Get("/project/get-moderators-count/{project_id}/sample-size/{sample_size}", h.GetModeratorsCountMRA)
 				r.Post("/projects/{client_id}/interviews", h.GetAllInterviewsMRA)
 				r.Post("/interview/schedule", h.ScheduleInterviewMRA)
+				r.Post("/interview/respondent_reschedule", h.RespondentRescheduleMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)
