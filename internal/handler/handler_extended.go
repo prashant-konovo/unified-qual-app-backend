@@ -15,6 +15,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/go-chi/chi/v5"
+	"github.com/xuri/excelize/v2"
 )
 
 // ══════════════════════════════════════════════════════
@@ -2330,4 +2331,125 @@ func (h *Handler) GetEmailTemplateMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, record)
+}
+
+// HandleProjectExportMRA handles POST /project/{project_id}/handle-export (MRA).
+// Contract-identical with legacy: queries export data, generates Excel, uploads to S3,
+// returns presigned URL. Response: {fileURL: "<presigned url>"}.
+func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request) {
+	pidStr := chi.URLParam(r, "project_id")
+	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while exporting project",
+		})
+		return
+	}
+
+	if h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "database not configured",
+			"errorMessage": "An error occured while exporting project",
+		})
+		return
+	}
+
+	var body struct {
+		PMTimeZone     string `json:"pmTimeZone"`
+		PMTimeZoneAbbr string `json:"pmTimeZoneAbbr"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		body.PMTimeZone = "America/New_York"
+		body.PMTimeZoneAbbr = "EDT"
+	}
+	if body.PMTimeZone == "" {
+		body.PMTimeZone = "America/New_York"
+	}
+	if body.PMTimeZoneAbbr == "" {
+		body.PMTimeZoneAbbr = "EDT"
+	}
+
+	rescheduleLinkPrefix := "https://apolloqualscheduler.com/scheduler/qstool/"
+
+	exportRows, err := h.qsProjectRepo.HandleProjectExportMRA(r.Context(), projectID, body.PMTimeZone, body.PMTimeZoneAbbr, rescheduleLinkPrefix)
+	if err != nil {
+		slog.Error("export query failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while exporting project",
+		})
+		return
+	}
+
+	noTsRows, err := h.qsProjectRepo.HandleProjectNoTimeslotExportMRA(r.Context(), projectID, body.PMTimeZone, body.PMTimeZoneAbbr)
+	if err != nil {
+		slog.Error("no-timeslot export query failed", "error", err)
+	}
+
+	projectName, err := h.qsProjectRepo.GetProjectName(r.Context(), projectID)
+	if err != nil {
+		projectName = fmt.Sprintf("Project_%d", projectID)
+	}
+
+	allRows := append(exportRows, noTsRows...)
+
+	f := excelize.NewFile()
+	sheetName := "Sheet1"
+	columns := []string{
+		"User ID", "Duration", "Time of Interview", "First Name", "Last Name",
+		"Sess Key", "Respondent Time of Interview", "Honorarium", "Modified Date",
+		"Email", "Phone", "Conference Link", "Moderator First Name", "Moderator Last Name",
+		"PM First Name", "PM Last Name", "Status", "Comment", "Reschedule Link",
+	}
+	for i, col := range columns {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		_ = f.SetCellValue(sheetName, cell, col)
+	}
+	for rowIdx, row := range allRows {
+		for colIdx, val := range row {
+			cell, _ := excelize.CoordinatesToCellName(colIdx+1, rowIdx+2)
+			_ = f.SetCellValue(sheetName, cell, val)
+		}
+	}
+
+	s3Key := projectName + "_Schedule.xlsx"
+
+	if h.services.S3 != nil && h.services.S3.ExportBucket() != "" {
+		buf, err := f.WriteToBuffer()
+		if err != nil {
+			slog.Error("excel write failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while exporting project",
+			})
+			return
+		}
+
+		bucket := h.services.S3.ExportBucket()
+		_, err = h.services.S3.UploadFile(r.Context(), bucket, s3Key, buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		if err != nil {
+			slog.Error("s3 upload failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while exporting project",
+			})
+			return
+		}
+
+		presignedURL, err := h.services.S3.GetPresignedURL(r.Context(), bucket, s3Key, 15*time.Minute)
+		if err != nil {
+			slog.Error("presign failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while exporting project",
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{"fileURL": presignedURL})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"fileURL": "", "rows": len(allRows)})
 }

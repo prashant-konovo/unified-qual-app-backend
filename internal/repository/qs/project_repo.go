@@ -998,6 +998,159 @@ func (r *ProjectRepo) GetEmailTemplateMRA(ctx context.Context, typeID int, langu
 	return map[string]any{"body_content": bodyContent.String}, nil
 }
 
+// HandleProjectExportMRA runs the legacy export query returning timeslot rows with 19 columns.
+func (r *ProjectRepo) HandleProjectExportMRA(ctx context.Context, projectID int64, pmTimeZone, pmTimeZoneAbbr, rescheduleLinkPrefix string) ([][]string, error) {
+	q := fmt.Sprintf(`SELECT
+		responder.external_responder_id AS participantId,
+		time_slot.duration,
+		CONCAT(CONVERT_TZ(time_slot.start_time, 'UTC', '%s'),' ', '%s') AS startTime,
+		responder.first_name AS ResonderFirstName,
+		responder.last_name AS ResonderLastName,
+		responder.sess_key AS sessKey,
+		CASE WHEN responder.time_zone IS NULL THEN CONCAT(CONVERT_TZ(time_slot.start_time, 'UTC','America/New_York'), ' ')
+		     WHEN responder.time_zone IS NOT NULL THEN CONCAT(CONVERT_TZ(time_slot.start_time, 'UTC', responder.time_zone), ' ')
+		END AS respondentInterviewTime,
+		project_responder_comm_address.honorarium AS Honorarium,
+		CONCAT(CONVERT_TZ(time_slot.updated_on, 'UTC', '%s'),' ', '%s') AS ModifiedOn,
+		(SELECT address FROM responder_communication_address WHERE transport_type_id = 1
+		 AND responder_communication_address.id = project_responder_comm_address.responder_comm_address_id) AS Email,
+		(SELECT GROUP_CONCAT(DISTINCT rca1.address SEPARATOR ', ') FROM responder_communication_address rca1
+		 WHERE rca1.transport_type_id=4 AND rca1.responder_id = project_responder_comm_address.responder_id) AS Phone,
+		conference_invitation.conference_link AS conferenceLink,
+		moderator_info.first_name AS ModeratorFirstName,
+		moderator_info.last_name AS ModeratorLastName,
+		project_manager_info.first_name AS PMFirstName,
+		project_manager_info.last_name AS PMLastName,
+		CASE
+		    WHEN time_slot.status_id = 9 AND time_slot.is_invalidated_interview = 0 THEN 'Complete'
+		    WHEN time_slot.status_id = 9 AND time_slot.is_invalidated_interview = 1 THEN 'Invalidated'
+		    WHEN time_slot.status_id = 5 THEN 'Cancelled'
+		    WHEN time_slot.status_id = 6 THEN 'Participant Cancelled'
+		    WHEN time_slot.status_id = 3 THEN 'Moderator Rescheduled'
+		    WHEN time_slot.status_id = 4 THEN 'Participant Rescheduled'
+		    WHEN time_slot.status_id = 11 THEN 'Project Manager Rescheduled'
+		    WHEN time_slot.status_id = 12 THEN 'Project Manager Cancelled'
+		    ELSE 'Scheduled'
+		END AS Status,
+		'' AS Comment,
+		responder.time_zone AS responderTimezone,
+		'' AS rescheduleLink
+	FROM responder
+	INNER JOIN answer_details ON answer_details.responder_id = responder.id
+	INNER JOIN time_slot ON time_slot.id = answer_details.time_slot_id
+	INNER JOIN conference_invitation_responder_time_slot ON conference_invitation_responder_time_slot.time_slot_id = time_slot.id
+	INNER JOIN conference_invitation ON conference_invitation.id = conference_invitation_responder_time_slot.conference_invitation_id
+	INNER JOIN (SELECT user.id AS id, user.first_name, user.last_name, moderator_time_slot.time_slot_id
+	            FROM moderator_time_slot INNER JOIN user ON user.id = moderator_time_slot.moderator_id
+	            WHERE moderator_time_slot.is_host) moderator_info ON moderator_info.time_slot_id = time_slot.id
+	INNER JOIN project ON time_slot.project_id = project.id
+	INNER JOIN (SELECT user.id AS id, user.first_name, user.last_name, user.time_zone FROM user) project_manager_info
+	      ON project_manager_info.id = project.created_by
+	INNER JOIN client ON client.id = project.client_id
+	INNER JOIN responder_communication_address ON answer_details.responder_id = responder_communication_address.responder_id
+	INNER JOIN project_responder_comm_address ON project_responder_comm_address.responder_comm_address_id = responder_communication_address.id
+	WHERE time_slot.project_id = ? AND project_responder_comm_address.project_id = ?
+	ORDER BY time_slot.start_time ASC`, pmTimeZone, pmTimeZoneAbbr, pmTimeZone, pmTimeZoneAbbr)
+
+	rows, err := r.db.QueryContext(ctx, q, projectID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("handle project export: %w", err)
+	}
+	defer rows.Close()
+
+	var results [][]string
+	for rows.Next() {
+		var (
+			participantId, duration, startTime, firstName, lastName, sessKey         sql.NullString
+			respondentTime, honorarium, modifiedOn, email, phone, confLink           sql.NullString
+			modFirstName, modLastName, pmFirstName, pmLastName, status, comment      sql.NullString
+			respTimezone, rescheduleLink                                             sql.NullString
+		)
+		if err := rows.Scan(&participantId, &duration, &startTime, &firstName, &lastName, &sessKey,
+			&respondentTime, &honorarium, &modifiedOn, &email, &phone, &confLink,
+			&modFirstName, &modLastName, &pmFirstName, &pmLastName, &status, &comment,
+			&respTimezone, &rescheduleLink); err != nil {
+			return nil, fmt.Errorf("scan export row: %w", err)
+		}
+		results = append(results, []string{
+			participantId.String, duration.String, startTime.String, firstName.String, lastName.String,
+			sessKey.String, respondentTime.String, honorarium.String, modifiedOn.String,
+			email.String, phone.String, confLink.String, modFirstName.String, modLastName.String,
+			pmFirstName.String, pmLastName.String, status.String, comment.String, rescheduleLink.String,
+		})
+	}
+	return results, rows.Err()
+}
+
+// HandleProjectNoTimeslotExportMRA returns respondents without timeslots for export.
+func (r *ProjectRepo) HandleProjectNoTimeslotExportMRA(ctx context.Context, projectID int64, pmTimeZone, pmTimeZoneAbbr string) ([][]string, error) {
+	q := fmt.Sprintf(`SELECT responder.external_responder_id AS participantId,
+		'' AS duration, '' AS startTime,
+		responder.first_name AS ResonderFirstName, responder.last_name AS ResonderLastName,
+		responder.sess_key AS sessKey, '' AS respondentInterviewTime,
+		project_responder_comm_address.honorarium AS Honorarium,
+		CONCAT(CONVERT_TZ(answer_comment.modified_on, 'UTC', '%s'),' ','%s') AS ModifiedOn,
+		(SELECT address FROM responder_communication_address WHERE transport_type_id = 1
+		 AND responder_communication_address.id = project_responder_comm_address.responder_comm_address_id) AS Email,
+		(SELECT GROUP_CONCAT(DISTINCT rca1.address SEPARATOR ', ') FROM responder_communication_address rca1
+		 WHERE rca1.transport_type_id=4 AND rca1.responder_id = project_responder_comm_address.responder_id) AS Phone,
+		'' AS conferenceLink, '' AS ModeratorFirstName, '' AS ModeratorLastName,
+		project_manager_info.first_name AS PMFirstName, project_manager_info.last_name AS PMLastName,
+		'' AS Status, answer_comment.comment AS Comment, '' AS rescheduleLink
+	FROM responder
+	INNER JOIN answer_details ON answer_details.responder_id = responder.id
+	INNER JOIN answer_comment ON answer_comment.answer_id = answer_details.answer_id
+	INNER JOIN answer ON answer.id = answer_details.answer_id
+	INNER JOIN survey_question ON survey_question.question_id = answer.question_id
+	INNER JOIN survey ON survey.id = survey_question.survey_id
+	INNER JOIN project ON survey.project_id = project.id
+	INNER JOIN (SELECT user.id AS id, user.first_name, user.last_name, user.time_zone FROM user) project_manager_info
+	      ON project_manager_info.id = project.created_by
+	INNER JOIN responder_communication_address ON answer_details.responder_id = responder_communication_address.responder_id
+	INNER JOIN project_responder_comm_address ON project_responder_comm_address.responder_comm_address_id = responder_communication_address.id
+	WHERE project.id = ? AND answer_details.no_timeslot_selected = 1 AND project_responder_comm_address.project_id = ?`,
+		pmTimeZone, pmTimeZoneAbbr)
+
+	rows, err := r.db.QueryContext(ctx, q, projectID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("handle no-timeslot export: %w", err)
+	}
+	defer rows.Close()
+
+	var results [][]string
+	for rows.Next() {
+		var (
+			participantId, duration, startTime, firstName, lastName, sessKey         sql.NullString
+			respondentTime, honorarium, modifiedOn, email, phone, confLink           sql.NullString
+			modFirstName, modLastName, pmFirstName, pmLastName, status, comment      sql.NullString
+			rescheduleLink                                                           sql.NullString
+		)
+		if err := rows.Scan(&participantId, &duration, &startTime, &firstName, &lastName, &sessKey,
+			&respondentTime, &honorarium, &modifiedOn, &email, &phone, &confLink,
+			&modFirstName, &modLastName, &pmFirstName, &pmLastName, &status, &comment,
+			&rescheduleLink); err != nil {
+			return nil, fmt.Errorf("scan no-timeslot row: %w", err)
+		}
+		results = append(results, []string{
+			participantId.String, duration.String, startTime.String, firstName.String, lastName.String,
+			sessKey.String, respondentTime.String, honorarium.String, modifiedOn.String,
+			email.String, phone.String, confLink.String, modFirstName.String, modLastName.String,
+			pmFirstName.String, pmLastName.String, status.String, comment.String, rescheduleLink.String,
+		})
+	}
+	return results, rows.Err()
+}
+
+// GetProjectName returns the name of a project by ID.
+func (r *ProjectRepo) GetProjectName(ctx context.Context, projectID int64) (string, error) {
+	var name string
+	err := r.db.QueryRowContext(ctx, "SELECT name FROM project WHERE id = ?", projectID).Scan(&name)
+	if err != nil {
+		return "", fmt.Errorf("get project name: %w", err)
+	}
+	return name, nil
+}
+
 // Update modifies mutable QS project fields.
 func (r *ProjectRepo) Update(ctx context.Context, id int64, fields map[string]any) error {
 	if len(fields) == 0 {

@@ -1029,15 +1029,18 @@ func (gs *GoogleSheetsClient) UpdateFirstDate(ctx context.Context, sheetName, ce
 type S3Client struct {
 	region        string
 	inquiryBucket string
+	exportBucket  string
 }
 
 func newS3Client(cfg config.S3Config) *S3Client {
-	return &S3Client{region: cfg.Region, inquiryBucket: cfg.InquiryBucket}
+	return &S3Client{region: cfg.Region, inquiryBucket: cfg.InquiryBucket, exportBucket: cfg.ExportBucket}
 }
 
 func (sc *S3Client) Configured() bool { return sc.inquiryBucket != "" }
 
 func (sc *S3Client) InquiryBucket() string { return sc.inquiryBucket }
+
+func (sc *S3Client) ExportBucket() string { return sc.exportBucket }
 
 func (sc *S3Client) UploadFile(ctx context.Context, bucket, key string, body io.Reader, contentType string) (string, error) {
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(sc.region))
@@ -1056,6 +1059,26 @@ func (sc *S3Client) UploadFile(ctx context.Context, bucket, key string, body io.
 	}
 	publicURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", bucket, sc.region, key)
 	return publicURL, nil
+}
+
+// GetPresignedURL returns a presigned GET URL for an S3 object.
+func (sc *S3Client) GetPresignedURL(ctx context.Context, bucket, key string, expires time.Duration) (string, error) {
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(sc.region))
+	if err != nil {
+		return "", fmt.Errorf("load AWS config: %w", err)
+	}
+	client := s3.NewFromConfig(awsCfg)
+	presignClient := s3.NewPresignClient(client)
+	req, err := presignClient.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	}, func(opts *s3.PresignOptions) {
+		opts.Expires = expires
+	})
+	if err != nil {
+		return "", fmt.Errorf("presign: %w", err)
+	}
+	return req.URL, nil
 }
 
 // GetObject downloads an object from S3 and returns the body reader and content length.
