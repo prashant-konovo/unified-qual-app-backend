@@ -278,19 +278,35 @@ func (h *Handler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AuthPassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		UserID      int64  `json:"userId"`
-		OldPassword string `json:"oldPassword"`
-		NewPassword string `json:"newPassword"`
-		AccessToken string `json:"accessToken"`
+		Password string `json:"password"`
+		Token    string `json:"token"`
+		UserID   int64  `json:"userId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while creating a new user",
+		})
 		return
 	}
-	// Password change requires Cognito ChangePassword API.
-	// When accessToken is present, the frontend should call Cognito directly.
-	// This endpoint acknowledges the request and logs the event.
+
+	// Password change delegated to Cognito (frontend calls Cognito directly).
+	// This endpoint acknowledges and returns user profile matching legacy proxy response.
 	slog.Info("password change requested", "userId", req.UserID)
+
+	if req.UserID > 0 && h.qsUserRepo != nil {
+		u, err := h.qsUserRepo.GetByID(r.Context(), req.UserID)
+		if err == nil && u != nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"id":         u.ID,
+				"first_name": nullStr(u.FirstName),
+				"last_name":  nullStr(u.LastName),
+				"email":      nullStr(u.Email),
+			})
+			return
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{"changed": true})
 }
 

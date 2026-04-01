@@ -28,29 +28,79 @@ import (
 
 func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		UserID  int64 `json:"userId"`
-		RoleIDs []int `json:"roleIds"`
+		Email         string `json:"email"`
+		RoleID        int    `json:"roleId"`
+		ClientID      int64  `json:"clientId"`
+		FirstName     string `json:"firstName"`
+		LastName      string `json:"lastName"`
+		CognitoUserID string `json:"cognitoUserId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
-		return
-	}
-	if req.UserID == 0 || len(req.RoleIDs) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "userId and roleIds required"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while adding user roles",
+		})
 		return
 	}
 
-	if h.qsUserRepo != nil {
-		if err := h.qsUserRepo.AddRoles(r.Context(), req.UserID, req.RoleIDs); err != nil {
-			slog.Error("add roles failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to add roles"})
-			return
-		}
-		roles, _ := h.qsUserRepo.GetRoles(r.Context(), req.UserID)
-		writeJSON(w, http.StatusOK, map[string]any{"userId": req.UserID, "roles": roles, "source": "qs"})
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "no database available",
+			"errorMessage": "An error occured while adding user roles",
+		})
 		return
 	}
-	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+
+	// Legacy flow: look up user by email (including deleted users)
+	user, _ := h.qsUserRepo.GetByEmailIncludeDeleted(r.Context(), req.Email)
+
+	if user == nil {
+		// User doesn't exist → create user + role + client + comm prefs
+		userID, err := h.qsUserRepo.Create(r.Context(), req.FirstName, req.LastName, req.Email, "", []int{req.RoleID})
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while adding user roles",
+			})
+			return
+		}
+		_ = h.qsUserRepo.AddUserClient(r.Context(), userID, req.ClientID)
+		_ = h.qsUserRepo.CreateUserCommPrefs(r.Context(), userID, req.Email, req.CognitoUserID)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"insertId":               userID,
+			"numberOfRecordsUpdated": 1,
+		})
+		return
+	}
+
+	if user.Deleted == 1 {
+		// User exists but deleted → restore + role + client
+		if err := h.qsUserRepo.RestoreByEmail(r.Context(), req.Email); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while adding user roles",
+			})
+			return
+		}
+		_ = h.qsUserRepo.AddRoles(r.Context(), user.ID, []int{req.RoleID})
+		_ = h.qsUserRepo.AddUserClient(r.Context(), user.ID, req.ClientID)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"numberOfRecordsUpdated": 1,
+		})
+		return
+	}
+
+	// User exists and active → just add the role
+	if err := h.qsUserRepo.AddRoles(r.Context(), user.ID, []int{req.RoleID}); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while adding user roles",
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"numberOfRecordsUpdated": 1,
+	})
 }
 
 func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {

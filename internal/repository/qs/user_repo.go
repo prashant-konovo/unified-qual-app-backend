@@ -422,6 +422,54 @@ func (r *UserRepo) UpdateModeratorAvailability(ctx context.Context, id int64, st
 	return nil
 }
 
+// GetByEmailIncludeDeleted returns a QS user by email regardless of deleted status.
+func (r *UserRepo) GetByEmailIncludeDeleted(ctx context.Context, email string) (*UserWithRoles, error) {
+	q := `SELECT id, first_name, last_name, email, deleted, cognito_user_id, terms_accepted,
+	             modified_on, moderator_buffer, moderator_buffer_modified_on, time_zone
+	      FROM user WHERE email = ? LIMIT 1`
+	var u User
+	err := r.db.QueryRowContext(ctx, q, email).Scan(
+		&u.ID, &u.FirstName, &u.LastName, &u.Email, &u.Deleted,
+		&u.CognitoUserID, &u.TermsAccepted, &u.ModifiedOn,
+		&u.ModeratorBuffer, &u.ModeratorBufferModified, &u.TimeZone,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get qs user by email (include deleted) %s: %w", email, err)
+	}
+	roles, _ := r.GetRoles(ctx, u.ID)
+	return &UserWithRoles{User: u, RoleIDs: roles}, nil
+}
+
+// RestoreByEmail sets deleted = 0 for a user found by email.
+func (r *UserRepo) RestoreByEmail(ctx context.Context, email string) error {
+	_, err := r.db.ExecContext(ctx, "UPDATE user SET deleted = 0 WHERE email = ?", email)
+	if err != nil {
+		return fmt.Errorf("restore qs user by email %s: %w", email, err)
+	}
+	slog.InfoContext(ctx, "restored QS user", "email", email)
+	return nil
+}
+
+// AddUserClient inserts a user_client association.
+func (r *UserRepo) AddUserClient(ctx context.Context, userID, clientID int64) error {
+	_, err := r.db.ExecContext(ctx, "INSERT IGNORE INTO user_client (user_id, client_id) VALUES (?, ?)", userID, clientID)
+	if err != nil {
+		return fmt.Errorf("add client %d to user %d: %w", clientID, userID, err)
+	}
+	return nil
+}
+
+// CreateUserCommPrefs inserts initial communication preferences for a user.
+func (r *UserRepo) CreateUserCommPrefs(ctx context.Context, userID int64, email, cognitoUserID string) error {
+	_, err := r.db.ExecContext(ctx,
+		"INSERT IGNORE INTO user_communication_preferences (user_id, email, cognito_user_id) VALUES (?, ?, ?)",
+		userID, email, cognitoUserID)
+	if err != nil {
+		return fmt.Errorf("create comm prefs for user %d: %w", userID, err)
+	}
+	return nil
+}
+
 // CheckUserIsQsToolAndI2 checks if a user exists in QS and has I2 (IRIS) cross-reference.
 func (r *UserRepo) CheckUserIsQsToolAndI2(ctx context.Context, email string) (map[string]any, error) {
 	u, err := r.GetByEmail(ctx, email)
