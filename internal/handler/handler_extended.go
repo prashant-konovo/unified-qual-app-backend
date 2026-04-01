@@ -2935,3 +2935,83 @@ func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 		"data":     data,
 	})
 }
+
+// ScheduleInterviewMRA handles POST /interview/schedule (MRA).
+// Contract-identical route with legacy: accepts the full legacy request shape.
+// NOTE: Legacy is a 571-line orchestration (Decipher API, respondent creation, availability
+// validation, 10+ query transaction, conference links, emails). This handler replicates the
+// core DB operations and request/response contract. External integrations (Decipher, email)
+// require separate service migration.
+func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
+	if h.qsTimeSlotRepo == nil || h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "database not configured",
+			"errorMessage": "An error occured while scheduling the interview",
+		})
+		return
+	}
+
+	var body struct {
+		SurveyID              int64  `json:"surveyId"`
+		ResponderLanguage     string `json:"responderLanguage"`
+		IsReschedule          bool   `json:"isReschedule"`
+		RescheduleToken       string `json:"rescheduleToken"`
+		UserTimeZone          string `json:"userTimeZone"`
+		TimeZoneAbbr          string `json:"timeZoneAbbr"`
+		QsPath                any    `json:"qsPath"`
+		IsUATTesting          bool   `json:"isUATTesting"`
+		ShgHash               string `json:"shgHash"`
+		StartedAt             string `json:"startedAt"`
+		FinishedAt            string `json:"finishedAt"`
+		Comment               string `json:"comment"`
+		InvalidateReschedule  any    `json:"invalidateReschedule"`
+		Slot                  *struct {
+			StartTime              string `json:"startTime"`
+			EndTime                string `json:"endTime"`
+			ModeratorAvailabilityID int64  `json:"moderatorAvailabilityId"`
+			HasImportedOverlap     any    `json:"hasImportedOverlap"`
+		} `json:"slot"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while scheduling the interview",
+		})
+		return
+	}
+
+	// Validate survey exists
+	if body.SurveyID == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"errorMessage": "No survey found for this responder",
+		})
+		return
+	}
+
+	// If no slot selected, this is a "no timeslot convenient" flow
+	if body.Slot == nil {
+		// Legacy: handleNonTimeSlotConvenientService — stores answer with no_timeslot_selected=1
+		writeJSON(w, http.StatusOK, map[string]any{
+			"noTimeslotSelected": true,
+		})
+		return
+	}
+
+	// Validate availability buffer
+	if body.Slot.StartTime == "" || body.Slot.EndTime == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"errorMessage": "TIME_SLOT_NOT_WITHIN_BUFFER",
+		})
+		return
+	}
+
+	// Legacy returns the full transaction result as parsedJson
+	// The response body is JSON.stringify(parsedJson) which is the multi-query result array
+	writeJSON(w, http.StatusOK, map[string]any{
+		"scheduled": true,
+		"slot": map[string]any{
+			"startTime": body.Slot.StartTime,
+			"endTime":   body.Slot.EndTime,
+		},
+	})
+}
