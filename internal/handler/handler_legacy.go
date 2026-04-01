@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -976,12 +977,21 @@ func (h *Handler) GetProjectDashboard(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetProjectMedia returns interview media for a project.
+// GetProjectMedia returns paginated interview media for a project.
+// Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/interview_media
+// Response: {"media": [...], "limit": N, "offset": N, "count": N}
 func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "pid")
 	projectID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
 		return
+	}
+
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	if limit <= 0 {
+		limit = 25
 	}
 
 	if h.irisSurveyRepo != nil {
@@ -991,22 +1001,46 @@ func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		result := make([]map[string]any, 0, len(media))
-		for _, m := range media {
-			result = append(result, map[string]any{
-				"id": m.ID, "name": m.Name, "description": m.Description,
-				"projectId": m.ProjectID, "status": m.Status,
-				"createdOn": m.CreatedOn.Format(time.RFC3339),
-				"pageCount": m.PageCount, "shared": m.Shared,
-			})
+		totalCount := len(media)
+
+		// Apply pagination
+		if offset > len(media) {
+			offset = len(media)
 		}
-		success(w, result)
+		end := offset + limit
+		if end > len(media) {
+			end = len(media)
+		}
+		paged := media[offset:end]
+
+		result := make([]map[string]any, 0, len(paged))
+		for _, m := range paged {
+			entry := mediaToJSON(m)
+			// Add computed fields matching legacy response
+			entry["basisPDF"] = fmt.Sprintf("/v1/project/%d/interview_media/%d/media.pdf", m.ProjectID, m.ID)
+			pages := make([]map[string]any, 0, m.PageCount)
+			for i := 0; i < m.PageCount; i++ {
+				pages = append(pages, map[string]any{
+					"page": fmt.Sprintf("/v1/project/%d/interview_media/%d/pages/%d/img.png", m.ProjectID, m.ID, i),
+				})
+			}
+			entry["pages"] = pages
+			result = append(result, entry)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"media":  result,
+			"limit":  limit,
+			"offset": offset,
+			"count":  totalCount,
+		})
 		return
 	}
-	success(w, []any{})
+	writeJSON(w, http.StatusOK, map[string]any{"media": []any{}, "limit": limit, "offset": offset, "count": 0})
 }
 
-// GetProjectMediaDetail returns a single media item.
+// GetProjectMediaDetail returns a single media item with computed page URLs.
+// Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/interview_media/:mediaId
+// Response: full InterviewMedia JSON with basisPDF and pages array
 func (h *Handler) GetProjectMediaDetail(w http.ResponseWriter, r *http.Request) {
 	pidStr := chi.URLParam(r, "pid")
 	midStr := chi.URLParam(r, "mediaId")
@@ -1024,18 +1058,145 @@ func (h *Handler) GetProjectMediaDetail(w http.ResponseWriter, r *http.Request) 
 			writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 			return
 		}
-		success(w, map[string]any{
-			"id": m.ID, "name": m.Name, "description": m.Description,
-			"projectId": m.ProjectID, "status": m.Status,
-			"createdOn": m.CreatedOn.Format(time.RFC3339),
-			"pageCount": m.PageCount, "shared": m.Shared,
-		})
+		entry := mediaToJSON(*m)
+		entry["basisPDF"] = fmt.Sprintf("/v1/project/%d/interview_media/%d/media.pdf", m.ProjectID, m.ID)
+		pages := make([]map[string]any, 0, m.PageCount)
+		for i := 0; i < m.PageCount; i++ {
+			pages = append(pages, map[string]any{
+				"page": fmt.Sprintf("/v1/project/%d/interview_media/%d/pages/%d/img.png", m.ProjectID, m.ID, i),
+			})
+		}
+		entry["pages"] = pages
+		writeJSON(w, http.StatusOK, entry)
 		return
 	}
 	writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 }
 
-// DeleteProjectMedia deletes interview media.
+// DownloadMediaPDF streams a media PDF from S3.
+// Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/interview_media/:mediaId/media.pdf
+func (h *Handler) DownloadMediaPDF(w http.ResponseWriter, r *http.Request) {
+	pidStr := chi.URLParam(r, "pid")
+	midStr := chi.URLParam(r, "mediaId")
+	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
+	mediaID, _ := strconv.ParseInt(midStr, 10, 64)
+
+	if h.irisSurveyRepo == nil || h.services.S3 == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		return
+	}
+
+	m, err := h.irisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
+	if err != nil || m == nil || !m.S3Key.Valid {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		return
+	}
+
+	key := m.S3Key.String + "/media.pdf"
+	bucket := h.cfg.S3.RecordingBucket
+	body, contentLength, err := h.services.S3.GetObject(r.Context(), bucket, key)
+	if err != nil {
+		slog.Error("S3 get media PDF failed", "error", err, "key", key)
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		return
+	}
+	defer body.Close()
+
+	w.Header().Set("Content-Type", "application/pdf")
+	if contentLength > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+	}
+	w.WriteHeader(http.StatusOK)
+	io.Copy(w, body)
+}
+
+// DownloadMediaPage streams a single page PDF from S3.
+// Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/interview_media/:mediaId/pages/:page/img.png
+func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
+	pidStr := chi.URLParam(r, "pid")
+	midStr := chi.URLParam(r, "mediaId")
+	pageStr := chi.URLParam(r, "page")
+	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
+	mediaID, _ := strconv.ParseInt(midStr, 10, 64)
+	page, _ := strconv.Atoi(pageStr)
+
+	if h.irisSurveyRepo == nil || h.services.S3 == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		return
+	}
+
+	m, err := h.irisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
+	if err != nil || m == nil || !m.S3Key.Valid {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		return
+	}
+
+	key := fmt.Sprintf("%s/page/%d.pdf", m.S3Key.String, page)
+	bucket := h.cfg.S3.RecordingBucket
+	body, contentLength, err := h.services.S3.GetObject(r.Context(), bucket, key)
+	if err != nil {
+		slog.Error("S3 get media page failed", "error", err, "key", key)
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		return
+	}
+	defer body.Close()
+
+	w.Header().Set("Content-Type", "application/pdf")
+	if contentLength > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+	}
+	w.WriteHeader(http.StatusOK)
+	io.Copy(w, body)
+}
+
+// GetMediaPageForConference serves a media page PDF for conference participants.
+// Contract-identical with legacy InCrowdAPI: GET /v1/interview_media/:conferenceHash/:mediaId/pages/:page/media.pdf
+func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Request) {
+	confHash := chi.URLParam(r, "confHash")
+	midStr := chi.URLParam(r, "mediaId")
+	pageStr := chi.URLParam(r, "page")
+	mediaID, _ := strconv.ParseInt(midStr, 10, 64)
+	page, _ := strconv.Atoi(pageStr)
+
+	if h.irisSurveyRepo == nil || h.services.S3 == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		return
+	}
+
+	// Look up timeslot by conference hash to verify access and get project ID
+	projectID, err := h.irisSurveyRepo.GetProjectIDByConferenceHash(r.Context(), confHash)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
+		return
+	}
+
+	m, err := h.irisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
+	if err != nil || m == nil || !m.S3Key.Valid {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		return
+	}
+
+	key := fmt.Sprintf("%s/page/%d.pdf", m.S3Key.String, page)
+	bucket := h.cfg.S3.RecordingBucket
+	body, contentLength, sErr := h.services.S3.GetObject(r.Context(), bucket, key)
+	if sErr != nil {
+		slog.Error("S3 get conference media page failed", "error", sErr, "key", key)
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		return
+	}
+	defer body.Close()
+
+	w.Header().Set("Content-Type", "application/pdf")
+	if contentLength > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(contentLength, 10))
+	}
+	w.WriteHeader(http.StatusOK)
+	io.Copy(w, body)
+}
+
+// DeleteProjectMedia deletes interview media from S3 and database.
+// Contract-identical with legacy InCrowdAPI: DELETE /v1/interview_media/:projectId/:mediaId
+// Response: {} (empty JSON object)
 func (h *Handler) DeleteProjectMedia(w http.ResponseWriter, r *http.Request) {
 	pidStr := chi.URLParam(r, "pid")
 	midStr := chi.URLParam(r, "mediaId")
@@ -1043,15 +1204,52 @@ func (h *Handler) DeleteProjectMedia(w http.ResponseWriter, r *http.Request) {
 	mediaID, _ := strconv.ParseInt(midStr, 10, 64)
 
 	if h.irisSurveyRepo != nil {
+		// Get media first for S3 cleanup
+		m, _ := h.irisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
+		if m != nil && m.Shared {
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": "cannot delete shared media"})
+			return
+		}
+
+		// Delete S3 objects if S3 is configured and media has an S3 key
+		if m != nil && m.S3Key.Valid && h.services.S3 != nil {
+			bucket := h.cfg.S3.RecordingBucket
+			s3Root := m.S3Key.String
+			// Delete main PDF
+			_ = h.services.S3.DeleteObject(r.Context(), bucket, s3Root+"/media.pdf")
+			// Delete page PDFs
+			for i := 1; i <= m.PageCount; i++ {
+				_ = h.services.S3.DeleteObject(r.Context(), bucket, fmt.Sprintf("%s/page/%d.pdf", s3Root, i))
+			}
+		}
+
 		if err := h.irisSurveyRepo.DeleteMedia(r.Context(), projectID, mediaID); err != nil {
 			slog.Error("delete media failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
 		}
-		success(w, map[string]any{"deleted": true})
+		writeJSON(w, http.StatusOK, map[string]any{})
 		return
 	}
 	writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+}
+
+// mediaToJSON converts ICInterviewMedia to the legacy JSON response shape.
+func mediaToJSON(m iris.ICInterviewMedia) map[string]any {
+	result := map[string]any{
+		"id": m.ID, "name": m.Name, "description": m.Description,
+		"projectId": m.ProjectID, "s3Key": nil, "hash": nil,
+		"status": m.Status, "createdOn": m.CreatedOn.Format(time.RFC3339),
+		"createdBy": m.CreatedBy, "pageCount": m.PageCount,
+		"pagesProcessed": m.PagesProcessed, "shared": m.Shared,
+	}
+	if m.S3Key.Valid {
+		result["s3Key"] = m.S3Key.String
+	}
+	if m.Hash.Valid {
+		result["hash"] = m.Hash.String
+	}
+	return result
 }
 
 // ──────────────────────────────────────────────

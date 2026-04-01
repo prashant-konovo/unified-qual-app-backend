@@ -52,6 +52,9 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 		// Recording upload callback from Conference Service (S3 trigger → Lambda → here)
 		r.Post("/chime/recording/meeting/{meetingId}", h.RecordingUploadCallback)
 
+		// ── Public: Interview media for conference participants (no JWT) ──
+		r.Get("/interview_media/{confHash}/{mediaId}/pages/{page}/media.pdf", h.GetMediaPageForConference)
+
 		// ── Protected: All remaining routes require valid JWT ──
 		r.Group(func(r chi.Router) {
 			r.Use(jwtAuth.Middleware)
@@ -79,6 +82,8 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Get("/project/{pid}/dashboard/availability_and_time_slots", h.GetProjectDashboard)
 				r.Get("/project/{pid}/interview_media", h.GetProjectMedia)
 				r.Get("/project/{pid}/interview_media/{mediaId}", h.GetProjectMediaDetail)
+				r.Get("/project/{pid}/interview_media/{mediaId}/media.pdf", h.DownloadMediaPDF)
+				r.Get("/project/{pid}/interview_media/{mediaId}/pages/{page}/img.png", h.DownloadMediaPage)
 				r.Delete("/interview_media/{pid}/{mediaId}", h.DeleteProjectMedia)
 			})
 

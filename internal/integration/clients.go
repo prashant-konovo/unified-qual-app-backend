@@ -1057,3 +1057,41 @@ func (sc *S3Client) UploadFile(ctx context.Context, bucket, key string, body io.
 	publicURL := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", bucket, sc.region, key)
 	return publicURL, nil
 }
+
+// GetObject downloads an object from S3 and returns the body reader and content length.
+func (sc *S3Client) GetObject(ctx context.Context, bucket, key string) (io.ReadCloser, int64, error) {
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(sc.region))
+	if err != nil {
+		return nil, 0, fmt.Errorf("load AWS config: %w", err)
+	}
+	client := s3.NewFromConfig(awsCfg)
+	out, err := client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("s3 get object: %w", err)
+	}
+	var length int64
+	if out.ContentLength != nil {
+		length = *out.ContentLength
+	}
+	return out.Body, length, nil
+}
+
+// DeleteObject deletes an object from S3.
+func (sc *S3Client) DeleteObject(ctx context.Context, bucket, key string) error {
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, awsconfig.WithRegion(sc.region))
+	if err != nil {
+		return fmt.Errorf("load AWS config: %w", err)
+	}
+	client := s3.NewFromConfig(awsCfg)
+	_, err = client.DeleteObject(ctx, &s3.DeleteObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	})
+	if err != nil {
+		return fmt.Errorf("s3 delete object: %w", err)
+	}
+	return nil
+}

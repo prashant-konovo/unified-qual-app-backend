@@ -2313,3 +2313,14 @@ func (r *SurveyRepo) GetSalesforceProjectByExtID(ctx context.Context, sfProjectI
 	return number, name, nil
 }
 
+// GetProjectIDByConferenceHash looks up the project ID from a timeslot's conference hash.
+func (r *SurveyRepo) GetProjectIDByConferenceHash(ctx context.Context, hash string) (int64, error) {
+	var projectID int64
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT project_id FROM time_slot WHERE conference_hash = ? LIMIT 1", hash).Scan(&projectID)
+	if err != nil {
+		return 0, fmt.Errorf("get project by conference hash: %w", err)
+	}
+	return projectID, nil
+}
+
