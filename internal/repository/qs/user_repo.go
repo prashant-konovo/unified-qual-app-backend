@@ -719,3 +719,266 @@ func (r *UserRepo) GetAllModeratorsListMRA(ctx context.Context, clientID int64) 
 	}
 	return records, rows.Err()
 }
+
+// GetModeratorBufferMRA returns the moderator_buffer for a user (default 15 if NULL).
+func (r *UserRepo) GetModeratorBufferMRA(ctx context.Context, moderatorID int64) (int, error) {
+	q := `SELECT COALESCE(moderator_buffer, 15) FROM user WHERE id = ?`
+	var buffer int
+	if err := r.db.QueryRowContext(ctx, q, moderatorID).Scan(&buffer); err != nil {
+		return 15, fmt.Errorf("get moderator buffer: %w", err)
+	}
+	return buffer, nil
+}
+
+// GetModExternalCalendarStatusMRA returns the external calendar import status for a moderator.
+func (r *UserRepo) GetModExternalCalendarStatusMRA(ctx context.Context, moderatorID int64) (string, error) {
+	q := `SELECT COALESCE(status, '') FROM moderator_external_calendar WHERE moderator_id = ? ORDER BY id DESC LIMIT 1`
+	var status string
+	err := r.db.QueryRowContext(ctx, q, moderatorID).Scan(&status)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get external calendar status: %w", err)
+	}
+	return status, nil
+}
+
+// IsValidAvailabilityMRA checks if a new availability conflicts with existing timeslots,
+// matching legacy isValidAvailability SQL exactly.
+func (r *UserRepo) IsValidAvailabilityMRA(ctx context.Context, moderatorID int64, startTime, endTime string, buffer int) (int64, error) {
+	q := `SELECT count(time_slot.id) AS count FROM time_slot
+		INNER JOIN moderator_time_slot ON time_slot.id = moderator_time_slot.time_slot_id
+		WHERE moderator_time_slot.moderator_id = ?
+		AND time_slot.status_id IN (2, 7, 8, 9)
+		AND time_slot.is_invalid = false
+		AND (
+			DATE_SUB(time_slot.start_time, INTERVAL ? MINUTE) <= ? AND DATE_ADD(time_slot.end_time, INTERVAL ? MINUTE) >= ?
+			OR (
+				(time_slot.start_time >= ? AND time_slot.end_time <= ?)
+				OR (time_slot.start_time > ? AND time_slot.end_time <= ?)
+				OR (time_slot.start_time >= ? AND time_slot.end_time < ?)
+				OR (time_slot.start_time > ? AND DATE_SUB(time_slot.end_time, INTERVAL ? MINUTE) <= ?)
+				OR (DATE_ADD(time_slot.start_time, INTERVAL ? MINUTE) >= ? AND time_slot.end_time < ?)
+				OR (DATE_SUB(time_slot.start_time, INTERVAL ? MINUTE) <= ? AND ? = time_slot.start_time)
+				OR (DATE_ADD(time_slot.end_time, INTERVAL ? MINUTE) >= ? AND time_slot.end_time = ?)
+				OR (DATE_SUB(time_slot.start_time, INTERVAL ? MINUTE) < ? AND ? < DATE_SUB(time_slot.start_time, INTERVAL ? MINUTE))
+				OR (DATE_ADD(time_slot.end_time, INTERVAL ? MINUTE) > ? AND ? > DATE_ADD(time_slot.start_time, INTERVAL ? MINUTE))
+			)
+		)`
+	var count int64
+	err := r.db.QueryRowContext(ctx, q,
+		moderatorID,
+		buffer, startTime, buffer, endTime,
+		startTime, endTime,
+		startTime, endTime,
+		startTime, endTime,
+		startTime, buffer, endTime,
+		buffer, startTime, endTime,
+		buffer, endTime, endTime,
+		buffer, startTime, startTime,
+		buffer, endTime, startTime, buffer,
+		buffer, startTime, endTime, buffer,
+	).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("check availability validity: %w", err)
+	}
+	return count, nil
+}
+
+// OverlappingAvailabilitiesMRA returns overlapping availabilities for a moderator,
+// matching legacy overLappingAvailabilities SQL.
+func (r *UserRepo) OverlappingAvailabilitiesMRA(ctx context.Context, moderatorID int64, startTime, endTime string) ([]map[string]any, error) {
+	q := `SELECT id, moderator_id AS moderatorId, client_id AS clientId, start_time AS startTime, end_time AS endTime
+		FROM moderator_availability
+		WHERE moderator_availability.moderator_id = ?
+		AND (
+			(moderator_availability.start_time >= ? AND moderator_availability.start_time <= ?)
+			OR (moderator_availability.end_time >= ? AND moderator_availability.end_time <= ?)
+			OR (moderator_availability.start_time <= ? AND moderator_availability.end_time >= ?)
+		)`
+	rows, err := r.db.QueryContext(ctx, q, moderatorID, startTime, endTime, startTime, endTime, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("get overlapping availabilities: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var id, modID, clientID int64
+		var st, et string
+		if err := rows.Scan(&id, &modID, &clientID, &st, &et); err != nil {
+			return nil, fmt.Errorf("scan overlapping availability: %w", err)
+		}
+		records = append(records, map[string]any{
+			"id": id, "moderatorId": modID, "clientId": clientID, "startTime": st, "endTime": et,
+		})
+	}
+	return records, rows.Err()
+}
+
+// GetAllModeratorAvailabilityMRA returns all manual availabilities for a moderator+client.
+func (r *UserRepo) GetAllModeratorAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error) {
+	q := `SELECT id, moderator_id AS moderatorId, client_id AS clientId, start_time AS startTime, end_time AS endTime
+		FROM moderator_availability
+		WHERE moderator_id = ? AND client_id = ?
+		ORDER BY start_time ASC`
+	rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get all moderator availability: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var id, modID, cID int64
+		var st, et string
+		if err := rows.Scan(&id, &modID, &cID, &st, &et); err != nil {
+			return nil, fmt.Errorf("scan moderator availability: %w", err)
+		}
+		records = append(records, map[string]any{
+			"id": id, "moderatorId": modID, "clientId": cID, "startTime": st, "endTime": et, "isImported": false,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
+}
+
+// GetNonOverlappingManualAvailabilityMRA returns manual availabilities with no overlap with imported.
+func (r *UserRepo) GetNonOverlappingManualAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error) {
+	q := `SELECT DISTINCT ma.id,
+        ma.moderator_id AS moderatorId,
+        first_name      AS firstName,
+        last_name       AS lastName,
+        ma.client_id    AS clientId,
+        ma.start_time   AS startTime,
+        ma.end_time     AS endTime
+FROM   moderator_availability ma
+INNER JOIN user ON user.id = ma.moderator_id
+AND ma.id NOT IN (SELECT DISTINCT ma.id
+              FROM   imported_moderator_availability ima
+                     INNER JOIN moderator_availability ma
+                             ON ma.moderator_id = ima.moderator_id
+                                AND ( (ima.start_time > ma.start_time and ima.end_time > ma.start_time AND ima.end_time <= ma.end_time)
+                                    OR (ima.start_time < ma.end_time AND ima.end_time < ma.end_time and ima.start_time >= ma.start_time)
+                                    OR (ima.start_time < ma.end_time AND ima.end_time < ma.end_time and ima.start_time > ma.start_time) )
+                                AND ma.id NOT IN (SELECT ma.id FROM moderator_availability ma
+                     INNER JOIN imported_moderator_availability ima ON ima.moderator_id = ma.moderator_id
+                     WHERE ima.end_time = ma.end_time AND ima.start_time = ma.start_time AND ma.moderator_id = ?)
+              WHERE  ima.moderator_id = ? AND ima.client_id = ?)
+AND ma.id NOT IN (SELECT ma.id FROM imported_moderator_availability ima
+     INNER JOIN moderator_availability ma ON ma.moderator_id = ima.moderator_id
+     WHERE ma.end_time = ima.end_time AND ma.start_time = ima.start_time AND ima.moderator_id = ?)
+WHERE  ma.moderator_id = ? AND ma.client_id = ?
+ORDER  BY ma.start_time`
+	return r.scanAvailabilityRows(ctx, q, moderatorID, moderatorID, clientID, moderatorID, moderatorID, clientID)
+}
+
+// GetNonOverlappingImportedAvailabilityMRA returns imported availabilities that exactly match manual ones.
+func (r *UserRepo) GetNonOverlappingImportedAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error) {
+	q := `SELECT DISTINCT ima.id,
+        ima.moderator_id AS moderatorId,
+        first_name       AS firstName,
+        last_name        AS lastName,
+        ima.client_id    AS clientId,
+        ima.start_time   AS startTime,
+        ima.end_time     AS endTime
+FROM   imported_moderator_availability ima
+INNER JOIN user ON user.id = ima.moderator_id
+WHERE  ima.moderator_id = ? AND ima.client_id = ?
+AND ima.id NOT IN (SELECT DISTINCT ima.id
+              FROM   imported_moderator_availability ima
+                     INNER JOIN moderator_availability ma
+                             ON ma.moderator_id = ima.moderator_id
+                                AND ( (ima.start_time > ma.start_time and ima.end_time > ma.start_time AND ima.end_time <= ma.end_time)
+                                    OR (ima.start_time < ma.end_time AND ima.end_time < ma.end_time and ima.start_time >= ma.start_time)
+                                    OR (ima.start_time < ma.end_time AND ima.end_time < ma.end_time and ima.start_time > ma.start_time) )
+                                AND ma.id NOT IN (SELECT ma.id FROM moderator_availability ma
+                     INNER JOIN imported_moderator_availability ima ON ima.moderator_id = ma.moderator_id
+                     WHERE ima.end_time = ma.end_time AND ima.start_time = ma.start_time AND ma.moderator_id = ?)
+              WHERE  ima.moderator_id = ? AND ima.client_id = ?)
+AND ima.id IN (SELECT DISTINCT ima.id FROM imported_moderator_availability ima
+       INNER JOIN moderator_availability ma ON ma.moderator_id = ima.moderator_id
+       AND ima.end_time = ma.end_time AND ima.start_time = ma.start_time AND ma.moderator_id = ?)
+ORDER  BY ima.start_time`
+	return r.scanAvailabilityRows(ctx, q, moderatorID, clientID, moderatorID, moderatorID, clientID, moderatorID)
+}
+
+// GetAllOverlappingManualAvailabilityMRA returns manual availabilities that overlap with imported (excluding exact matches).
+func (r *UserRepo) GetAllOverlappingManualAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error) {
+	q := `SELECT DISTINCT ma.id,
+        ma.moderator_id AS moderatorId,
+        first_name      AS firstName,
+        last_name       AS lastName,
+        ma.client_id    AS clientId,
+        ma.start_time   AS startTime,
+        ma.end_time     AS endTime
+FROM   moderator_availability ma
+INNER JOIN user ON user.id = ma.moderator_id
+INNER JOIN imported_moderator_availability ima ON ima.moderator_id = ma.moderator_id
+AND ma.id IN (SELECT DISTINCT ma.id
+              FROM   imported_moderator_availability ima
+                     LEFT JOIN moderator_availability ma
+                             ON ma.moderator_id = ima.moderator_id
+                                AND ( (ima.start_time > ma.start_time and ima.end_time > ma.start_time AND ima.end_time <= ma.end_time)
+                                    OR (ima.start_time < ma.end_time AND ima.end_time < ma.end_time and ima.start_time >= ma.start_time)
+                                    OR (ima.start_time < ma.end_time AND ima.end_time < ma.end_time and ima.start_time > ma.start_time) )
+                                AND ma.id NOT IN (SELECT ma.id FROM moderator_availability ma
+                     INNER JOIN imported_moderator_availability ima ON ima.moderator_id = ma.moderator_id
+                     WHERE ima.end_time = ma.end_time AND ima.start_time = ma.start_time AND ma.moderator_id = ?)
+              WHERE  ima.moderator_id = ? AND ima.client_id = ?)
+AND ma.id NOT IN (SELECT ma.id FROM imported_moderator_availability ima
+     INNER JOIN moderator_availability ma ON ma.moderator_id = ima.moderator_id
+     WHERE ma.end_time = ima.end_time AND ma.start_time = ima.start_time AND ima.moderator_id = ?)
+WHERE  ma.moderator_id = ? AND ma.client_id = ?
+ORDER  BY ma.start_time`
+	return r.scanAvailabilityRows(ctx, q, moderatorID, moderatorID, clientID, moderatorID, moderatorID, clientID)
+}
+
+// GetAllOverlappingImportedAvailabilityMRA returns imported availabilities that overlap with manual (excluding exact matches).
+func (r *UserRepo) GetAllOverlappingImportedAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error) {
+	q := `SELECT DISTINCT ima.id,
+        ima.moderator_id AS moderatorId,
+        first_name       AS firstName,
+        last_name        AS lastName,
+        ima.client_id    AS clientId,
+        ima.start_time   AS startTime,
+        ima.end_time     AS endTime
+FROM   imported_moderator_availability ima
+INNER JOIN user ON user.id = ima.moderator_id
+INNER JOIN moderator_availability ma ON ma.moderator_id = ima.moderator_id
+   AND ( (ima.start_time > ma.start_time and ima.end_time > ma.start_time AND ima.end_time <= ma.end_time)
+       OR (ima.start_time < ma.end_time AND ima.end_time < ma.end_time and ima.start_time >= ma.start_time)
+       OR (ima.start_time < ma.end_time AND ima.end_time < ma.end_time and ima.start_time > ma.start_time) )
+   AND ma.id NOT IN (SELECT ma.id FROM moderator_availability ma
+        INNER JOIN imported_moderator_availability ima ON ima.moderator_id = ma.moderator_id
+        WHERE ima.end_time = ma.end_time AND ima.start_time = ma.start_time AND ma.moderator_id = ?)
+WHERE  ima.moderator_id = ? AND ima.client_id = ?
+ORDER  BY ima.start_time`
+	return r.scanAvailabilityRows(ctx, q, moderatorID, moderatorID, clientID)
+}
+
+// scanAvailabilityRows is a helper to scan availability result rows into []map[string]any.
+func (r *UserRepo) scanAvailabilityRows(ctx context.Context, query string, args ...any) ([]map[string]any, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var id, modID, clientID int64
+		var firstName, lastName, st, et string
+		if err := rows.Scan(&id, &modID, &firstName, &lastName, &clientID, &st, &et); err != nil {
+			return nil, err
+		}
+		records = append(records, map[string]any{
+			"id": id, "moderatorId": modID, "firstName": firstName, "lastName": lastName,
+			"clientId": clientID, "startTime": st, "endTime": et,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
+}

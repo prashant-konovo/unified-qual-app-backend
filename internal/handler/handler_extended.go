@@ -3598,3 +3598,271 @@ func (h *Handler) GetAllModeratorsMRA(w http.ResponseWriter, r *http.Request) {
 	// Legacy returns result.records directly as array
 	writeJSON(w, http.StatusOK, records)
 }
+
+// PostModeratorAvailabilityMRA handles POST /moderator/post-availability (MRA).
+// Contract-identical with legacy: validates dates, checks external calendar, checks timeslot conflicts,
+// merges overlapping availabilities, creates new availability, returns all availabilities.
+func (h *Handler) PostModeratorAvailabilityMRA(w http.ResponseWriter, r *http.Request) {
+	headers := map[string]string{"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"}
+	_ = headers
+
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "user repository not available"})
+		return
+	}
+
+	var body struct {
+		ModeratorID int64  `json:"moderatorId"`
+		ClientID    int64  `json:"clientId"`
+		StartTime   string `json:"startTime"`
+		EndTime     string `json:"endTime"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	// Validation: startTime and endTime required
+	if body.StartTime == "" || body.EndTime == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Start time and end time are required"})
+		return
+	}
+
+	start, err := time.Parse(time.RFC3339, body.StartTime)
+	if err != nil {
+		start, err = time.Parse("2006-01-02T15:04:05.000Z", body.StartTime)
+	}
+	end, errEnd := time.Parse(time.RFC3339, body.EndTime)
+	if errEnd != nil {
+		end, errEnd = time.Parse("2006-01-02T15:04:05.000Z", body.EndTime)
+	}
+	if err != nil || errEnd != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Invalid date format"})
+		return
+	}
+
+	now := time.Now()
+	if !end.After(start) || start.Before(now) {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "End time must be greater than start time and start time cannot be in the past",
+		})
+		return
+	}
+
+	ctx := r.Context()
+
+	// Check external calendar import status
+	calStatus, _ := h.qsUserRepo.GetModExternalCalendarStatusMRA(ctx, body.ModeratorID)
+	if calStatus == "In Progress" {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{
+			"errorMessage": "There is a running import process for this moderator, try again later",
+		})
+		return
+	}
+
+	// Get moderator buffer (default 15)
+	buffer, _ := h.qsUserRepo.GetModeratorBufferMRA(ctx, body.ModeratorID)
+
+	// Check for timeslot conflicts
+	conflictCount, err := h.qsUserRepo.IsValidAvailabilityMRA(ctx, body.ModeratorID, body.StartTime, body.EndTime, buffer)
+	if err != nil {
+		slog.Error("check availability validity failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	if conflictCount > 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "This availability conflicts with an existing timeslot or some other condition",
+		})
+		return
+	}
+
+	// Check for overlapping availabilities and merge
+	overlapping, err := h.qsUserRepo.OverlappingAvailabilitiesMRA(ctx, body.ModeratorID, body.StartTime, body.EndTime)
+	if err != nil {
+		slog.Error("get overlapping availabilities failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	newStartTime := start
+	newEndTime := end
+	skipCreate := false
+
+	for _, oldAv := range overlapping {
+		oldST, _ := time.Parse("2006-01-02 15:04:05", oldAv["startTime"].(string))
+		oldET, _ := time.Parse("2006-01-02 15:04:05", oldAv["endTime"].(string))
+		avID := oldAv["id"].(int64)
+
+		if (oldST.Equal(newStartTime) || oldST.After(newStartTime)) && (oldET.Equal(newEndTime) || oldET.Before(newEndTime)) {
+			// Old is fully contained in new → delete old
+			_ = h.qsUserRepo.DeleteModeratorAvailability(ctx, avID)
+		} else if oldST.Before(newStartTime) && oldET.After(newEndTime) {
+			// New is wrapped inside old → don't create
+			skipCreate = true
+		} else if oldST.Before(newStartTime) || oldET.Equal(newStartTime) {
+			// Old starts before new → extend newStartTime
+			newStartTime = oldST
+			_ = h.qsUserRepo.DeleteModeratorAvailability(ctx, avID)
+		} else if oldET.After(newEndTime) || oldST.Equal(newEndTime) {
+			// Old ends after new → extend newEndTime
+			newEndTime = oldET
+			_ = h.qsUserRepo.DeleteModeratorAvailability(ctx, avID)
+		}
+	}
+
+	// Create the merged availability
+	if !skipCreate {
+		_, err = h.qsUserRepo.CreateModeratorAvailability(ctx, body.ModeratorID, body.ClientID, newStartTime, newEndTime)
+		if err != nil {
+			slog.Error("create moderator availability failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+			return
+		}
+	}
+
+	// Return all availabilities with imported overlap resolution (matching legacy getAllModeratorAvailabilityWithImportedService)
+	result := h.getAllModeratorAvailabilityWithImported(ctx, body.ModeratorID, body.ClientID)
+	writeJSON(w, http.StatusOK, result)
+}
+
+// getAllModeratorAvailabilityWithImported replicates the legacy getAllModeratorAvailabilityWithImportedService.
+// It fetches 4 sets of availabilities and merges them with overlap resolution.
+func (h *Handler) getAllModeratorAvailabilityWithImported(ctx context.Context, moderatorID, clientID int64) []map[string]any {
+	nonOverlapManual, err1 := h.qsUserRepo.GetNonOverlappingManualAvailabilityMRA(ctx, moderatorID, clientID)
+	nonOverlapImported, err2 := h.qsUserRepo.GetNonOverlappingImportedAvailabilityMRA(ctx, moderatorID, clientID)
+	overlapManual, err3 := h.qsUserRepo.GetAllOverlappingManualAvailabilityMRA(ctx, moderatorID, clientID)
+	overlapImported, err4 := h.qsUserRepo.GetAllOverlappingImportedAvailabilityMRA(ctx, moderatorID, clientID)
+
+	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
+		slog.Error("availability query errors", "err1", err1, "err2", err2, "err3", err3, "err4", err4)
+	}
+
+	var result []map[string]any
+	t := 0
+
+	// Non-overlapping manual
+	for _, d := range nonOverlapManual {
+		d["isImported"] = false
+		d["availabilityId"] = d["id"]
+		d["id"] = t
+		t++
+		result = append(result, d)
+	}
+
+	// Non-overlapping imported
+	for _, d := range nonOverlapImported {
+		d["isImported"] = true
+		d["availabilityId"] = d["id"]
+		d["id"] = t
+		t++
+		result = append(result, d)
+	}
+
+	frontEndId := t + 1
+
+	// For each overlapping manual, find its overlapping imported counterparts
+	for i := range overlapManual {
+		manAv := overlapManual[i]
+		manST := parseTimeFlexible(fmt.Sprint(manAv["startTime"]))
+		manET := parseTimeFlexible(fmt.Sprint(manAv["endTime"]))
+
+		// Filter imported that overlap with this manual availability
+		var overlappingImp []map[string]any
+		for _, imp := range overlapImported {
+			impST := parseTimeFlexible(fmt.Sprint(imp["startTime"]))
+			impET := parseTimeFlexible(fmt.Sprint(imp["endTime"]))
+			if (impST.Equal(manST) || impST.After(manST)) && impST.Before(manET) ||
+				impET.After(manST) && (impET.Equal(manET) || impET.Before(manET)) ||
+				impST.Before(manST) && impET.After(manET) {
+				overlappingImp = append(overlappingImp, imp)
+			}
+		}
+
+		manAv["isImported"] = false
+		manAv["availabilityId"] = manAv["id"]
+
+		if len(overlappingImp) == 0 {
+			manAv["id"] = frontEndId
+			frontEndId++
+			result = append(result, manAv)
+		} else {
+			for j := range overlappingImp {
+				imp := overlappingImp[j]
+				impST := parseTimeFlexible(fmt.Sprint(imp["startTime"]))
+				impET := parseTimeFlexible(fmt.Sprint(imp["endTime"]))
+
+				imp["isImported"] = true
+				imp["availabilityId"] = imp["id"]
+
+				if impST.After(manST) && impET.Before(manET) {
+					// Imported fully inside manual → split manual
+					manualHalf := map[string]any{
+						"id":             frontEndId,
+						"moderatorId":    manAv["moderatorId"],
+						"firstName":      manAv["firstName"],
+						"lastName":       manAv["lastName"],
+						"clientId":       manAv["clientId"],
+						"startTime":      manAv["startTime"],
+						"endTime":        fmt.Sprint(imp["startTime"]),
+						"isImported":     false,
+						"availabilityId": manAv["availabilityId"],
+					}
+					frontEndId++
+					manAv["startTime"] = fmt.Sprint(imp["endTime"])
+					result = append(result, manualHalf)
+					imp["id"] = frontEndId
+					frontEndId++
+					result = append(result, imp)
+				} else if (impST.Equal(manST) || impST.Before(manST)) && (impET.Equal(manET) || impET.After(manET)) {
+					// Imported wraps manual → replace with imported
+					imp["id"] = frontEndId
+					frontEndId++
+					result = append(result, imp)
+				} else if impST.Before(manET) && (impET.Equal(manET) || impET.After(manET)) {
+					// Imported extends past manual end → truncate manual, add imported
+					manAv["endTime"] = fmt.Sprint(imp["startTime"])
+					manAv["id"] = frontEndId
+					frontEndId++
+					result = append(result, manAv)
+					imp["id"] = frontEndId
+					frontEndId++
+					result = append(result, imp)
+				} else if impET.After(manST) && (impST.Equal(manST) || impST.Before(manST)) {
+					// Imported extends past manual start → add imported, truncate manual start
+					imp["id"] = frontEndId
+					frontEndId++
+					result = append(result, imp)
+					manAv["startTime"] = fmt.Sprint(imp["endTime"])
+					manAv["id"] = frontEndId
+					frontEndId++
+					result = append(result, manAv)
+				} else {
+					imp["id"] = frontEndId
+					frontEndId++
+					result = append(result, imp)
+				}
+			}
+		}
+	}
+
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result
+}
+
+// parseTimeFlexible parses a time string in multiple formats.
+func parseTimeFlexible(s string) time.Time {
+	for _, layout := range []string{
+		"2006-01-02 15:04:05",
+		time.RFC3339,
+		"2006-01-02T15:04:05.000Z",
+		"2006-01-02T15:04:05Z",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
