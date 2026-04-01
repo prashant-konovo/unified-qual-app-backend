@@ -80,6 +80,10 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 // ValidateSurvey checks if a survey can be fielded.
+// ValidateSurvey validates a survey for launch readiness.
+// Contract-identical with legacy InCrowdAPI: GET /v1/survey/:id/validate
+// Success: 200 {"error":{"message":"ready","developerMessage":"...","warnings":[...],"status":"OK","code":200}}
+// Failure: 422 {"error":{"developerMessage":"...","errors":[...],"warnings":[...],"status":"EXPECTATION FAILED","code":417}}
 func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	surveyID, err := strconv.ParseInt(idStr, 10, 64)
@@ -94,8 +98,29 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "validation failed"})
 			return
 		}
-		valid := len(errors) == 0
-		success(w, map[string]any{"valid": valid, "errors": errors, "source": "iris"})
+		warnings := h.irisSurveyRepo.ValidateSurveyWarnings(r.Context(), surveyID)
+
+		if len(errors) == 0 {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"error": map[string]any{
+					"message":          "ready",
+					"developerMessage": "This survey is okay to go live",
+					"warnings":         warnings,
+					"status":           "OK",
+					"code":             200,
+				},
+			})
+		} else {
+			writeJSON(w, http.StatusUnprocessableEntity, map[string]any{
+				"error": map[string]any{
+					"developerMessage": "this survey is not ready to go live",
+					"errors":           errors,
+					"warnings":         warnings,
+					"status":           "EXPECTATION FAILED",
+					"code":             417,
+				},
+			})
+		}
 		return
 	}
 
@@ -106,7 +131,15 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 			return
 		}
-		success(w, map[string]any{"valid": true, "errors": []string{}, "source": "qs"})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"error": map[string]any{
+				"message":          "ready",
+				"developerMessage": "This survey is okay to go live",
+				"warnings":         []string{},
+				"status":           "OK",
+				"code":             200,
+			},
+		})
 		return
 	}
 	writeJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})

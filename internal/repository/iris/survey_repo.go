@@ -299,9 +299,41 @@ func (r *SurveyRepo) ValidateSurvey(ctx context.Context, id int64) ([]string, er
 	var crowdCount int
 	_ = r.ro().QueryRowContext(ctx, "SELECT COUNT(*) FROM survey_crowd WHERE survey_id = ? AND excluded = 0", id).Scan(&crowdCount)
 	if crowdCount == 0 {
-		errors = append(errors, "survey must have at least one crowd assigned")
+		errors = append(errors, "This survey doesn't have any crowds")
+	}
+	// Check if has deleted crowds
+	var deletedCount int
+	_ = r.ro().QueryRowContext(ctx, `SELECT COUNT(*) FROM survey_crowd sc
+		INNER JOIN crowd c ON sc.crowd_id = c.id
+		WHERE sc.survey_id = ? AND c.deleted = 1`, id).Scan(&deletedCount)
+	if deletedCount > 0 {
+		errors = append(errors, "This survey contains deleted crowds")
+	}
+	// Check if survey is a template
+	if s.Status == 5 { // template status
+		errors = append(errors, "This is a template")
 	}
 	return errors, nil
+}
+
+// ValidateSurveyWarnings returns non-blocking warnings for a survey.
+func (r *SurveyRepo) ValidateSurveyWarnings(ctx context.Context, surveyID int64) []string {
+	var warnings []string
+
+	// Check if there are enough moderator time slots
+	var tsCount int
+	_ = r.ro().QueryRowContext(ctx, `SELECT COUNT(*) FROM time_slot ts
+		INNER JOIN project p ON ts.project_id = p.id
+		INNER JOIN survey s ON s.project_id = p.id
+		WHERE s.id = ? AND ts.status_id IN (1,2)`, surveyID).Scan(&tsCount)
+	if tsCount < 2 {
+		warnings = append(warnings, "You're requesting more completes than you have defined moderator availability; your survey might not close on its own.")
+	}
+
+	if warnings == nil {
+		warnings = []string{}
+	}
+	return warnings
 }
 
 // GetSurveyCrowds returns survey_crowd rows with all 26 columns for a survey.
