@@ -249,6 +249,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Use(middleware.RequireRoles("admin"))
 				r.Get("/admin/users", h.ListAdminUsers)
 				r.Post("/admin/users", h.CreateAdminUser)
+				r.Get("/qstoolAdmin/get-all-users", h.ListAdminUsersMRA)
 			})
 
 			// ══════════════════════════════════════════

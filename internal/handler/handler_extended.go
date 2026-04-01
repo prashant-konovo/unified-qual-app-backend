@@ -448,6 +448,38 @@ func (h *Handler) UnsubscribeUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // ──────────────────────────────────────────────
+// Admin Get All Users (MRA #17)
+// ──────────────────────────────────────────────
+
+// ListAdminUsersMRA returns all QS users with comm prefs using legacy JOIN query.
+// Contract-identical with legacy QS Tool: GET /qstoolAdmin/get-all-users
+// Response: flat array of user rows (result.records from data-api-client)
+func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "no database available",
+			"errorMessage": "Error while getting all users",
+		})
+		return
+	}
+
+	cognitoUserID := r.URL.Query().Get("cognitoUserId")
+
+	records, err := h.qsUserRepo.GetAllUsersAdmin(r.Context(), cognitoUserID)
+	if err != nil {
+		slog.Error("get all users admin failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "Error while getting all users",
+		})
+		return
+	}
+
+	// Legacy returns result.records (flat array)
+	writeJSON(w, http.StatusOK, records)
+}
+
+// ──────────────────────────────────────────────
 // Project Moderators Reset (MRA #23)
 // ──────────────────────────────────────────────
 

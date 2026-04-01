@@ -587,3 +587,85 @@ func (r *UserRepo) CheckUserIsQsToolAndI2(ctx context.Context, email string) (ma
 		"userId":   u.ID,
 	}, nil
 }
+
+// GetAllUsersAdmin returns all users with comm prefs using the legacy JOIN query.
+// Optional cognitoUserId filter narrows to a single user.
+func (r *UserRepo) GetAllUsersAdmin(ctx context.Context, cognitoUserID string) ([]map[string]any, error) {
+	q := `SELECT *
+	FROM   (SELECT myusers.first_name                   AS firstName,
+	               myusers.last_name                    AS lastName,
+	               myusers.email                        AS email,
+	               userpref.modified_date               AS modifiedDate,
+	               userpref.allow_contact_by_email,
+	               myusers.cognito_user_id              AS cognitoUserId,
+	               (SELECT Concat(u.first_name, ' ', u.last_name) AS byWho
+	                FROM   user u
+	                WHERE  u.cognito_user_id = userpref.modified_by) AS byWho,
+	               (SELECT user_role.role_id AS roleId
+	                FROM   user_role
+	                WHERE  user_role.user_id = myusers.id
+	                ORDER  BY modified_date DESC
+	                LIMIT  1)                           AS userRole
+	        FROM   user myusers
+	               INNER JOIN user_communication_preferences userpref
+	                       ON myusers.id = userpref.user_id
+	        WHERE  myusers.cognito_user_id IS NOT NULL) AS usersList
+	WHERE  usersList.userRole IS NOT NULL`
+
+	var args []any
+	if cognitoUserID != "" {
+		q += " AND usersList.cognitoUserId = ?"
+		args = append(args, cognitoUserID)
+	}
+	q += " ORDER BY Concat(firstName, ' ', lastName)"
+
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get all users admin: %w", err)
+	}
+	defer rows.Close()
+
+	var records []map[string]any
+	for rows.Next() {
+		var firstName, lastName, email, cogID sql.NullString
+		var modifiedDate sql.NullString
+		var allowContact sql.NullInt64
+		var byWho sql.NullString
+		var userRole sql.NullInt64
+		if err := rows.Scan(&firstName, &lastName, &email, &modifiedDate,
+			&allowContact, &cogID, &byWho, &userRole); err != nil {
+			return nil, err
+		}
+		rec := map[string]any{
+			"firstName":             firstName.String,
+			"lastName":              lastName.String,
+			"email":                 email.String,
+			"cognitoUserId":         cogID.String,
+		}
+		if modifiedDate.Valid {
+			rec["modifiedDate"] = modifiedDate.String
+		} else {
+			rec["modifiedDate"] = nil
+		}
+		if allowContact.Valid {
+			rec["allow_contact_by_email"] = allowContact.Int64
+		} else {
+			rec["allow_contact_by_email"] = nil
+		}
+		if byWho.Valid {
+			rec["byWho"] = byWho.String
+		} else {
+			rec["byWho"] = nil
+		}
+		if userRole.Valid {
+			rec["userRole"] = userRole.Int64
+		} else {
+			rec["userRole"] = nil
+		}
+		records = append(records, rec)
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
+}
