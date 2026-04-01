@@ -1920,20 +1920,30 @@ func (h *Handler) UpdateModerator(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.qsUserRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"error":        "QS database unavailable",
+			"errorMessage": "An error occured while removing the user",
+		})
 		return
 	}
 	modID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator id"})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"error":        "invalid moderator id",
+			"errorMessage": "An error occured while removing the user",
+		})
 		return
 	}
 	if err := h.qsUserRepo.SoftDelete(ctx, modID); err != nil {
 		slog.Error("delete moderator", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete moderator"})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while removing the user",
+		})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": modID})
+	// Legacy returns data-api-client UPDATE result shape
+	writeJSON(w, http.StatusOK, map[string]any{"numberOfRecordsUpdated": 1})
 }
 
 func (h *Handler) BulkUploadModerators(w http.ResponseWriter, r *http.Request) {
