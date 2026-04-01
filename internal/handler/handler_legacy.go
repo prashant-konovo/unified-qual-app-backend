@@ -2791,13 +2791,16 @@ func (h *Handler) MarkNoShow(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 // GetUser returns a user by ID.
-// Contract-identical with legacy InCrowdAPI: GET /v1/user/:id
-// Response: flat user object
+// Contract-identical with legacy QS Tool: GET /user/user-info/{user_id}
+// Response: flat user object with account/client selections
 func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	userID, err := strconv.ParseInt(idStr, 10, 64)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid user id"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "An error occured while fetching user info",
+			"errorMessage": "An error occured while fetching user info",
+		})
 		return
 	}
 	source := h.resolveSource(r)
@@ -2805,11 +2808,14 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	if source == "iris" && h.irisUserRepo != nil {
 		u, err := h.irisUserRepo.GetByID(r.Context(), userID)
 		if err != nil || u == nil {
-			writeJSON(w, http.StatusNotFound, map[string]any{"error": "user not found"})
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        "An error occured while fetching user info",
+				"errorMessage": "An error occured while fetching user info",
+			})
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"id": u.ID, "firstName": u.FirstName, "lastName": u.LastName,
+			"id": u.ID, "first_name": u.FirstName, "last_name": u.LastName,
 			"email": nullStr(u.Email), "source": "iris",
 		})
 		return
@@ -2818,16 +2824,69 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	if h.qsUserRepo != nil {
 		u, err := h.qsUserRepo.GetByID(r.Context(), userID)
 		if err != nil || u == nil {
-			writeJSON(w, http.StatusNotFound, map[string]any{"error": "user not found"})
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        "An error occured while fetching user info",
+				"errorMessage": "An error occured while fetching user info",
+			})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"id": u.ID, "firstName": nullStr(u.FirstName), "lastName": nullStr(u.LastName),
-			"email": nullStr(u.Email), "roleIds": u.RoleIDs, "source": "qs",
-		})
+
+		// First role ID for legacy compat (legacy returns single int)
+		var roles any
+		if len(u.RoleIDs) > 0 {
+			roles = u.RoleIDs[0]
+		}
+
+		resp := map[string]any{
+			"id":                        u.ID,
+			"first_name":                nullStr(u.FirstName),
+			"last_name":                 nullStr(u.LastName),
+			"email":                     nullStr(u.Email),
+			"time_zone":                 nullStr(u.TimeZone),
+			"modified_on":               u.ModifiedOn,
+			"roles":                     roles,
+			"moderatorBuffer":           nullInt64(u.ModeratorBuffer),
+			"moderatorBufferModifiedOn": nullTime(u.ModeratorBufferModified),
+		}
+
+		// Fetch clientId from user_client table
+		if h.db.QS != nil {
+			var clientID sql.NullInt64
+			_ = h.db.QS.QueryRowContext(r.Context(),
+				"SELECT client_id FROM user_client WHERE user_id = ? LIMIT 1", userID).Scan(&clientID)
+			resp["clientId"] = nullInt64(clientID)
+
+			// Fetch accountsSelected
+			var acctSel sql.NullInt64
+			_ = h.db.QS.QueryRowContext(r.Context(),
+				"SELECT account_selection_account_id FROM user_account_selection WHERE userid = ? LIMIT 1", userID).Scan(&acctSel)
+			resp["accountsSelected"] = nullInt64(acctSel)
+
+			// Fetch clientsSelected
+			clientRows, err := h.db.QS.QueryContext(r.Context(),
+				"SELECT client_selection_account_id FROM user_client_selection WHERE userid = ?", userID)
+			if err == nil {
+				defer clientRows.Close()
+				var clients []int64
+				for clientRows.Next() {
+					var cid int64
+					if clientRows.Scan(&cid) == nil {
+						clients = append(clients, cid)
+					}
+				}
+				if len(clients) > 0 {
+					resp["clientsSelected"] = clients
+				}
+			}
+		}
+
+		writeJSON(w, http.StatusOK, resp)
 		return
 	}
-	writeJSON(w, http.StatusNotFound, map[string]any{"error": "user not found"})
+	writeJSON(w, http.StatusInternalServerError, map[string]any{
+		"error":        "An error occured while fetching user info",
+		"errorMessage": "An error occured while fetching user info",
+	})
 }
 
 // UpdateUser updates a user.
