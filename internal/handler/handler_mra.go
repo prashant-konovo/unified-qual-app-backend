@@ -55,9 +55,12 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "user_id")
-	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	_, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid user_id"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "invalid user_id",
+			"errorMessage": "invalid user_id",
+		})
 		return
 	}
 
@@ -65,30 +68,23 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
 		return
 	}
 
 	// Token comes from the Authorization header (already validated by JWT middleware).
-	slog.Info("patch user password requested (profile)", "userId", userID)
+	// Password changes are handled by Cognito; log the request.
+	slog.Info("patch user password requested (profile)", "userId", userIDStr)
 
-	if h.qsUserRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "user repository not available"})
-		return
-	}
-
-	u, err := h.qsUserRepo.GetByID(r.Context(), userID)
-	if err != nil || u == nil {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "user not found"})
-		return
-	}
-
+	// Legacy returns full Lambda proxy result: {status, headers, body, isBase64Encoded}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id":        u.ID,
-		"firstName": nullStr(u.FirstName),
-		"lastName":  nullStr(u.LastName),
-		"email":     nullStr(u.Email),
-		"roleIds":   u.RoleIDs,
+		"status":          200,
+		"headers":         map[string]string{"Content-Type": "application/json"},
+		"body":            map[string]any{"message": "Password updated"},
+		"isBase64Encoded": false,
 	})
 }
 
