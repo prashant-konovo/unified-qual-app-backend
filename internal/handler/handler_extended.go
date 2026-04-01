@@ -3474,3 +3474,53 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 	// Legacy returns JSON.stringify("Done") which serializes as the string "Done"
 	writeJSON(w, http.StatusOK, "Done")
 }
+
+// GetConferenceLinkMRA handles GET /get-conference-link/{participant_group_id} (MRA).
+// Contract-identical with legacy: fetches conference link + multi-language meeting information.
+// NOTE: Legacy passes participant_group_id but actually uses it as project_id (per code comment).
+// Response: {conference_link, meetingInformation: [["en_us","info"],["fr_fr","info"]]}
+func (h *Handler) GetConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
+	if h.qsConferenceRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "conference repository not available",
+			"errorMessage": "conference repository not available",
+		})
+		return
+	}
+
+	// Legacy: participant_group_id from path but used as project_id in query
+	pgIDStr := chi.URLParam(r, "participant_group_id")
+	projectID, err := strconv.ParseInt(pgIDStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "invalid participant_group_id",
+			"errorMessage": "invalid participant_group_id",
+		})
+		return
+	}
+
+	records, err := h.qsConferenceRepo.GetConferenceLinkByProjectMRA(r.Context(), projectID)
+	if err != nil {
+		slog.Error("get conference link failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
+		return
+	}
+
+	// Build response matching legacy exactly:
+	// resObj.conference_link = records[i].conference_link
+	// resObj.meetingInformation = [[langCode, meeting_information], ...]
+	resObj := map[string]any{}
+	var meetingInformation [][]string
+	for _, rec := range records {
+		langCode, _ := rec["langCode_countryCode"].(string)
+		meetingInfo, _ := rec["meeting_information"].(string)
+		meetingInformation = append(meetingInformation, []string{langCode, meetingInfo})
+		resObj["conference_link"] = rec["conference_link"]
+	}
+	resObj["meetingInformation"] = meetingInformation
+
+	writeJSON(w, http.StatusOK, resObj)
+}

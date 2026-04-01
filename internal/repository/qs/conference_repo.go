@@ -403,3 +403,51 @@ func (r *ConferenceRepo) GetPendingTimeSlotsCountMRA(ctx context.Context, projec
 	}
 	return count, nil
 }
+
+// GetConferenceLinkByProjectMRA returns conference link + multi-language meeting information
+// matching legacy getConferenceLink SQL exactly.
+// NOTE: Legacy passes participant_group_id but actually uses it as project_id in the WHERE clause.
+func (r *ConferenceRepo) GetConferenceLinkByProjectMRA(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	q := `SELECT
+		c.id AS conferenceId,
+		c.conference_link,
+		pmt.language_id,
+		pmt.meeting_information,
+		pmt.project_id,
+		l.id AS lang_id,
+		l.langCode_countryCode,
+		l.name AS lang_name
+	FROM conference_invitation c
+	JOIN participant_group pg ON c.participant_group_id = pg.id
+	JOIN survey s ON s.id = pg.survey_id
+	JOIN project p ON p.id = s.project_id
+	JOIN project_meeting_translation pmt ON pmt.project_id = p.id
+	JOIN conference_invitation ci ON ci.participant_group_id = pg.id
+	JOIN language_localisation l ON l.id = pmt.language_id
+	WHERE p.id = ?`
+
+	rows, err := r.db.QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get conference link by project: %w", err)
+	}
+	defer rows.Close()
+
+	var records []map[string]any
+	for rows.Next() {
+		var confID, langID, projectIDVal int64
+		var confLink, meetingInfo, langCode, langName string
+		if err := rows.Scan(&confID, &confLink, &langID, &meetingInfo, &projectIDVal, &langID, &langCode, &langName); err != nil {
+			return nil, fmt.Errorf("scan conference link row: %w", err)
+		}
+		records = append(records, map[string]any{
+			"conferenceId":          confID,
+			"conference_link":       confLink,
+			"language_id":           langID,
+			"meeting_information":   meetingInfo,
+			"project_id":            projectIDVal,
+			"langCode_countryCode":  langCode,
+			"name":                  langName,
+		})
+	}
+	return records, rows.Err()
+}
