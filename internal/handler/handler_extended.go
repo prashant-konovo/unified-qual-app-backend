@@ -2181,3 +2181,99 @@ func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Reque
 
 	writeJSON(w, http.StatusOK, map[string]any{})
 }
+
+// ResetProjectModeratorsMRA handles POST /project/{project_id}/moderators_reset (MRA).
+// Contract-identical with legacy: supports "reset" and "unassign" modes.
+// Reset: diffs moderatorIds against existing, adds/removes from projects_users + moderator_time_range.
+// Unassign: removes single moderator, returns updated moderator list.
+func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Request) {
+	pidStr := chi.URLParam(r, "project_id")
+	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while trying to reset project moderators",
+		})
+		return
+	}
+
+	if h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "database not configured",
+			"errorMessage": "An error occured while trying to reset project moderators",
+		})
+		return
+	}
+
+	mode := r.URL.Query().Get("mode")
+	if mode == "" {
+		mode = r.Header.Get("X-Mode")
+	}
+
+	var body struct {
+		ModeratorIDs []int64 `json:"moderatorIds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while trying to reset project moderators",
+		})
+		return
+	}
+
+	if mode == "reset" {
+		existingIDs, err := h.qsProjectRepo.GetProjectModeratorIDs(r.Context(), projectID)
+		if err != nil {
+			slog.Error("get project mod ids failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while trying to reset project moderators",
+			})
+			return
+		}
+
+		if err := h.qsProjectRepo.ResetProjectModeratorsMRA(r.Context(), projectID, body.ModeratorIDs, existingIDs); err != nil {
+			slog.Error("reset project mods failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while trying to reset project moderators",
+			})
+			return
+		}
+
+		// Legacy returns transaction result array
+		writeJSON(w, http.StatusOK, []map[string]any{})
+	} else if mode == "unassign" {
+		if len(body.ModeratorIDs) == 0 {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        "no moderator id provided",
+				"errorMessage": "An error occured while trying to reset project moderators",
+			})
+			return
+		}
+		modID := body.ModeratorIDs[0]
+		if err := h.qsProjectRepo.UnassignModeratorFromProject(r.Context(), modID, projectID); err != nil {
+			slog.Error("unassign moderator failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while trying to reset project moderators",
+			})
+			return
+		}
+
+		mods, err := h.qsProjectRepo.GetModeratorsList(r.Context(), projectID)
+		if err != nil {
+			slog.Error("get moderators list failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while trying to reset project moderators",
+			})
+			return
+		}
+		writeJSON(w, http.StatusOK, mods)
+	} else {
+		writeJSON(w, 422, map[string]any{
+			"errorMessage": "Missing mode in request",
+		})
+	}
+}

@@ -794,6 +794,192 @@ func (r *ProjectRepo) UpdateExternalSurveyID(ctx context.Context, projectID int6
 	return nil
 }
 
+// GetProjectModeratorIDs returns user_ids of moderators assigned to a project.
+func (r *ProjectRepo) GetProjectModeratorIDs(ctx context.Context, projectID int64) ([]int64, error) {
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT user_id FROM projects_users WHERE project_id = ?", projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get project mod ids: %w", err)
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ResetProjectModeratorsMRA performs the legacy diff-based moderator reset.
+// Compares newIDs vs existingIDs, then adds/removes in projects_users and cleans moderator_time_range.
+func (r *ProjectRepo) ResetProjectModeratorsMRA(ctx context.Context, projectID int64, newIDs, existingIDs []int64) error {
+	existingSet := map[int64]bool{}
+	for _, id := range existingIDs {
+		existingSet[id] = true
+	}
+	newSet := map[int64]bool{}
+	for _, id := range newIDs {
+		newSet[id] = true
+	}
+
+	var modsToAdd, modsToRemove []int64
+	for _, id := range existingIDs {
+		if !newSet[id] {
+			modsToRemove = append(modsToRemove, id)
+		}
+	}
+	for _, id := range newIDs {
+		if !existingSet[id] {
+			modsToAdd = append(modsToAdd, id)
+		}
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if len(newIDs) > 0 {
+		// Remove mods no longer in list
+		if len(modsToRemove) > 0 {
+			placeholders := make([]string, len(modsToRemove))
+			args := []any{projectID}
+			for i, id := range modsToRemove {
+				placeholders[i] = "?"
+				args = append(args, id)
+			}
+			_, err = tx.ExecContext(ctx,
+				"DELETE FROM projects_users WHERE project_id = ? AND user_id IN ("+strings.Join(placeholders, ",")+")", args...)
+			if err != nil {
+				return fmt.Errorf("delete removed mods: %w", err)
+			}
+		}
+		// Add new mods
+		for _, id := range modsToAdd {
+			_, err = tx.ExecContext(ctx,
+				"INSERT INTO projects_users (project_id, user_id) VALUES (?, ?)", projectID, id)
+			if err != nil {
+				return fmt.Errorf("insert mod: %w", err)
+			}
+		}
+		// Clean stale moderator_time_range
+		if len(modsToRemove) > 0 {
+			_, err = tx.ExecContext(ctx,
+				"DELETE FROM moderator_time_range WHERE moderator_id NOT IN (SELECT user_id FROM projects_users WHERE project_id = ?) AND project_id = ?",
+				projectID, projectID)
+			if err != nil {
+				return fmt.Errorf("clean moderator_time_range: %w", err)
+			}
+		}
+	} else {
+		// Empty moderatorIds → delete all
+		_, err = tx.ExecContext(ctx,
+			"DELETE FROM projects_users WHERE project_id = ?", projectID)
+		if err != nil {
+			return fmt.Errorf("delete all mods: %w", err)
+		}
+		_, err = tx.ExecContext(ctx,
+			"DELETE FROM moderator_time_range WHERE project_id = ?", projectID)
+		if err != nil {
+			return fmt.Errorf("delete all time ranges: %w", err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
+// UnassignModeratorFromProject removes a moderator from project and their time range.
+func (r *ProjectRepo) UnassignModeratorFromProject(ctx context.Context, userID, projectID int64) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	_, err = tx.ExecContext(ctx,
+		"DELETE FROM projects_users WHERE user_id = ? AND project_id = ?", userID, projectID)
+	if err != nil {
+		return fmt.Errorf("delete projects_users: %w", err)
+	}
+	_, err = tx.ExecContext(ctx,
+		"DELETE FROM moderator_time_range WHERE project_id = ? AND moderator_id = ?", projectID, userID)
+	if err != nil {
+		return fmt.Errorf("delete moderator_time_range: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
+
+// GetModeratorsList returns moderators for a project matching legacy getModeratorsList query.
+func (r *ProjectRepo) GetModeratorsList(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	q := `SELECT DISTINCT user.first_name as firstName, user.last_name as lastName,
+	      user.id as id, user_client.client_id as clientId,
+	      COUNT(DISTINCT moderator_time_slot.id) as interviewCount,
+	      mtr.start_time as startTime, mtr.end_time as endTime, mtr.timezone as timezone
+	      FROM user
+	      INNER JOIN user_client ON user.id = user_client.user_id
+	      INNER JOIN projects_users ON user_client.user_id = projects_users.user_id
+	      INNER JOIN user_role ON user.id = user_role.user_id
+	      LEFT OUTER JOIN (SELECT moderator_time_slot.* FROM moderator_time_slot
+	           INNER JOIN time_slot ON time_slot.id = moderator_time_slot.time_slot_id
+	           AND time_slot.status_id = 2 AND time_slot.is_invalid = FALSE
+	           AND time_slot.project_id = ?) moderator_time_slot ON moderator_time_slot.moderator_id = user.id
+	      LEFT OUTER JOIN (SELECT * FROM moderator_time_range WHERE project_id = ?) mtr ON mtr.moderator_id = user.id
+	      WHERE user_role.role_id = 1 AND user.deleted = 0 AND projects_users.project_id = ?
+	      GROUP BY user.id`
+
+	rows, err := r.db.QueryContext(ctx, q, projectID, projectID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get moderators list: %w", err)
+	}
+	defer rows.Close()
+
+	var results []map[string]any
+	for rows.Next() {
+		var (
+			firstName, lastName                string
+			id, clientID, interviewCount       int64
+			startTime, endTime, timezone       sql.NullString
+		)
+		if err := rows.Scan(&firstName, &lastName, &id, &clientID,
+			&interviewCount, &startTime, &endTime, &timezone); err != nil {
+			return nil, fmt.Errorf("scan moderator row: %w", err)
+		}
+		results = append(results, map[string]any{
+			"firstName":      firstName,
+			"lastName":       lastName,
+			"id":             id,
+			"clientId":       clientID,
+			"interviewCount": interviewCount,
+			"startTime":      startTime.String,
+			"endTime":        endTime.String,
+			"timezone":       timezone.String,
+		})
+	}
+	if results == nil {
+		results = []map[string]any{}
+	}
+	return results, rows.Err()
+}
+
 // Update modifies mutable QS project fields.
 func (r *ProjectRepo) Update(ctx context.Context, id int64, fields map[string]any) error {
 	if len(fields) == 0 {
