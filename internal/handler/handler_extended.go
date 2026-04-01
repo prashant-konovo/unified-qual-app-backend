@@ -2777,3 +2777,80 @@ func (h *Handler) UpsertModeratorTimeRangeMRA(w http.ResponseWriter, r *http.Req
 	// Legacy returns the transaction result which includes numberOfRecordsUpdated
 	writeJSON(w, http.StatusOK, map[string]any{"numberOfRecordsUpdated": 1})
 }
+
+// GetModeratorsCountMRA handles GET /project/get-moderators-count/{project_id}/sample-size/{sample_size} (MRA).
+// Contract-identical with legacy: sums availability slots divided by interviewLength,
+// compares against sampleSize - completed to produce displayWarning flag.
+// Response: {avModCount, displayWarning}.
+func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) {
+	pidStr := chi.URLParam(r, "project_id")
+	ssStr := chi.URLParam(r, "sample_size")
+	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while getting the number of available moderators",
+		})
+		return
+	}
+	sampleSize, err := strconv.ParseInt(ssStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while getting the number of available moderators",
+		})
+		return
+	}
+
+	if h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "database not configured",
+			"errorMessage": "An error occured while getting the number of available moderators",
+		})
+		return
+	}
+
+	// Get moderator availability per role
+	availabilities, err := h.qsProjectRepo.GetAllModeratorsAvailabilityPerRole(r.Context(), projectID)
+	if err != nil {
+		slog.Error("get moderator availability per role failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while getting the number of available moderators",
+		})
+		return
+	}
+
+	// Get project details for interviewLength and completed count
+	project, err := h.qsProjectRepo.GetProjectDetailsMRA(r.Context(), projectID)
+	if err != nil || project == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"errorMessage": "An error occured while getting project details",
+		})
+		return
+	}
+
+	interviewLength, _ := project["interviewLength"].(int64)
+	completed, _ := project["completed"].(int64)
+
+	if interviewLength == 0 {
+		interviewLength = 1 // avoid divide by zero
+	}
+
+	// Sum availability slots: Math.floor(minutes / interviewLength)
+	var modIdAvailabilitiesCount int64
+	for _, av := range availabilities {
+		minutes := int64(av.EndTime.Sub(av.StartTime).Minutes())
+		modIdAvailabilitiesCount += minutes / interviewLength
+	}
+
+	displayWarning := false
+	if modIdAvailabilitiesCount < sampleSize-completed {
+		displayWarning = true
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"avModCount":     modIdAvailabilitiesCount,
+		"displayWarning": displayWarning,
+	})
+}

@@ -1293,3 +1293,28 @@ func (r *ProjectRepo) UpsertModeratorTimeRangePerProject(ctx context.Context, pr
 	}
 	return nil
 }
+
+// GetAllModeratorsAvailabilityPerRole returns moderator availability for moderators with role_id=1
+// assigned to a project, with end_time >= NOW().
+func (r *ProjectRepo) GetAllModeratorsAvailabilityPerRole(ctx context.Context, projectID int64) ([]ModeratorAvailability, error) {
+	q := `SELECT moderator_availability.id, moderator_id, client_id, start_time, end_time
+	      FROM moderator_availability
+	      INNER JOIN user_role ON user_role.user_id = moderator_availability.moderator_id
+	      INNER JOIN projects_users ON moderator_availability.moderator_id = projects_users.user_id
+	      WHERE user_role.role_id = 1 AND end_time >= NOW() AND project_id = ?`
+	rows, err := r.db.QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get moderators availability per role: %w", err)
+	}
+	defer rows.Close()
+
+	var results []ModeratorAvailability
+	for rows.Next() {
+		var ma ModeratorAvailability
+		if err := rows.Scan(&ma.ID, &ma.ModeratorID, &ma.ClientID, &ma.StartTime, &ma.EndTime); err != nil {
+			return nil, fmt.Errorf("scan moderator availability per role: %w", err)
+		}
+		results = append(results, ma)
+	}
+	return results, rows.Err()
+}
