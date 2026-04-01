@@ -2854,3 +2854,84 @@ func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) 
 		"displayWarning": displayWarning,
 	})
 }
+
+// GetAllInterviewsMRA handles POST /projects/{client_id}/interviews (MRA).
+// Contract-identical with legacy: returns paginated interviews filtered by activeTab,
+// externalClientsIds, projectsIds, search, paymentStatusCode. Side effect: saveUserSelection.
+// Response: {clientId, data: records}.
+func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
+	cidStr := chi.URLParam(r, "client_id")
+	clientID, err := strconv.ParseInt(cidStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	if h.qsInterviewsRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
+		return
+	}
+
+	var body struct {
+		ExternalClientsIDs []string `json:"externalClientsIds"`
+		ProjectsIDs        []string `json:"projectsIds"`
+		ProjectAccountID   any      `json:"projectAccountId"`
+		UserID             any      `json:"userId"`
+		Offset             int      `json:"offset"`
+		ActiveTab          string   `json:"activeTab"`
+		HandleScroll       any      `json:"handleScroll"`
+		PaymentStatusCode  string   `json:"paymentStatusCode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	search := r.URL.Query().Get("q")
+
+	data, err := h.qsInterviewsRepo.GetAllInterviewsByOffsetAndActiveTab(
+		r.Context(), clientID, body.ExternalClientsIDs, body.ProjectsIDs,
+		search, body.Offset, body.ActiveTab, body.PaymentStatusCode,
+	)
+	if err != nil {
+		slog.Error("get all interviews failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	if data == nil {
+		data = []map[string]any{}
+	}
+
+	// Side effect: save user selection (non-fatal)
+	if h.qsProjectRepo != nil && body.UserID != nil && body.ProjectAccountID != nil {
+		var userID int64
+		switch v := body.UserID.(type) {
+		case float64:
+			userID = int64(v)
+		case string:
+			userID, _ = strconv.ParseInt(v, 10, 64)
+		}
+		if userID > 0 {
+			// projectAccountId and externalClientsIds are passed through to SaveUserSelection
+			var accountIDs, clientIDs []string
+			if paStr, ok := body.ProjectAccountID.(string); ok {
+				paStr = strings.Trim(paStr, "()")
+				if paStr != "" {
+					accountIDs = strings.Split(paStr, ",")
+				}
+			}
+			for _, c := range body.ExternalClientsIDs {
+				c = strings.Trim(c, "() '\"")
+				if c != "" {
+					clientIDs = append(clientIDs, c)
+				}
+			}
+			_ = h.qsProjectRepo.SaveUserSelection(r.Context(), userID, accountIDs, clientIDs)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"clientId": cidStr,
+		"data":     data,
+	})
+}

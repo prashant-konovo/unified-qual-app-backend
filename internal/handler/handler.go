@@ -37,10 +37,15 @@ type Handler struct {
 	irisSurveyRepo   *iris.SurveyRepo
 	qsConferenceRepo *qs.ConferenceRepo
 	qsAnswerRepo     *qs.AnswerRepo
+	qsInterviewsRepo *qs.InterviewsRepo
 }
 
 func New(cfg *config.Config, db *config.DBPair, services *integration.ServiceClients, irisRepo *iris.ProjectRepo, qsRepo *qs.ProjectRepo, irisUserRepo *iris.UserRepo, qsUserRepo *qs.UserRepo, qsTimeSlotRepo *qs.TimeSlotRepo, qsRespondentRepo *qs.RespondentRepo, qsSurveyRepo *qs.SurveyRepo, irisSurveyRepo *iris.SurveyRepo, qsConferenceRepo *qs.ConferenceRepo, qsAnswerRepo *qs.AnswerRepo) *Handler {
-	return &Handler{cfg: cfg, db: db, services: services, irisProjectRepo: irisRepo, qsProjectRepo: qsRepo, irisUserRepo: irisUserRepo, qsUserRepo: qsUserRepo, qsTimeSlotRepo: qsTimeSlotRepo, qsRespondentRepo: qsRespondentRepo, qsSurveyRepo: qsSurveyRepo, irisSurveyRepo: irisSurveyRepo, qsConferenceRepo: qsConferenceRepo, qsAnswerRepo: qsAnswerRepo}
+	h := &Handler{cfg: cfg, db: db, services: services, irisProjectRepo: irisRepo, qsProjectRepo: qsRepo, irisUserRepo: irisUserRepo, qsUserRepo: qsUserRepo, qsTimeSlotRepo: qsTimeSlotRepo, qsRespondentRepo: qsRespondentRepo, qsSurveyRepo: qsSurveyRepo, irisSurveyRepo: irisSurveyRepo, qsConferenceRepo: qsConferenceRepo, qsAnswerRepo: qsAnswerRepo}
+	if db.QS != nil {
+		h.qsInterviewsRepo = qs.NewInterviewsRepo(db.QS)
+	}
+	return h
 }
 
 // ──────────────────────────────────────────────
