@@ -751,6 +751,38 @@ func (r *ProjectRepo) SaveUserSelection(ctx context.Context, userID int64, accou
 	return nil
 }
 
+// UpdateSchedulerGenerated sets scheduler_generated=1 for a project (legacy default path).
+func (r *ProjectRepo) UpdateSchedulerGenerated(ctx context.Context, projectID int64) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE project SET scheduler_generated = 1 WHERE id = ?", projectID)
+	if err != nil {
+		return fmt.Errorf("update scheduler_generated: %w", err)
+	}
+	return nil
+}
+
+// UpdatePostScreenInBuffer updates post_screenin_buffer and modified_on for a project.
+func (r *ProjectRepo) UpdatePostScreenInBuffer(ctx context.Context, projectID int64, buffer float64) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE project SET post_screenin_buffer = ?, modified_on = ? WHERE id = ?",
+		buffer, time.Now().UTC(), projectID)
+	if err != nil {
+		return fmt.Errorf("update post_screenin_buffer: %w", err)
+	}
+	return nil
+}
+
+// UpdateModeratorBufferMRA updates moderator_buffer and modified_on for a project.
+func (r *ProjectRepo) UpdateModeratorBufferMRA(ctx context.Context, projectID int64, buffer float64) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE project SET moderator_buffer = ?, modified_on = ? WHERE id = ?",
+		buffer, time.Now().UTC(), projectID)
+	if err != nil {
+		return fmt.Errorf("update moderator_buffer: %w", err)
+	}
+	return nil
+}
+
 // Update modifies mutable QS project fields.
 func (r *ProjectRepo) Update(ctx context.Context, id int64, fields map[string]any) error {
 	if len(fields) == 0 {

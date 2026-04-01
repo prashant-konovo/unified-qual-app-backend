@@ -2067,3 +2067,72 @@ func (h *Handler) ListProjectsMRA(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, output)
 }
+
+// UpdateProjectMRA handles PUT /project/update-project-details/{project_id} (MRA).
+// Contract-identical with legacy QS Tool: 3 code paths based on request body.
+// 1. postScreeninBuffer set and != -1 → update buffer + modified_on
+// 2. moderatorBuffer set and != -1 → update buffer + modified_on
+// 3. else → set scheduler_generated = 1
+// Response: {} (empty object — legacy transaction result has no "records" key)
+func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "project_id")
+	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while updating project details",
+		})
+		return
+	}
+
+	if h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "database not configured",
+			"errorMessage": "An error occured while updating project details",
+		})
+		return
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while updating project details",
+		})
+		return
+	}
+
+	// Legacy formatProject maps: postScreeninBuffer → post_screenin_buffer, moderatorBuffer → moderator_buffer
+	postScreeninBuffer := float64(-1)
+	if v, ok := body["postScreeninBuffer"]; ok && v != nil {
+		if f, ok := v.(float64); ok {
+			postScreeninBuffer = f
+		}
+	}
+	moderatorBuffer := float64(-1)
+	if v, ok := body["moderatorBuffer"]; ok && v != nil {
+		if f, ok := v.(float64); ok {
+			moderatorBuffer = f
+		}
+	}
+
+	if postScreeninBuffer != -1 {
+		err = h.qsProjectRepo.UpdatePostScreenInBuffer(r.Context(), projectID, postScreeninBuffer)
+	} else if moderatorBuffer != -1 {
+		err = h.qsProjectRepo.UpdateModeratorBufferMRA(r.Context(), projectID, moderatorBuffer)
+	} else {
+		err = h.qsProjectRepo.UpdateSchedulerGenerated(r.Context(), projectID)
+	}
+
+	if err != nil {
+		slog.Error("update project mra failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while updating project details",
+		})
+		return
+	}
+
+	// Legacy response: {data: undefined} → JSON.stringify → {}
+	writeJSON(w, http.StatusOK, map[string]any{})
+}
