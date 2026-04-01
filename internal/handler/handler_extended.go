@@ -3524,3 +3524,49 @@ func (h *Handler) GetConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, resObj)
 }
+
+// GetConfLinkByTimeSlotMRA handles GET /get-conf-link-time-slot-id/{timeslot_id} (MRA).
+// Contract-identical with legacy: returns {conferenceLink} for a timeslot_id.
+// No side effects — pure read API.
+func (h *Handler) GetConfLinkByTimeSlotMRA(w http.ResponseWriter, r *http.Request) {
+	if h.qsConferenceRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "conference repository not available",
+			"errorMessage": "An error occured while getting conference link by timeslot id",
+		})
+		return
+	}
+
+	tsIDStr := chi.URLParam(r, "timeslot_id")
+	tsID, err := strconv.ParseInt(tsIDStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "invalid timeslot_id",
+			"errorMessage": "An error occured while getting conference link by timeslot id",
+		})
+		return
+	}
+
+	result, err := h.qsConferenceRepo.GetConferenceLinkByTimeSlotMRA(r.Context(), tsID)
+	if err != nil {
+		slog.Error("get conference link by timeslot failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while getting conference link by timeslot id",
+		})
+		return
+	}
+
+	// Legacy returns records[0] which is {conferenceLink: "..."}
+	// If no records, records[0] would be undefined → JSON.stringify(undefined) = undefined
+	// But legacy would throw at .records[0] access, caught → 500
+	if result == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "conference link not found",
+			"errorMessage": "An error occured while getting conference link by timeslot id",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}

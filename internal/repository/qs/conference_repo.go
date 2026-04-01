@@ -451,3 +451,22 @@ func (r *ConferenceRepo) GetConferenceLinkByProjectMRA(ctx context.Context, proj
 	}
 	return records, rows.Err()
 }
+
+// GetConferenceLinkByTimeSlotMRA returns conference_link for a timeslot
+// matching legacy SQL: SELECT conference_link FROM conference_invitation_responder_time_slot
+// INNER JOIN conference_invitation WHERE time_slot_id = ?
+func (r *ConferenceRepo) GetConferenceLinkByTimeSlotMRA(ctx context.Context, timeSlotID int64) (map[string]any, error) {
+	q := `SELECT conference_link AS conferenceLink
+		FROM conference_invitation_responder_time_slot
+		INNER JOIN conference_invitation ON conference_invitation_responder_time_slot.conference_invitation_id = conference_invitation.id
+		WHERE conference_invitation_responder_time_slot.time_slot_id = ?`
+	var conferenceLink string
+	err := r.db.QueryRowContext(ctx, q, timeSlotID).Scan(&conferenceLink)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get conference link by timeslot %d: %w", timeSlotID, err)
+	}
+	return map[string]any{"conferenceLink": conferenceLink}, nil
+}
