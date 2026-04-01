@@ -3093,3 +3093,130 @@ func (h *Handler) RespondentRescheduleMRA(w http.ResponseWriter, r *http.Request
 		"hanldeCancelRescheduleResp":  "{}",
 	})
 }
+
+// InvalidateInterviewMRA handles POST /interview/invalidate (MRA).
+// Contract-identical with legacy: validates request, checks timeslot state,
+// sets is_invalidated_interview=1 with reason, updates project status.
+// Response: {status:"SUCCESS", message:"Interview invalidated successfully"}.
+func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request) {
+	if h.qsTimeSlotRepo == nil || h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "An error occurred while invalidating the interview",
+		})
+		return
+	}
+
+	var body struct {
+		TimeSlotID             any    `json:"timeSlotId"`
+		InvalidationReasonCode string `json:"invalidationReasonCode"`
+		InvalidationReasonText string `json:"invalidationReasonText"`
+		InvalidatedByUserID    any    `json:"invalidatedByUserId"`
+		IsInvalidateEmailSent  *bool  `json:"isInvalidateEmailSent"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Invalid JSON payload"})
+		return
+	}
+
+	// Validation
+	validReasonCodes := map[string]bool{"PARTICIPANT_NO_SHOW": true, "MODERATOR_NO_SHOW": true, "OTHER": true}
+	var validationErrors []string
+
+	// Parse timeSlotId
+	var timeSlotID int64
+	switch v := body.TimeSlotID.(type) {
+	case float64:
+		timeSlotID = int64(v)
+	case string:
+		timeSlotID, _ = strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+	}
+	if timeSlotID == 0 {
+		validationErrors = append(validationErrors, "timeSlotId is missing!")
+	}
+
+	if !validReasonCodes[body.InvalidationReasonCode] {
+		validationErrors = append(validationErrors, "invalidationReasonCode must be one of: PARTICIPANT_NO_SHOW, MODERATOR_NO_SHOW, OTHER")
+	}
+
+	// Parse invalidatedByUserId
+	var invalidatedByUserID int64
+	switch v := body.InvalidatedByUserID.(type) {
+	case float64:
+		invalidatedByUserID = int64(v)
+	case string:
+		invalidatedByUserID, _ = strconv.ParseInt(v, 10, 64)
+	}
+	if invalidatedByUserID == 0 {
+		validationErrors = append(validationErrors, "invalidatedByUserId is missing!")
+	}
+
+	if body.IsInvalidateEmailSent == nil {
+		validationErrors = append(validationErrors, "isInvalidateEmailSent must be a boolean")
+	}
+
+	var reasonText *string
+	if body.InvalidationReasonCode == "OTHER" {
+		trimmed := strings.TrimSpace(body.InvalidationReasonText)
+		if trimmed == "" {
+			validationErrors = append(validationErrors, "invalidationReasonText is required when invalidationReasonCode is OTHER")
+		} else if len(trimmed) > 150 {
+			validationErrors = append(validationErrors, "invalidationReasonText cannot exceed 150 characters")
+		} else {
+			reasonText = &trimmed
+		}
+	}
+
+	if len(validationErrors) > 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": validationErrors})
+		return
+	}
+
+	// Check timeslot exists and not already invalidated
+	ts, err := h.qsTimeSlotRepo.GetByID(r.Context(), timeSlotID)
+	if err != nil || ts == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "An error occurred while invalidating the interview",
+		})
+		return
+	}
+
+	if ts.IsInvalidatedInterview {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": "Interview already invalidated!",
+		})
+		return
+	}
+
+	// Check completed payment — legacy blocks invalidation if payment is done
+	hasPaid, err := h.qsTimeSlotRepo.HasCompletedPaymentMRA(r.Context(), timeSlotID)
+	if err != nil {
+		slog.Error("check payment status failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "An error occurred while invalidating the interview",
+		})
+		return
+	}
+	if hasPaid {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error": "Interview cannot be invalidated because payment is already completed",
+		})
+		return
+	}
+
+	// Invalidate
+	if err := h.qsTimeSlotRepo.InvalidateInterviewMRA(r.Context(), timeSlotID, body.InvalidationReasonCode, reasonText, invalidatedByUserID); err != nil {
+		slog.Error("invalidate interview failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error": "An error occurred while invalidating the interview",
+		})
+		return
+	}
+
+	// Update project status to InProgress (2)
+	_ = h.qsProjectRepo.Update(r.Context(), ts.ProjectID, map[string]any{"project_status_id": 2})
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":  "SUCCESS",
+		"message": "Interview invalidated successfully",
+	})
+}

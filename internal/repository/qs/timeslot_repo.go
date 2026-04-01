@@ -373,3 +373,32 @@ func (repo *TimeSlotRepo) UpsertReward(ctx context.Context, timeSlotID int64, po
 	slog.InfoContext(ctx, "upserted booking reward", "timeSlotId", timeSlotID, "points", points, "status", status)
 	return nil
 }
+
+// InvalidateInterviewMRA sets is_invalidated_interview=1 with reason and user info.
+func (repo *TimeSlotRepo) InvalidateInterviewMRA(ctx context.Context, timeSlotID int64, reasonCode string, reasonText *string, invalidatedByUserID int64) error {
+	q := `UPDATE time_slot
+	      SET is_invalidated_interview = 1,
+	          invalidation_reason_code = ?,
+	          invalidation_reason_text = ?,
+	          invalidated_by_user_id = ?,
+	          updated_on = NOW()
+	      WHERE id = ?`
+	_, err := repo.db.ExecContext(ctx, q, reasonCode, reasonText, invalidatedByUserID, timeSlotID)
+	if err != nil {
+		return fmt.Errorf("invalidate interview %d: %w", timeSlotID, err)
+	}
+	return nil
+}
+
+// HasCompletedPaymentMRA checks if a timeslot has a COMPLETED payment record.
+func (repo *TimeSlotRepo) HasCompletedPaymentMRA(ctx context.Context, timeSlotID int64) (bool, error) {
+	const q = `SELECT EXISTS(
+		SELECT 1 FROM time_slot_payment_history
+		WHERE time_slot_id = ? AND payment_status = 'COMPLETED'
+	)`
+	var exists bool
+	if err := repo.db.QueryRowContext(ctx, q, timeSlotID).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check payment status for timeslot %d: %w", timeSlotID, err)
+	}
+	return exists, nil
+}
