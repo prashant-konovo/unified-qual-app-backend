@@ -1776,14 +1776,13 @@ func (r *SurveyRepo) GetNoShowCheck(ctx context.Context) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
+	// Legacy shape: timeSlot = full adminJson, interviewee = just user ID (Long)
 	return map[string]any{
 		"timeSlot": map[string]any{
 			"id": tsID, "projectId": projectID, "startTime": startTime.Format(time.RFC3339),
 			"endTime": endTime.Format(time.RFC3339), "statusId": statusID,
 		},
-		"interviewee": map[string]any{
-			"id": intervieweeID.Int64, "name": name.String,
-		},
+		"interviewee": intervieweeID.Int64,
 	}, nil
 }
 
@@ -2354,5 +2353,93 @@ func (r *SurveyRepo) GetProjectIDByConferenceHash(ctx context.Context, hash stri
 		return 0, fmt.Errorf("get project by conference hash: %w", err)
 	}
 	return projectID, nil
+}
+
+// GetTimeSlotAdminJSON returns a timeslot in the legacy adminJson shape.
+func (r *SurveyRepo) GetTimeSlotAdminJSON(ctx context.Context, timeSlotID int64) (map[string]any, error) {
+	q := `SELECT ts.id, ts.project_id, ts.start_time, ts.end_time, ts.is_picked,
+	       ts.confirmed, ts.conference_hash, ts.promised_honorarium,
+	       ts.stop_payment, ts.honorarium_paid, ts.payment_stopped_by,
+	       ts.completed, ts.no_show, ts.duration, ts.interviewee_id,
+	       ts.status_modified_by, ts.status_id, ts.is_invalid,
+	       ts.meeting_id, ts.chime_meeting_id,
+	       COALESCE(p.name, '') AS project_name,
+	       s.id AS survey_id, s.name_public, s.name_private
+	      FROM time_slot ts
+	      LEFT JOIN project p ON p.id = ts.project_id
+	      LEFT JOIN survey s ON s.id = ts.survey_id
+	      WHERE ts.id = ?`
+	var tsID, projectID int64
+	var startTime, endTime time.Time
+	var isPicked, confirmed, stopPayment, honorariumPaid, completed, noShow, isInvalid bool
+	var confHash, meetingID, chimeMeetingID sql.NullString
+	var promisedHonorarium sql.NullFloat64
+	var paymentStoppedBy, intervieweeID, statusModifiedBy sql.NullInt64
+	var duration, statusID int
+	var projectName string
+	var surveyID sql.NullInt64
+	var namePublic, namePrivate sql.NullString
+
+	err := r.ro().QueryRowContext(ctx, q, timeSlotID).Scan(
+		&tsID, &projectID, &startTime, &endTime, &isPicked,
+		&confirmed, &confHash, &promisedHonorarium,
+		&stopPayment, &honorariumPaid, &paymentStoppedBy,
+		&completed, &noShow, &duration, &intervieweeID,
+		&statusModifiedBy, &statusID, &isInvalid,
+		&meetingID, &chimeMeetingID,
+		&projectName, &surveyID, &namePublic, &namePrivate,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get timeslot admin json: %w", err)
+	}
+
+	result := map[string]any{
+		"id":                tsID,
+		"projectId":         projectID,
+		"startTime":         startTime.Format(time.RFC3339),
+		"endTime":           endTime.Format(time.RFC3339),
+		"isPicked":          isPicked,
+		"isConfirmed":       confirmed,
+		"conferenceHash":    nullStr(confHash),
+		"promisedHonorarium": nullFloat(promisedHonorarium),
+		"stopPayment":       stopPayment,
+		"honorariumPaid":    honorariumPaid,
+		"paymentStoppedBy":  nullInt(paymentStoppedBy),
+		"completed":         completed,
+		"noShow":            noShow,
+		"duration":          duration,
+		"intervieweeId":     nullInt(intervieweeID),
+		"statusModifiedBy":  nullInt(statusModifiedBy),
+		"statusId":          statusID,
+		"isInvalid":         isInvalid,
+		"meetingId":         nullStr(meetingID),
+		"chimeMeetingId":    nullStr(chimeMeetingID),
+		"projectName":       projectName,
+		"surveyId":          nullInt(surveyID),
+		"surveyNamePublic":  nullStr(namePublic),
+		"surveyNamePrivate": nullStr(namePrivate),
+	}
+	return result, nil
+}
+
+func nullStr(v sql.NullString) any {
+	if v.Valid {
+		return v.String
+	}
+	return nil
+}
+
+func nullInt(v sql.NullInt64) any {
+	if v.Valid {
+		return v.Int64
+	}
+	return nil
+}
+
+func nullFloat(v sql.NullFloat64) any {
+	if v.Valid {
+		return v.Float64
+	}
+	return nil
 }
 

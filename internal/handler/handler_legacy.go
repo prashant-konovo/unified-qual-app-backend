@@ -1875,6 +1875,9 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListMarketsNPI returns markets with NPI.
+// ListMarketsNPI returns markets with NPI data.
+// Contract-identical with legacy InCrowdAPI: GET /v1/markets/npi
+// Response: {"markets": [...]}
 func (h *Handler) ListMarketsNPI(w http.ResponseWriter, r *http.Request) {
 	if h.irisSurveyRepo != nil {
 		markets, err := h.irisSurveyRepo.ListMarketsWithNPI(r.Context())
@@ -1889,13 +1892,15 @@ func (h *Handler) ListMarketsNPI(w http.ResponseWriter, r *http.Request) {
 				"id": m.ID, "name": m.Name, "canInterview": m.CanInterview,
 			})
 		}
-		success(w, result)
+		writeJSON(w, http.StatusOK, map[string]any{"markets": result})
 		return
 	}
-	success(w, []any{})
+	writeJSON(w, http.StatusOK, map[string]any{"markets": []any{}})
 }
 
 // GetCrowdableAttributes returns crowdable attributes for a market.
+// Contract-identical with legacy InCrowdAPI: GET /v1/market/:id/crowdable_attributes
+// Response: {"attributes": [...]}
 func (h *Handler) GetCrowdableAttributes(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	marketID, err := strconv.ParseInt(idStr, 10, 64)
@@ -1911,10 +1916,10 @@ func (h *Handler) GetCrowdableAttributes(w http.ResponseWriter, r *http.Request)
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		success(w, attrs)
+		writeJSON(w, http.StatusOK, map[string]any{"attributes": attrs})
 		return
 	}
-	success(w, []any{})
+	writeJSON(w, http.StatusOK, map[string]any{"attributes": []any{}})
 }
 
 // ──────────────────────────────────────────────
@@ -2103,6 +2108,9 @@ func (h *Handler) ConferenceLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetConferenceParticipants returns participants in a conference.
+// GetConferenceParticipants returns participants and timeslot info for a conference.
+// Contract-identical with legacy InCrowdAPI: GET /v1/conf/:confId/participants
+// Response: {"participants": [...], "timeSlot": {startTime, endTime, conferencePin, projectId, id}}
 func (h *Handler) GetConferenceParticipants(w http.ResponseWriter, r *http.Request) {
 	confHashStr := chi.URLParam(r, "confId")
 
@@ -2118,10 +2126,32 @@ func (h *Handler) GetConferenceParticipants(w http.ResponseWriter, r *http.Reque
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		success(w, participants)
+		if participants == nil {
+			participants = []map[string]any{}
+		}
+
+		// Build timeSlot object matching legacy shape
+		tsObj := map[string]any{
+			"id":            ci.TimeSlotID,
+			"conferencePin": ci.Pin,
+		}
+		// Enrich with timeslot start/end/projectId if available
+		if h.qsTimeSlotRepo != nil {
+			ts, tsErr := h.qsTimeSlotRepo.GetByID(r.Context(), ci.TimeSlotID)
+			if tsErr == nil && ts != nil {
+				tsObj["startTime"] = ts.StartTime.Format(time.RFC3339)
+				tsObj["endTime"] = ts.EndTime.Format(time.RFC3339)
+				tsObj["projectId"] = ts.ProjectID
+			}
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"participants": participants,
+			"timeSlot":     tsObj,
+		})
 		return
 	}
-	success(w, []any{})
+	writeJSON(w, http.StatusOK, map[string]any{"participants": []any{}, "timeSlot": nil})
 }
 
 // GetMeetingMetadata returns meeting metadata.
@@ -2391,6 +2421,9 @@ func (h *Handler) DeleteModeratorAvailabilityExt(w http.ResponseWriter, r *http.
 // ──────────────────────────────────────────────
 
 // GetNoShowCheck checks for no-show timeslots.
+// GetNoShowCheck checks for no-show timeslots.
+// Contract-identical with legacy InCrowdAPI: GET /v1/selfservice/noshow
+// Response: {"timeSlot": <adminJson>, "interviewee": <userID>}
 func (h *Handler) GetNoShowCheck(w http.ResponseWriter, r *http.Request) {
 	if h.irisSurveyRepo != nil {
 		data, err := h.irisSurveyRepo.GetNoShowCheck(r.Context())
@@ -2399,13 +2432,15 @@ func (h *Handler) GetNoShowCheck(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
 			return
 		}
-		success(w, data)
+		writeJSON(w, http.StatusOK, data)
 		return
 	}
-	success(w, map[string]any{"timeSlot": nil, "interviewee": nil})
+	writeJSON(w, http.StatusOK, map[string]any{"timeSlot": nil, "interviewee": nil})
 }
 
 // MarkNoShow marks a timeslot as no-show.
+// Contract-identical with legacy InCrowdAPI: PUT /v1/selfservice/project/:pid/timeslot/:tid
+// Response: full updated TimeSlot adminJson
 func (h *Handler) MarkNoShow(w http.ResponseWriter, r *http.Request) {
 	pidStr := chi.URLParam(r, "pid")
 	tidStr := chi.URLParam(r, "tid")
@@ -2424,7 +2459,19 @@ func (h *Handler) MarkNoShow(w http.ResponseWriter, r *http.Request) {
 		_ = h.qsTimeSlotRepo.Update(r.Context(), timeSlotID, map[string]any{"status_id": 10}) // 10 = NoShow
 	}
 
-	success(w, map[string]any{"marked": true, "projectId": projectID, "timeSlotId": timeSlotID})
+	// Return the updated timeslot adminJson (legacy contract)
+	if h.irisSurveyRepo != nil {
+		ts, err := h.irisSurveyRepo.GetTimeSlotAdminJSON(r.Context(), timeSlotID)
+		if err == nil && ts != nil {
+			writeJSON(w, http.StatusOK, ts)
+			return
+		}
+	}
+	// Fallback: minimal timeslot shape
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id": timeSlotID, "projectId": projectID, "statusId": 10,
+		"stopPayment": true,
+	})
 }
 
 // ──────────────────────────────────────────────
