@@ -372,40 +372,36 @@ func (h *Handler) CheckUserCommPreference(w http.ResponseWriter, r *http.Request
 	userIDStr := chi.URLParam(r, "userId")
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid user id"})
-		return
-	}
-	source := h.resolveSource(r)
-
-	if (source == "" || source == "qs") && h.qsUserRepo != nil {
-		pref, err := h.qsUserRepo.GetUserCommPreference(r.Context(), userID)
-		if err != nil {
-			slog.Error("get comm pref failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
-			return
-		}
-		if pref == nil {
-			writeJSON(w, http.StatusNotFound, map[string]any{"error": "user not found"})
-			return
-		}
-		pref["source"] = "qs"
-		writeJSON(w, http.StatusOK, pref)
-		return
-	}
-
-	if source == "iris" && h.irisUserRepo != nil {
-		u, err := h.irisUserRepo.GetByID(r.Context(), userID)
-		if err != nil || u == nil {
-			writeJSON(w, http.StatusNotFound, map[string]any{"error": "user not found"})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"userId": u.ID, "email": u.Email.String,
-			"optedIn": true, "canUnsubscribe": true, "source": "iris",
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "invalid user id",
+			"errorMessage": "invalid user id",
 		})
 		return
 	}
-	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "no database available",
+			"errorMessage": "no database available",
+		})
+		return
+	}
+
+	// Legacy: SELECT allow_contact_by_email FROM user_communication_preferences WHERE user_id = :userId
+	pref, err := h.qsUserRepo.GetUserCommPreference(r.Context(), userID)
+	if err != nil {
+		slog.Error("get comm pref failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
+		})
+		return
+	}
+
+	// Legacy returns {data: records} where records = [{allow_contact_by_email: 0/1}]
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": pref,
+	})
 }
 
 func (h *Handler) UnsubscribeUser(w http.ResponseWriter, r *http.Request) {

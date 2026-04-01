@@ -376,24 +376,30 @@ func (r *UserRepo) GetRoles(ctx context.Context, userID int64) ([]int, error) {
 	return roles, rows.Err()
 }
 
-// GetUserCommPreference returns communication preference for a user.
-func (r *UserRepo) GetUserCommPreference(ctx context.Context, userID int64) (map[string]any, error) {
-	q := `SELECT u.id, u.email, COALESCE(u.terms_accepted, 0) as opted_in
-	      FROM user u WHERE u.id = ? AND u.deleted = 0`
-	var id int64
-	var email sql.NullString
-	var optedIn int
-	err := r.db.QueryRowContext(ctx, q, userID).Scan(&id, &email, &optedIn)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+// GetUserCommPreference returns communication preference for a user from user_communication_preferences.
+func (r *UserRepo) GetUserCommPreference(ctx context.Context, userID int64) ([]map[string]any, error) {
+	q := `SELECT allow_contact_by_email FROM user_communication_preferences WHERE user_id = ?`
+	rows, err := r.db.QueryContext(ctx, q, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get comm pref for user %d: %w", userID, err)
 	}
-	return map[string]any{
-		"userId": id, "email": email.String,
-		"optedIn": optedIn == 1, "canUnsubscribe": true,
-	}, nil
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var allowContact sql.NullInt64
+		if err := rows.Scan(&allowContact); err != nil {
+			return nil, err
+		}
+		var val any
+		if allowContact.Valid {
+			val = allowContact.Int64
+		}
+		records = append(records, map[string]any{"allow_contact_by_email": val})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
 }
 
 // SetUnsubscribed marks a user as unsubscribed (terms_accepted = 0).
