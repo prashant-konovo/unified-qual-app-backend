@@ -1886,3 +1886,41 @@ func (h *Handler) SendSMS(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "sms service not configured"})
 }
+
+// CreateProjectMRA handles POST /project/create-project (MRA).
+// Contract-identical with legacy QS Tool: 9-query transaction creating
+// external_client, project, survey, third_party_survey, question,
+// survey_question, participant_group, topics, then SELECT project details.
+// Response: flat project details object (parsedJson[8]["records"][0]).
+func (h *Handler) CreateProjectMRA(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	if h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
+		return
+	}
+
+	// Legacy formatProject maps camelCase request to snake_case for DB,
+	// but repo.CreateProjectFull expects the camelCase keys from the request body.
+	// Look up SalesForceJobNumberText from salesforce_project table.
+	sfJobNumber, _ := body["salesForceJobNumber"].(string)
+	sfJobNumberText, err := h.qsProjectRepo.GetSalesForceJobNumberText(r.Context(), sfJobNumber)
+	if err != nil {
+		slog.Error("sf job number text lookup failed", "error", err)
+		// Legacy continues with empty string on failure
+	}
+	body["SalesForceJobNumberText"] = sfJobNumberText
+
+	record, err := h.qsProjectRepo.CreateProjectFull(r.Context(), body)
+	if err != nil {
+		slog.Error("create project failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, record)
+}

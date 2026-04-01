@@ -211,6 +211,189 @@ func (r *ProjectRepo) Create(ctx context.Context, p *Project) (int64, error) {
 	return res.LastInsertId()
 }
 
+// CreateProjectFull performs the legacy 9-query transaction for project creation.
+// Creates: external_client, project, survey, third_party_survey, question, survey_question,
+// participant_group, topics, and returns the project detail via SELECT.
+func (r *ProjectRepo) CreateProjectFull(ctx context.Context, req map[string]any) (map[string]any, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	sfJobNumber, _ := req["salesForceJobNumber"].(string)
+	sfClientId, _ := req["salesForceClientId"].(string)
+	clientID, _ := req["clientId"].(float64)
+	name, _ := req["name"].(string)
+	externalSurveyID, _ := req["surveyId"].(string)
+	sampleSize, _ := req["sampleSize"].(float64)
+	interviewLength, _ := req["interviewLength"].(float64)
+	userID, _ := req["id"].(float64)
+	postScreeninBuffer, _ := req["postScreeninBuffer"].(float64)
+	moderatorBuffer, _ := req["moderatorBuffer"].(float64)
+	topicName, _ := req["topicName"].(string)
+	sfJobNumberText, _ := req["SalesForceJobNumberText"].(string)
+
+	// 1. INSERT external_client
+	res1, err := tx.ExecContext(ctx,
+		"INSERT INTO external_client (external_client_project_id, external_client_account_id, client_id) VALUES (?, ?, ?)",
+		sfJobNumber, sfClientId, int64(clientID))
+	if err != nil {
+		return nil, fmt.Errorf("insert external_client: %w", err)
+	}
+	extClientID, _ := res1.LastInsertId()
+
+	// 2. INSERT project
+	res2, err := tx.ExecContext(ctx,
+		`INSERT INTO project (name, external_survey_id, sample_size, salesforce_job_number, client_id,
+		 created_by, interview_length, qual_moderator_id, modified_by, project_status_id,
+		 post_screenin_buffer, moderator_buffer, project_external_client)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+		name, externalSurveyID, int64(sampleSize), sfJobNumberText, int64(clientID),
+		int64(userID), int64(interviewLength), int64(userID), int64(userID),
+		postScreeninBuffer, moderatorBuffer, extClientID)
+	if err != nil {
+		return nil, fmt.Errorf("insert project: %w", err)
+	}
+	projectID, _ := res2.LastInsertId()
+
+	// 3. INSERT survey
+	res3, err := tx.ExecContext(ctx,
+		"INSERT INTO survey (client_id, created_by, project_id, owned_by) VALUES (?, ?, ?, ?)",
+		int64(clientID), int64(userID), projectID, int64(userID))
+	if err != nil {
+		return nil, fmt.Errorf("insert survey: %w", err)
+	}
+	surveyID, _ := res3.LastInsertId()
+
+	// 4. INSERT third_party_survey
+	_, err = tx.ExecContext(ctx,
+		"INSERT INTO third_party_survey (type_id, qs_tool_survey_id) VALUES (1, ?)", surveyID)
+	if err != nil {
+		return nil, fmt.Errorf("insert third_party_survey: %w", err)
+	}
+
+	// 5. INSERT question
+	res5, err := tx.ExecContext(ctx,
+		"INSERT INTO question (title, comments) VALUES ('Scheduler', 1)")
+	if err != nil {
+		return nil, fmt.Errorf("insert question: %w", err)
+	}
+	questionID, _ := res5.LastInsertId()
+
+	// 6. INSERT survey_question
+	_, err = tx.ExecContext(ctx,
+		"INSERT INTO survey_question (question_id, survey_id) VALUES (?, ?)", questionID, surveyID)
+	if err != nil {
+		return nil, fmt.Errorf("insert survey_question: %w", err)
+	}
+
+	// 7. INSERT participant_group
+	_, err = tx.ExecContext(ctx,
+		"INSERT INTO participant_group (survey_id, created_by) VALUES (?, ?)", surveyID, int64(userID))
+	if err != nil {
+		return nil, fmt.Errorf("insert participant_group: %w", err)
+	}
+
+	// 8. INSERT topics
+	_, err = tx.ExecContext(ctx,
+		"INSERT INTO topics (topic_name, created_by, project_id, language_id) VALUES (?, ?, ?, 1)",
+		topicName, int64(userID), projectID)
+	if err != nil {
+		return nil, fmt.Errorf("insert topics: %w", err)
+	}
+
+	// 9. SELECT project details (matching legacy query exactly)
+	q := `SELECT project.id, participant_group.id as participantGroupId, project.name,
+	      project.client_id as clientId, project.created_on as createdOn,
+	      project.created_by as createdBy, project.modified_on as modifiedOn,
+	      project.qual_moderator_id as qualModeratorId,
+	      project.project_status_id as projectStatusId,
+	      project.interview_length as interviewLength,
+	      project.sample_size as sampleSize,
+	      project.salesforce_job_number as salesForceJobNumber,
+	      project.external_survey_id as externalSurveyId,
+	      project_status.name as projectStatus,
+	      survey.id as surveyId,
+	      post_screenin_buffer as postScreeninBuffer,
+	      moderator_buffer as moderatorBuffer,
+	      (SELECT t.topic_name FROM topics AS t WHERE t.project_id=project.id AND t.language_id=1) as topic_name
+	      FROM project
+	      INNER JOIN project_status ON project.project_status_id = project_status.id
+	      INNER JOIN survey ON project.id = survey.project_id
+	      INNER JOIN participant_group ON survey.id = participant_group.survey_id
+	      WHERE project.id = ?`
+
+	row := tx.QueryRowContext(ctx, q, projectID)
+	var result struct {
+		ID, ParticipantGroupID, ClientID, CreatedBy, QualModeratorID, ProjectStatusID int64
+		InterviewLength, SampleSize                                                   sql.NullInt64
+		Name, ProjectStatus                                                           string
+		SalesForceJobNumber, ExternalSurveyID, TopicName                              sql.NullString
+		PostScreeninBuffer, ModeratorBuffer                                           sql.NullString
+		CreatedOn, ModifiedOn                                                         sql.NullString
+		SurveyID                                                                      int64
+	}
+	err = row.Scan(&result.ID, &result.ParticipantGroupID, &result.Name,
+		&result.ClientID, &result.CreatedOn, &result.CreatedBy, &result.ModifiedOn,
+		&result.QualModeratorID, &result.ProjectStatusID, &result.InterviewLength,
+		&result.SampleSize, &result.SalesForceJobNumber, &result.ExternalSurveyID,
+		&result.ProjectStatus, &result.SurveyID, &result.PostScreeninBuffer,
+		&result.ModeratorBuffer, &result.TopicName)
+	if err != nil {
+		return nil, fmt.Errorf("select project details: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit tx: %w", err)
+	}
+
+	record := map[string]any{
+		"id":                  result.ID,
+		"participantGroupId":  result.ParticipantGroupID,
+		"name":                result.Name,
+		"clientId":            result.ClientID,
+		"createdOn":           result.CreatedOn.String,
+		"createdBy":           result.CreatedBy,
+		"modifiedOn":          result.ModifiedOn.String,
+		"qualModeratorId":     result.QualModeratorID,
+		"projectStatusId":     result.ProjectStatusID,
+		"interviewLength":     result.InterviewLength.Int64,
+		"sampleSize":          result.SampleSize.Int64,
+		"salesForceJobNumber": result.SalesForceJobNumber.String,
+		"externalSurveyId":    result.ExternalSurveyID.String,
+		"projectStatus":       result.ProjectStatus,
+		"surveyId":            result.SurveyID,
+		"postScreeninBuffer":  result.PostScreeninBuffer.String,
+		"moderatorBuffer":     result.ModeratorBuffer.String,
+		"topic_name":          result.TopicName.String,
+	}
+	return record, nil
+}
+
+// GetSalesForceJobNumberText looks up job_number_text_c from salesforce_project
+// by salesforce_project_id, matching the legacy getSalesForceJobNumberTextBySalesForceId query.
+func (r *ProjectRepo) GetSalesForceJobNumberText(ctx context.Context, sfProjectID string) (string, error) {
+	if sfProjectID == "" {
+		return "", nil
+	}
+	var jobNumber sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		"SELECT job_number_text_c FROM salesforce_project WHERE salesforce_project_id = ?",
+		sfProjectID).Scan(&jobNumber)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get sf job number text: %w", err)
+	}
+	return jobNumber.String, nil
+}
+
 // Update modifies mutable QS project fields.
 func (r *ProjectRepo) Update(ctx context.Context, id int64, fields map[string]any) error {
 	if len(fields) == 0 {
