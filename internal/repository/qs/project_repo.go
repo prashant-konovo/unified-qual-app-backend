@@ -1199,3 +1199,23 @@ func (r *ProjectRepo) TimeSlotCounts(ctx context.Context, projectID int64) (sche
 	}
 	return
 }
+
+// UpdateSampleSizeMRA updates sample_size + modified_on for a project (no status change).
+func (r *ProjectRepo) UpdateSampleSizeMRA(ctx context.Context, projectID int64, sampleSize int64) error {
+	q := `UPDATE project SET sample_size = ?, modified_on = NOW() WHERE id = ?`
+	_, err := r.db.ExecContext(ctx, q, sampleSize, projectID)
+	if err != nil {
+		return fmt.Errorf("update sample size: %w", err)
+	}
+	return nil
+}
+
+// UpdateSampleSizeProjectStatusMRA updates sample_size + project_status_id + modified_on.
+func (r *ProjectRepo) UpdateSampleSizeProjectStatusMRA(ctx context.Context, projectID int64, sampleSize int64, projectStatusID int64) error {
+	q := `UPDATE project SET sample_size = ?, project_status_id = ?, modified_on = NOW() WHERE id = ?`
+	_, err := r.db.ExecContext(ctx, q, sampleSize, projectStatusID, projectID)
+	if err != nil {
+		return fmt.Errorf("update sample size with status: %w", err)
+	}
+	return nil
+}

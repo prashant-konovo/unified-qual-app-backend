@@ -2453,3 +2453,110 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 
 	writeJSON(w, http.StatusOK, map[string]any{"fileURL": "", "rows": len(allRows)})
 }
+
+// UpdateSampleSizeMRA handles PUT /project/{project_id}/update-sample-size (MRA).
+// Contract-identical with legacy: validates sampleSize vs current scheduled+completed,
+// auto-transitions project_status_id between InProgress(2)↔Completed(3).
+// Response: empty body on success (legacy returns transaction result which serializes to nothing).
+func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
+	pidStr := chi.URLParam(r, "project_id")
+	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while updating project sample size",
+		})
+		return
+	}
+
+	if h.qsProjectRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "database not configured",
+			"errorMessage": "An error occured while updating project sample size",
+		})
+		return
+	}
+
+	var body struct {
+		SampleSize int64 `json:"sampleSize"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        err.Error(),
+			"errorMessage": "An error occured while updating project sample size",
+		})
+		return
+	}
+
+	// Get current project details to validate
+	project, err := h.qsProjectRepo.GetProjectDetailsMRA(r.Context(), projectID)
+	if err != nil || project == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":        "project not found",
+			"errorMessage": "An error occured while updating project sample size",
+		})
+		return
+	}
+
+	currentSampleSize, _ := project["sampleSize"].(int64)
+	scheduled, _ := project["scheduled"].(int64)
+	completed, _ := project["completed"].(int64)
+	projectStatusID, _ := project["projectStatusId"].(int64)
+
+	// Validation: sampleSize must differ from current and > 0
+	if body.SampleSize == currentSampleSize || body.SampleSize == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"errorMessage": "Updated sample size must be greater than 0 and different than the original sample size",
+		})
+		return
+	}
+
+	// Validation: sampleSize must be >= scheduled + completed
+	if body.SampleSize < scheduled+completed {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"errorMessage": "Condition newSampleSize >= shceduled+completed interviews not verified",
+		})
+		return
+	}
+
+	const projectStatusInProgress int64 = 2
+	const projectStatusCompleted int64 = 3
+
+	// Auto-transition logic
+	if projectStatusID == projectStatusInProgress && scheduled == 0 && completed == body.SampleSize {
+		// InProgress → Completed
+		if err := h.qsProjectRepo.UpdateSampleSizeProjectStatusMRA(r.Context(), projectID, body.SampleSize, projectStatusCompleted); err != nil {
+			slog.Error("update sample size with status failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while updating project sample size",
+			})
+			return
+		}
+	} else if projectStatusID == projectStatusCompleted && scheduled == 0 {
+		// Completed → InProgress
+		if err := h.qsProjectRepo.UpdateSampleSizeProjectStatusMRA(r.Context(), projectID, body.SampleSize, projectStatusInProgress); err != nil {
+			slog.Error("update sample size with status failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while updating project sample size",
+			})
+			return
+		}
+	} else {
+		// Just update sample_size
+		if err := h.qsProjectRepo.UpdateSampleSizeMRA(r.Context(), projectID, body.SampleSize); err != nil {
+			slog.Error("update sample size failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error occured while updating project sample size",
+			})
+			return
+		}
+	}
+
+	// Legacy returns transaction result["records"] which is undefined → JSON.stringify produces empty
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Brand", "mra")
+	w.WriteHeader(http.StatusOK)
+}
