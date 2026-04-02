@@ -733,3 +733,98 @@ records = []map[string]any{}
 }
 return records, rows.Err()
 }
+
+// GetModeratorsForTimeSlotMRA returns moderators for a timeslot matching legacy camelCase fields.
+func (r *TimeSlotRepo) GetModeratorsForTimeSlotMRA(ctx context.Context, timeslotID int64) ([]map[string]any, error) {
+q := `SELECT time_slot.id AS timeSlotId,
+moderator_time_slot.moderator_id AS moderatorId,
+moderator_time_slot.is_host AS isHost
+FROM time_slot
+INNER JOIN project ON time_slot.project_id = project.id
+INNER JOIN moderator_time_slot ON moderator_time_slot.time_slot_id = time_slot.id
+WHERE time_slot.id = ?`
+rows, err := r.db.QueryContext(ctx, q, timeslotID)
+if err != nil {
+return nil, fmt.Errorf("get moderators for timeslot mra: %w", err)
+}
+defer rows.Close()
+var records []map[string]any
+for rows.Next() {
+var timeSlotID, moderatorID int64
+var isHost bool
+if err := rows.Scan(&timeSlotID, &moderatorID, &isHost); err != nil {
+return nil, err
+}
+records = append(records, map[string]any{
+"timeSlotId":  timeSlotID,
+"moderatorId": moderatorID,
+"isHost":      isHost,
+})
+}
+if records == nil {
+records = []map[string]any{}
+}
+return records, rows.Err()
+}
+
+// GetStartEndTimeBySlotIdMRA returns start_time and end_time for a timeslot.
+func (r *TimeSlotRepo) GetStartEndTimeBySlotIdMRA(ctx context.Context, timeslotID int64) (string, string, error) {
+q := `SELECT start_time, end_time FROM time_slot WHERE id = ?`
+var startTime, endTime string
+err := r.db.QueryRowContext(ctx, q, timeslotID).Scan(&startTime, &endTime)
+if err != nil {
+return "", "", fmt.Errorf("get start end time by slot id mra: %w", err)
+}
+return startTime, endTime, nil
+}
+
+// ModeratorInfoForSlotMRA holds moderator info for a timeslot.
+type ModeratorInfoForSlotMRA struct {
+ID              int64
+IsHost          bool
+FirstName       string
+LastName        string
+}
+
+// GetModeratorsInfoForSlotMRA returns moderator info for a timeslot.
+func (r *TimeSlotRepo) GetModeratorsInfoForSlotMRA(ctx context.Context, timeslotID int64) ([]ModeratorInfoForSlotMRA, error) {
+q := `SELECT moderator_id, is_host, first_name, last_name
+FROM moderator_time_slot
+INNER JOIN user ON user.id = moderator_time_slot.moderator_id
+WHERE time_slot_id = ?`
+rows, err := r.db.QueryContext(ctx, q, timeslotID)
+if err != nil {
+return nil, fmt.Errorf("get moderators info for slot mra: %w", err)
+}
+defer rows.Close()
+var results []ModeratorInfoForSlotMRA
+for rows.Next() {
+var m ModeratorInfoForSlotMRA
+if err := rows.Scan(&m.ID, &m.IsHost, &m.FirstName, &m.LastName); err != nil {
+return nil, err
+}
+results = append(results, m)
+}
+return results, rows.Err()
+}
+
+// GetModeratorConflictForSlotMRA checks if a moderator has a conflict with a timeslot.
+func (r *TimeSlotRepo) GetModeratorConflictForSlotMRA(ctx context.Context, moderatorID int64, startTime, endTime string, timeslotID int64) (int, error) {
+q := `SELECT COUNT(time_slot.id) AS hasConflict
+FROM time_slot
+INNER JOIN moderator_time_slot ON time_slot.id = moderator_time_slot.time_slot_id
+WHERE moderator_time_slot.moderator_id = ?
+AND time_slot.is_invalid = FALSE
+AND time_slot.status_id IN (2, 7, 8, 9)
+AND time_slot.id != ?
+AND (
+(time_slot.start_time >= ? AND time_slot.start_time < ?)
+OR (time_slot.end_time > ? AND time_slot.end_time <= ?)
+)`
+var hasConflict int
+err := r.db.QueryRowContext(ctx, q, moderatorID, timeslotID, startTime, endTime, startTime, endTime).Scan(&hasConflict)
+if err != nil {
+return 0, fmt.Errorf("get moderator conflict for slot mra: %w", err)
+}
+return hasConflict, nil
+}

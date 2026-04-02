@@ -4848,3 +4848,88 @@ return err
 
 return nil
 }
+
+// GetModeratorsForTimeSlotMRA handles GET /get-moderators-for-timeSlot/{timeslot_id} (MRA).
+// Contract-identical with legacy: returns [{timeSlotId, moderatorId, isHost}]
+func (h *Handler) GetModeratorsForTimeSlotMRA(w http.ResponseWriter, r *http.Request) {
+tsIDStr := chi.URLParam(r, "timeslot_id")
+tsID, _ := strconv.ParseInt(tsIDStr, 10, 64)
+
+if h.qsTimeSlotRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+return
+}
+
+records, err := h.qsTimeSlotRepo.GetModeratorsForTimeSlotMRA(r.Context(), tsID)
+if err != nil {
+slog.Error("get moderators for timeslot mra failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        err.Error(),
+"errorMessage": "An error occured while getting moderators for timeslot id",
+})
+return
+}
+
+writeJSON(w, http.StatusOK, records)
+}
+
+// GetModeratorsOptionMRA handles GET /get-moderators-option/{timeslot_id} (MRA).
+// Contract-identical: returns [{hasConflict, isHost, moderator: {id, firstName, lastName}}]
+func (h *Handler) GetModeratorsOptionMRA(w http.ResponseWriter, r *http.Request) {
+tsIDStr := chi.URLParam(r, "timeslot_id")
+tsID, _ := strconv.ParseInt(tsIDStr, 10, 64)
+
+if h.qsTimeSlotRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+return
+}
+
+ctx := r.Context()
+
+startTime, endTime, err := h.qsTimeSlotRepo.GetStartEndTimeBySlotIdMRA(ctx, tsID)
+if err != nil {
+slog.Error("get start end time failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        err.Error(),
+"errorMessage": "An error occured while getting possible moderators for timeslot",
+})
+return
+}
+
+modsInfo, err := h.qsTimeSlotRepo.GetModeratorsInfoForSlotMRA(ctx, tsID)
+if err != nil {
+slog.Error("get moderators info failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        err.Error(),
+"errorMessage": "An error occured while getting possible moderators for timeslot",
+})
+return
+}
+
+var result []map[string]any
+for _, m := range modsInfo {
+hasConflict, err := h.qsTimeSlotRepo.GetModeratorConflictForSlotMRA(ctx, m.ID, startTime, endTime, tsID)
+if err != nil {
+slog.Error("get moderator conflict failed", "error", err, "moderatorId", m.ID)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        err.Error(),
+"errorMessage": "An error occured while getting possible moderators for timeslot",
+})
+return
+}
+result = append(result, map[string]any{
+"hasConflict": hasConflict,
+"isHost":      m.IsHost,
+"moderator": map[string]any{
+"id":        m.ID,
+"firstName": m.FirstName,
+"lastName":  m.LastName,
+},
+})
+}
+if result == nil {
+result = []map[string]any{}
+}
+
+writeJSON(w, http.StatusOK, result)
+}
