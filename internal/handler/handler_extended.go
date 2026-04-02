@@ -4026,3 +4026,404 @@ return
 result := h.getAllModeratorAvailabilityWithImported(ctx, modID, clientID)
 writeJSON(w, http.StatusOK, result)
 }
+
+// ──────────────────────────────────────────────
+// MRA #44 — Get Moderators Availability
+// GET /get_moderators_availability/{qs_path}/survey/{survey_id}
+// ──────────────────────────────────────────────
+
+// GetModeratorsAvailabilityMRA handles GET /get_moderators_availability/{qs_path}/survey/{survey_id}.
+// Contract-identical with legacy getModeratorsAvailability Lambda handler.
+// Returns moderator availability slots split into 15-min intervals grouped by date.
+func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	surveyIDStr := chi.URLParam(r, "survey_id")
+	surveyID, err := strconv.ParseInt(surveyIDStr, 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":           err.Error(),
+			"errorMessage":    "an error occurred while getting moderators availability",
+			"customErrorCode": "INVALID_SURVEY_ID",
+		})
+		return
+	}
+
+	respondentIdentifier := r.URL.Query().Get("respondentIdentifer")
+	rescheduleToken := r.URL.Query().Get("rescheduleToken")
+
+	if h.qsSurveyRepo == nil || h.qsProjectRepo == nil || h.qsUserRepo == nil || h.qsTimeSlotRepo == nil || h.qsRespondentRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":           "database not configured",
+			"errorMessage":    "an error occurred while getting moderators availability",
+			"customErrorCode": "DB_NOT_CONFIGURED",
+		})
+		return
+	}
+
+	// Step 1: Get survey → clientId, projectId
+	survey, err := h.qsSurveyRepo.GetSurveyByIdMRA(ctx, surveyID)
+	if err != nil {
+		slog.Error("get survey failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":           err.Error(),
+			"errorMessage":    "an error occurred while getting moderators availability",
+			"customErrorCode": err.Error(),
+		})
+		return
+	}
+	if survey == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":           "survey not found",
+			"errorMessage":    "an error occurred while getting moderators availability",
+			"customErrorCode": "SURVEY_NOT_FOUND",
+		})
+		return
+	}
+	clientID, _ := survey["client_id"].(int64)
+	projectID, _ := survey["project_id"].(int64)
+
+	// Step 2: Get project details
+	project, err := h.qsProjectRepo.GetProjectDetailsMRA(ctx, projectID)
+	if err != nil {
+		slog.Error("get project details failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":           err.Error(),
+			"errorMessage":    "an error occurred while getting moderators availability",
+			"customErrorCode": err.Error(),
+		})
+		return
+	}
+	if project == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":           "project not found",
+			"errorMessage":    "an error occurred while getting moderators availability",
+			"customErrorCode": "PROJECT_NOT_FOUND",
+		})
+		return
+	}
+
+	sampleSize, _ := project["sampleSize"].(int64)
+	scheduled, _ := project["scheduled"].(int64)
+	completed, _ := project["completed"].(int64)
+	interviewLength, _ := project["interviewLength"].(int64)
+	postScreeninBufferStr, _ := project["postScreeninBuffer"].(string)
+	postScreeninBuffer := 0.0
+	if postScreeninBufferStr != "" {
+		postScreeninBuffer, _ = strconv.ParseFloat(postScreeninBufferStr, 64)
+	}
+
+	// Step 3: Check quota
+	var isOverquota bool
+	if rescheduleToken != "" {
+		isOverquota = sampleSize == (scheduled-1)+completed
+	} else {
+		isOverquota = sampleSize == scheduled+completed
+	}
+	if isOverquota {
+		slog.Error("quota reached", "surveyId", surveyID, "projectId", projectID)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":           "Quota Reached",
+			"errorMessage":    "an error occurred while getting moderators availability",
+			"customErrorCode": "QUOTA_REACHED",
+		})
+		return
+	}
+
+	// Step 4: Validate respondent
+	if rescheduleToken == "" {
+		// Regular schedule or moderator reschedule
+		statusRecords, err := h.qsTimeSlotRepo.GetInvalidTimeSlotStatusMRA(ctx, respondentIdentifier, projectID)
+		if err != nil {
+			slog.Error("get invalid timeslot status failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":           err.Error(),
+				"errorMessage":    "an error occurred while getting moderators availability",
+				"customErrorCode": err.Error(),
+			})
+			return
+		}
+		if len(statusRecords) > 0 {
+			slog.Error("respondent already scheduled", "respondentIdentifier", respondentIdentifier, "projectId", projectID)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":           "Respondent already scheduled an interview, interview cancelled or completed",
+				"errorMessage":    "an error occurred while getting moderators availability",
+				"customErrorCode": "QUOTA_REACHED",
+			})
+			return
+		}
+	} else {
+		// Respondent reschedule — validate token
+		statusRecords, err := h.qsTimeSlotRepo.GetInvalidTimeSlotStatusForRespRescMRA(ctx, respondentIdentifier, projectID)
+		if err != nil {
+			slog.Error("get invalid timeslot status for resp resc failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":           err.Error(),
+				"errorMessage":    "an error occurred while getting moderators availability",
+				"customErrorCode": err.Error(),
+			})
+			return
+		}
+		if len(statusRecords) > 0 {
+			slog.Error("interview cancelled or completed", "respondentIdentifier", respondentIdentifier, "projectId", projectID)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":           "Interview cancelled or completed",
+				"errorMessage":    "an error occurred while getting moderators availability",
+				"customErrorCode": "QUOTA_REACHED",
+			})
+			return
+		}
+
+		// Get respondent ID
+		respRecords, err := h.qsRespondentRepo.GetRespondentByExternalIdMRA(ctx, respondentIdentifier, projectID)
+		if err != nil {
+			slog.Error("get respondent by external id failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":           err.Error(),
+				"errorMessage":    "an error occurred while getting moderators availability",
+				"customErrorCode": err.Error(),
+			})
+			return
+		}
+		if len(respRecords) == 0 {
+			slog.Error("respondent not found", "respondentIdentifier", respondentIdentifier)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":           "Respondent not found",
+				"errorMessage":    "an error occurred while getting moderators availability",
+				"customErrorCode": "Respondent not found",
+			})
+			return
+		}
+		responderID, _ := respRecords[0]["responderId"].(int64)
+
+		// Check pending timeslot for token expiry
+		pendingSlots, err := h.qsTimeSlotRepo.GetPendingTimeslotByProjectAndResponderMRA(ctx, projectID, responderID)
+		if err != nil {
+			slog.Error("get pending timeslot failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":           err.Error(),
+				"errorMessage":    "an error occurred while getting moderators availability",
+				"customErrorCode": err.Error(),
+			})
+			return
+		}
+
+		if len(pendingSlots) == 0 {
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":           "timeslot not found for this respondent",
+				"errorMessage":    "an error occurred while getting moderators availability",
+				"customErrorCode": "timeslot not found for this respondent",
+			})
+			return
+		}
+
+		timeSlotStartTimeStr, _ := pendingSlots[0]["start_time"].(string)
+		isInvalidatedInterview, _ := pendingSlots[0]["is_invalidated_interview"].(bool)
+
+		if timeSlotStartTimeStr != "" {
+			timeSlotStartTime, parseErr := time.Parse("2006-01-02 15:04:05", timeSlotStartTimeStr)
+			if parseErr == nil {
+				bufferDuration := time.Duration(postScreeninBuffer * float64(time.Hour))
+				tokenExpired := timeSlotStartTime.Before(time.Now().UTC().Add(bufferDuration))
+				if tokenExpired && !isInvalidatedInterview {
+					slog.Error("token expired", "respondentIdentifier", respondentIdentifier)
+					writeJSON(w, http.StatusInternalServerError, map[string]any{
+						"error":           "token expired",
+						"errorMessage":    "an error occurred while getting moderators availability",
+						"customErrorCode": "token expired",
+					})
+					return
+				}
+			}
+		}
+
+		// Validate reschedule token
+		existingToken, err := h.qsRespondentRepo.GetRescheduleTokenMRA(ctx, projectID, responderID)
+		if err != nil {
+			slog.Error("get reschedule token failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":           err.Error(),
+				"errorMessage":    "an error occurred while getting moderators availability",
+				"customErrorCode": err.Error(),
+			})
+			return
+		}
+		if existingToken == "" {
+			slog.Error("token not found", "respondentIdentifier", respondentIdentifier)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":           "token not found",
+				"errorMessage":    "an error occurred while getting moderators availability",
+				"customErrorCode": "token not found",
+			})
+			return
+		}
+		if existingToken != rescheduleToken {
+			slog.Error("token mismatch", "respondentIdentifier", respondentIdentifier)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":           "token mismatch",
+				"errorMessage":    "an error occurred while getting moderators availability",
+				"customErrorCode": "token mismatch",
+			})
+			return
+		}
+	}
+
+	// Step 5: Get moderator time ranges and build map
+	moderatorsTimeRange, err := h.qsProjectRepo.GetModeratorsTimeRangePerProjectMRA(ctx, projectID)
+	if err != nil {
+		slog.Error("get moderators time range failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":           err.Error(),
+			"errorMessage":    "an error occurred while getting moderators availability",
+			"customErrorCode": err.Error(),
+		})
+		return
+	}
+
+	type modTimeRange struct {
+		startTime string
+		endTime   string
+		timezone  string
+	}
+	moderatorsWithTimeRangeMap := make(map[int64]modTimeRange)
+	for _, tr := range moderatorsTimeRange {
+		modID, _ := tr["moderator_id"].(int64)
+		moderatorsWithTimeRangeMap[modID] = modTimeRange{
+			startTime: fmt.Sprint(tr["start_time"]),
+			endTime:   fmt.Sprint(tr["end_time"]),
+			timezone:  fmt.Sprint(tr["timezone"]),
+		}
+	}
+
+	// Step 6: Get all moderator availabilities
+	moderatorsAvailability, err := h.qsUserRepo.GetAllModeratorsAvailabilityPerClientMRA(ctx, clientID, projectID)
+	if err != nil {
+		slog.Error("get all moderators availability failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{
+			"error":           err.Error(),
+			"errorMessage":    "an error occurred while getting moderators availability",
+			"customErrorCode": err.Error(),
+		})
+		return
+	}
+
+	// Step 7: Split availabilities into 15-min intervals
+	var dividedAvailabilities []map[string]any
+	currentTime := time.Now().UTC()
+
+	for _, av := range moderatorsAvailability {
+		avID, _ := av["id"].(int64)
+		modID, _ := av["moderatorId"].(int64)
+		avClientID, _ := av["clientId"].(int64)
+		stStr, _ := av["startTime"].(string)
+		etStr, _ := av["endTime"].(string)
+
+		startTime, err := time.Parse("2006-01-02 15:04:05", stStr)
+		if err != nil {
+			continue
+		}
+		endTime, err := time.Parse("2006-01-02 15:04:05", etStr)
+		if err != nil {
+			continue
+		}
+
+		// Get overlapping imported availability for this availability window
+		overlappingImported, err := h.qsUserRepo.GetOverlappingImportedAvailabilityMRA(ctx, modID, avClientID, stStr, etStr)
+		if err != nil {
+			slog.Error("get overlapping imported failed", "error", err)
+			overlappingImported = []map[string]any{}
+		}
+
+		minutes := int(endTime.Sub(startTime).Minutes())
+		for i := 1; i <= minutes/15; i++ {
+			offset := time.Duration((i - 1) * 15) * time.Minute
+			newStartTime := startTime.Add(offset)
+			newEndTime := newStartTime.Add(time.Duration(interviewLength) * time.Minute)
+
+			// Check imported overlap
+			hasImportedOverlap := false
+			for _, impAv := range overlappingImported {
+				impSTStr := fmt.Sprint(impAv["startTime"])
+				impETStr := fmt.Sprint(impAv["endTime"])
+				impST, e1 := time.Parse("2006-01-02 15:04:05", impSTStr)
+				impET, e2 := time.Parse("2006-01-02 15:04:05", impETStr)
+				if e1 != nil || e2 != nil {
+					continue
+				}
+				if (impST.After(newStartTime) && impST.Before(newEndTime)) ||
+					(impET.After(newStartTime) && impET.Before(newEndTime)) ||
+					(!impST.After(newStartTime) && !impET.Before(newEndTime)) {
+					hasImportedOverlap = true
+					break
+				}
+			}
+
+			// Check time buffer
+			bufferDuration := time.Duration(postScreeninBuffer * float64(time.Hour))
+			respectsTimeBuffer := !newStartTime.Before(time.Now().UTC().Add(bufferDuration))
+
+			// Check moderator working hours
+			isWithinTimeRangeCondition := true
+			if tr, ok := moderatorsWithTimeRangeMap[modID]; ok {
+				isWithinTimeRangeCondition = isWithinModeratorTimeRange(tr.startTime, tr.endTime, tr.timezone, newStartTime, newEndTime)
+			}
+
+			if !newStartTime.Before(currentTime) && !newEndTime.After(endTime) && respectsTimeBuffer && isWithinTimeRangeCondition {
+				dividedAvailabilities = append(dividedAvailabilities, map[string]any{
+					"moderatorAvailabilityId": avID,
+					"clientId":                avClientID,
+					"startTime":               newStartTime.Format("2006-01-02T15:04:05.000") + "Z",
+					"endTime":                 newEndTime.Format("2006-01-02T15:04:05.000") + "Z",
+					"moderatorId":              modID,
+					"hasImportedOverlap":       hasImportedOverlap,
+				})
+			}
+		}
+	}
+
+	// Step 8: Add sequential id field
+	for j := range dividedAvailabilities {
+		dividedAvailabilities[j]["id"] = j
+	}
+
+	// Step 9: Group by date "YYYY-MM-DD"
+	grouped := make(map[string][]map[string]any)
+	for _, av := range dividedAvailabilities {
+		stStr, _ := av["startTime"].(string)
+		t, err := time.Parse("2006-01-02T15:04:05.000Z", stStr)
+		if err != nil {
+			continue
+		}
+		key := t.Format("2006-01-02")
+		grouped[key] = append(grouped[key], av)
+	}
+
+	writeJSON(w, http.StatusOK, grouped)
+}
+
+// isWithinModeratorTimeRange checks if a time interval falls within the moderator's working hours
+// in the moderator's timezone. Mirrors legacy isWithinTimeRange helper.
+func isWithinModeratorTimeRange(rangeStart, rangeEnd, timezone string, newStart, newEnd time.Time) bool {
+	loc, err := time.LoadLocation(timezone)
+	if err != nil {
+		return true // if timezone invalid, don't filter
+	}
+	// Convert UTC times to moderator timezone
+	localStart := newStart.In(loc)
+	localEnd := newEnd.In(loc)
+	// Format as HHmm for numeric comparison
+	startHHMM := localStart.Hour()*100 + localStart.Minute()
+	endHHMM := localEnd.Hour()*100 + localEnd.Minute()
+	// 00:00 means end of day (24:00)
+	if endHHMM == 0 {
+		endHHMM = 2400
+	}
+	// Parse range values (stored as "HHmm" strings like "0900", "1700")
+	var rangeStartInt, rangeEndInt int
+	if _, err := fmt.Sscanf(rangeStart, "%d", &rangeStartInt); err != nil {
+		return true
+	}
+	if _, err := fmt.Sscanf(rangeEnd, "%d", &rangeEndInt); err != nil {
+		return true
+	}
+	return rangeStartInt <= startHHMM && rangeEndInt >= endHHMM
+}

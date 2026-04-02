@@ -1055,3 +1055,38 @@ func (r *UserRepo) AddModeratorAvailabilityFromImportedMRA(ctx context.Context, 
 	_, err := r.db.ExecContext(ctx, q, moderatorID, clientID, startTime, endTime)
 	return err
 }
+
+// GetAllModeratorsAvailabilityPerClientMRA returns moderator availabilities for a client+project.
+// Contract-identical with legacy getAllModeratorsAvailabilityPerClient.
+func (r *UserRepo) GetAllModeratorsAvailabilityPerClientMRA(ctx context.Context, clientID, projectID int64) ([]map[string]any, error) {
+	q := `SELECT moderator_availability.id, moderator_id AS moderatorId,
+	      client_id AS clientId, start_time AS startTime, end_time AS endTime
+	      FROM moderator_availability
+	      INNER JOIN projects_users ON moderator_availability.moderator_id = projects_users.user_id
+	      WHERE client_id = ? AND project_id = ?`
+	rows, err := r.db.QueryContext(ctx, q, clientID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get all moderators availability per client mra: %w", err)
+	}
+	defer rows.Close()
+
+	var records []map[string]any
+	for rows.Next() {
+		var id, modID, cID int64
+		var st, et string
+		if err := rows.Scan(&id, &modID, &cID, &st, &et); err != nil {
+			return nil, fmt.Errorf("scan moderator availability mra: %w", err)
+		}
+		records = append(records, map[string]any{
+			"id":          id,
+			"moderatorId": modID,
+			"clientId":    cID,
+			"startTime":   st,
+			"endTime":     et,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
+}

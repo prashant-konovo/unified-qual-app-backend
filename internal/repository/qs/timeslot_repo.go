@@ -402,3 +402,89 @@ func (repo *TimeSlotRepo) HasCompletedPaymentMRA(ctx context.Context, timeSlotID
 	}
 	return exists, nil
 }
+
+// GetInvalidTimeSlotStatusMRA returns invalid timeslot statuses for a respondent+project.
+// Status IDs: 2=pending, 5=cancelled, 6=respondent_cancelled, 9=completed, 12=no_show.
+func (repo *TimeSlotRepo) GetInvalidTimeSlotStatusMRA(ctx context.Context, externalResponderID string, projectID int64) ([]map[string]any, error) {
+	q := `SELECT t.status_id AS statusId FROM time_slot t
+	      INNER JOIN answer_details ad ON ad.time_slot_id = t.id
+	      INNER JOIN responder r ON ad.responder_id = r.id
+	      AND r.external_responder_id = ? AND t.project_id = ?
+	      AND t.status_id IN (2,5,6,9,12)
+	      AND t.is_invalidated_interview = 0`
+	rows, err := repo.db.QueryContext(ctx, q, externalResponderID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get invalid timeslot status mra: %w", err)
+	}
+	defer rows.Close()
+
+	var records []map[string]any
+	for rows.Next() {
+		var statusID int
+		if err := rows.Scan(&statusID); err != nil {
+			return nil, fmt.Errorf("scan invalid timeslot status: %w", err)
+		}
+		records = append(records, map[string]any{"statusId": statusID})
+	}
+	return records, rows.Err()
+}
+
+// GetInvalidTimeSlotStatusForRespRescMRA returns invalid statuses for respondent reschedule (excludes status 2).
+func (repo *TimeSlotRepo) GetInvalidTimeSlotStatusForRespRescMRA(ctx context.Context, externalResponderID string, projectID int64) ([]map[string]any, error) {
+	q := `SELECT t.status_id AS statusId FROM time_slot t
+	      INNER JOIN answer_details ad ON ad.time_slot_id = t.id
+	      INNER JOIN responder r ON ad.responder_id = r.id
+	      AND r.external_responder_id = ? AND t.project_id = ?
+	      AND t.status_id IN (5,6,9,12)
+	      AND t.is_invalidated_interview = 0`
+	rows, err := repo.db.QueryContext(ctx, q, externalResponderID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get invalid timeslot status resp resc mra: %w", err)
+	}
+	defer rows.Close()
+
+	var records []map[string]any
+	for rows.Next() {
+		var statusID int
+		if err := rows.Scan(&statusID); err != nil {
+			return nil, fmt.Errorf("scan invalid timeslot status resp resc: %w", err)
+		}
+		records = append(records, map[string]any{"statusId": statusID})
+	}
+	return records, rows.Err()
+}
+
+// GetPendingTimeslotByProjectAndResponderMRA returns pending/invalidated timeslots for a responder.
+func (repo *TimeSlotRepo) GetPendingTimeslotByProjectAndResponderMRA(ctx context.Context, projectID, responderID int64) ([]map[string]any, error) {
+	q := `SELECT t.id, t.project_id, t.start_time, t.end_time, t.status_id,
+	      t.is_invalidated_interview
+	      FROM time_slot t
+	      INNER JOIN answer_details ad ON t.id = ad.time_slot_id
+	      WHERE t.project_id = ? AND ad.responder_id = ?
+	      AND (t.status_id = 2 OR t.is_invalidated_interview = 1)`
+	rows, err := repo.db.QueryContext(ctx, q, projectID, responderID)
+	if err != nil {
+		return nil, fmt.Errorf("get pending timeslot by project and responder mra: %w", err)
+	}
+	defer rows.Close()
+
+	var records []map[string]any
+	for rows.Next() {
+		var id, pID int64
+		var st, et string
+		var statusID int
+		var isInvalidatedInterview bool
+		if err := rows.Scan(&id, &pID, &st, &et, &statusID, &isInvalidatedInterview); err != nil {
+			return nil, fmt.Errorf("scan pending timeslot: %w", err)
+		}
+		records = append(records, map[string]any{
+			"id":                       id,
+			"project_id":               pID,
+			"start_time":               st,
+			"end_time":                 et,
+			"status_id":                statusID,
+			"is_invalidated_interview": isInvalidatedInterview,
+		})
+	}
+	return records, rows.Err()
+}

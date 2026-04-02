@@ -199,3 +199,44 @@ func (repo *RespondentRepo) Update(ctx context.Context, id int64, fields map[str
 	}
 	return nil
 }
+
+// GetRespondentByExternalIdMRA returns responder ID by external_responder_id and project.
+// Contract-identical with legacy getRespondentByExternalResponderId.
+func (repo *RespondentRepo) GetRespondentByExternalIdMRA(ctx context.Context, externalResponderID string, projectID int64) ([]map[string]any, error) {
+	q := `SELECT responder.id AS responderId FROM responder
+	      INNER JOIN responder_communication_address resCommAddress
+	        ON responder.id = resCommAddress.responder_id
+	      INNER JOIN project_responder_comm_address projectResComm
+	        ON projectResComm.responder_comm_address_id = resCommAddress.id
+	      WHERE responder.external_responder_id = ? AND projectResComm.project_id = ?`
+	rows, err := repo.db.QueryContext(ctx, q, externalResponderID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get respondent by external id mra: %w", err)
+	}
+	defer rows.Close()
+
+	var records []map[string]any
+	for rows.Next() {
+		var responderID int64
+		if err := rows.Scan(&responderID); err != nil {
+			return nil, fmt.Errorf("scan respondent by external id: %w", err)
+		}
+		records = append(records, map[string]any{"responderId": responderID})
+	}
+	return records, rows.Err()
+}
+
+// GetRescheduleTokenMRA returns the reschedule token for a project+responder.
+func (repo *RespondentRepo) GetRescheduleTokenMRA(ctx context.Context, projectID, responderID int64) (string, error) {
+	q := `SELECT reschedule_token FROM project_responder_comm_address
+	      WHERE project_id = ? AND responder_id = ?`
+	var token sql.NullString
+	err := repo.db.QueryRowContext(ctx, q, projectID, responderID).Scan(&token)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get reschedule token mra: %w", err)
+	}
+	return token.String, nil
+}

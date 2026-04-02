@@ -1318,3 +1318,35 @@ func (r *ProjectRepo) GetAllModeratorsAvailabilityPerRole(ctx context.Context, p
 	}
 	return results, rows.Err()
 }
+
+// GetModeratorsTimeRangePerProjectMRA returns moderator time ranges for a project.
+// Contract-identical with legacy getModeratorsTimeRangePerProject.
+func (r *ProjectRepo) GetModeratorsTimeRangePerProjectMRA(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	q := `SELECT moderator_id, project_id, start_time, end_time, timezone
+	      FROM moderator_time_range WHERE project_id = ?`
+	rows, err := r.db.QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get moderators time range per project mra: %w", err)
+	}
+	defer rows.Close()
+
+	var records []map[string]any
+	for rows.Next() {
+		var moderatorID, pID int64
+		var startTime, endTime, tz sql.NullString
+		if err := rows.Scan(&moderatorID, &pID, &startTime, &endTime, &tz); err != nil {
+			return nil, fmt.Errorf("scan moderator time range: %w", err)
+		}
+		records = append(records, map[string]any{
+			"moderator_id": moderatorID,
+			"project_id":   pID,
+			"start_time":   startTime.String,
+			"end_time":     endTime.String,
+			"timezone":     tz.String,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
+}

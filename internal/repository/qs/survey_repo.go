@@ -146,3 +146,22 @@ func (r *SurveyRepo) Delete(ctx context.Context, id int64) error {
 	}
 	return nil
 }
+
+// GetSurveyByIdMRA returns a raw survey row as map (contract-identical with legacy getSurveyById).
+func (r *SurveyRepo) GetSurveyByIdMRA(ctx context.Context, surveyID int64) (map[string]any, error) {
+	q := `SELECT id, project_id, client_id FROM survey WHERE id = ?`
+	var id int64
+	var projectID, clientID sql.NullInt64
+	err := r.db.QueryRowContext(ctx, q, surveyID).Scan(&id, &projectID, &clientID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get survey by id mra %d: %w", surveyID, err)
+	}
+	return map[string]any{
+		"id":         id,
+		"project_id": projectID.Int64,
+		"client_id":  clientID.Int64,
+	}, nil
+}
