@@ -116,6 +116,13 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Get("/moderator/get/{moderator_id}/get-mod-av/{client_id}", h.GetModeratorAvailabilityByClientMRA)
 				r.Post("/moderator/get/{moderator_id}/imported/{client_id}", h.StartModeratorImportMRA)
 				r.Get("/moderator/get/{moderator_id}/imported-from-current-sync/{client_id}", h.GetImportedAvailabilityFromCurrentSyncMRA)
+				// MRA #67-72
+				r.Get("/moderator/get/{moderator_id}/import-status", h.GetImportStatusMRA)
+				r.Post("/moderator/unlink-imp-mod/{moderator_id}", h.UnlinkImportedModeratorMRA)
+				r.Get("/moderator/update-google-sheet-first-date", h.UpdateGoogleSheetFirstDateMRA)
+				r.Get("/project/get_topics_by_project/{project_id}", h.GetTopicsByProjectMRA)
+				r.Post("/update-topic-translation/{project_id}", h.UpdateTopicTranslationMRA)
+				r.Delete("/translations/delete-topic-translation/{project_id}/{transaltion_to_delete}", h.DeleteTopicTranslationMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)

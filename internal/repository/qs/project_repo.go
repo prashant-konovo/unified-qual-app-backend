@@ -1486,3 +1486,133 @@ records = []map[string]any{}
 }
 return records, rows.Err()
 }
+
+// GetTopicsByProjectMRA returns topics with language locale codes for a project.
+// Legacy: select t.id, l.langCode_countryCode, t.topic_name from topics as t
+//
+//	inner join language_localisation as l on l.id = t.language_id where project_id = ?
+func (r *ProjectRepo) GetTopicsByProjectMRA(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	const q = `SELECT t.id, l.langCode_countryCode, t.topic_name
+		FROM topics AS t
+		INNER JOIN language_localisation AS l ON l.id = t.language_id
+		WHERE t.project_id = ?`
+	rows, err := r.db.QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get topics by project mra: %w", err)
+	}
+	defer rows.Close()
+
+	var result []map[string]any
+	for rows.Next() {
+		var id int64
+		var langCodeCountryCode, topicName string
+		if err := rows.Scan(&id, &langCodeCountryCode, &topicName); err != nil {
+			return nil, fmt.Errorf("scan topic by project: %w", err)
+		}
+		result = append(result, map[string]any{
+			"id":                    id,
+			"langCode_countryCode": langCodeCountryCode,
+			"topic_name":           topicName,
+		})
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result, rows.Err()
+}
+
+// GetProjectStatusByIdMRA returns the project_status_id for a project.
+// Legacy: SELECT project_status_id FROM project WHERE id = ?
+func (r *ProjectRepo) GetProjectStatusByIdMRA(ctx context.Context, projectID int64) (int64, error) {
+	const q = `SELECT project_status_id FROM project WHERE id = ?`
+	var statusID int64
+	err := r.db.QueryRowContext(ctx, q, projectID).Scan(&statusID)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("get project status by id mra: %w", err)
+	}
+	return statusID, nil
+}
+
+// GetRespondersLanguagesByProjectIdMRA returns distinct language_country values for scheduled interviews.
+// Legacy: SELECT DISTINCT language_country FROM responder resp INNER JOIN ...
+func (r *ProjectRepo) GetRespondersLanguagesByProjectIdMRA(ctx context.Context, projectID int64) ([]string, error) {
+	const q = `SELECT DISTINCT language_country
+		FROM responder resp
+		INNER JOIN responder_participant_group respg ON resp.id = respg.responder_id
+		INNER JOIN participant_group pg ON pg.id = respg.participant_group_id
+		INNER JOIN survey ON survey.id = pg.survey_id
+		INNER JOIN project ON project.id = survey.project_id
+		INNER JOIN time_slot ON project.id = time_slot.project_id
+		WHERE project.id = ?
+		AND time_slot.status_id IN (2, 7, 8, 9)
+		AND time_slot.start_time > NOW()`
+	rows, err := r.db.QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get responders languages by project id mra: %w", err)
+	}
+	defer rows.Close()
+
+	var result []string
+	for rows.Next() {
+		var lang string
+		if err := rows.Scan(&lang); err != nil {
+			return nil, fmt.Errorf("scan language: %w", err)
+		}
+		result = append(result, lang)
+	}
+	return result, rows.Err()
+}
+
+// GetTopicsByProjectIdAndLanguageIdMRA checks if a topic exists for a project+language combination.
+// Legacy: SELECT topic_name FROM topics WHERE project_id = ? AND language_id = ?
+func (r *ProjectRepo) GetTopicsByProjectIdAndLanguageIdMRA(ctx context.Context, projectID, languageID int64) (bool, error) {
+	const q = `SELECT topic_name FROM topics WHERE project_id = ? AND language_id = ?`
+	var topicName string
+	err := r.db.QueryRowContext(ctx, q, projectID, languageID).Scan(&topicName)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("get topics by project and language mra: %w", err)
+	}
+	return true, nil
+}
+
+// AddTopicByProjectAndLanguageMRA inserts a new topic for a project+language.
+// Legacy: INSERT INTO topics (topic_name, created_by, project_id, language_id) VALUES (?, ?, ?, ?)
+func (r *ProjectRepo) AddTopicByProjectAndLanguageMRA(ctx context.Context, topicName string, languageID, projectID int64, userID any) error {
+	const q = `INSERT INTO topics (topic_name, created_by, project_id, language_id) VALUES (?, ?, ?, ?)`
+	_, err := r.db.ExecContext(ctx, q, topicName, userID, projectID, languageID)
+	if err != nil {
+		return fmt.Errorf("add topic by project and language mra: %w", err)
+	}
+	return nil
+}
+
+// UpdateTopicByProjectAndLanguageMRA updates an existing topic for a project+language.
+// Legacy: UPDATE topics SET topic_name = ?, created_by = ? WHERE project_id = ? AND language_id = ?
+func (r *ProjectRepo) UpdateTopicByProjectAndLanguageMRA(ctx context.Context, topicName string, languageID, projectID int64, userID any) error {
+	const q = `UPDATE topics SET topic_name = ?, created_by = ? WHERE project_id = ? AND language_id = ?`
+	_, err := r.db.ExecContext(ctx, q, topicName, userID, projectID, languageID)
+	if err != nil {
+		return fmt.Errorf("update topic by project and language mra: %w", err)
+	}
+	return nil
+}
+
+// DeleteTopicByProjectAndLanguageMRA deletes a topic by project and language.
+// Legacy: DELETE FROM topics WHERE project_id = ? AND language_id = ?
+func (r *ProjectRepo) DeleteTopicByProjectAndLanguageMRA(ctx context.Context, projectID, languageID int64) error {
+	const q = `DELETE FROM topics WHERE project_id = ? AND language_id = ?`
+	_, err := r.db.ExecContext(ctx, q, projectID, languageID)
+	if err != nil {
+		return fmt.Errorf("delete topic by project and language mra: %w", err)
+	}
+	return nil
+}
+
+
+

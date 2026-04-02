@@ -1607,3 +1607,163 @@ result = []map[string]any{}
 }
 return result, rows.Err()
 }
+
+// GetModeratorExternalCalendarMRA returns all rows from moderator_external_calendar for a moderator.
+// Legacy: SELECT * FROM moderator_external_calendar WHERE moderator_id = ?
+func (r *UserRepo) GetModeratorExternalCalendarMRA(ctx context.Context, moderatorID int64) ([]map[string]any, error) {
+	const q = `SELECT * FROM moderator_external_calendar WHERE moderator_id = ?`
+	rows, err := r.db.QueryContext(ctx, q, moderatorID)
+	if err != nil {
+		return nil, fmt.Errorf("get moderator external calendar mra: %w", err)
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, fmt.Errorf("get columns: %w", err)
+	}
+
+	var result []map[string]any
+	for rows.Next() {
+		values := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range values {
+			ptrs[i] = &values[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, fmt.Errorf("scan moderator external calendar: %w", err)
+		}
+		rec := make(map[string]any, len(cols))
+		for i, col := range cols {
+			val := values[i]
+			if b, ok := val.([]byte); ok {
+				rec[col] = string(b)
+			} else {
+				rec[col] = val
+			}
+		}
+		result = append(result, rec)
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result, rows.Err()
+}
+
+// GetRunningImportProcessCountMRA counts running import processes across all moderators.
+// Legacy: SELECT count(*) as RunningProcesses FROM moderator_external_calendar WHERE status = "In Progress"
+// Note: Legacy does NOT filter by moderator_id despite receiving it.
+func (r *UserRepo) GetRunningImportProcessCountMRA(ctx context.Context) (int64, error) {
+	const q = `SELECT COUNT(*) AS RunningProcesses FROM moderator_external_calendar WHERE status = 'In Progress'`
+	var count int64
+	err := r.db.QueryRowContext(ctx, q).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("get running import process count mra: %w", err)
+	}
+	return count, nil
+}
+
+// DeleteExternalCalStatusMRA deletes the external calendar status for a moderator.
+// Legacy: DELETE FROM moderator_external_calendar WHERE moderator_id = ?
+func (r *UserRepo) DeleteExternalCalStatusMRA(ctx context.Context, moderatorID int64) error {
+	const q = `DELETE FROM moderator_external_calendar WHERE moderator_id = ?`
+	_, err := r.db.ExecContext(ctx, q, moderatorID)
+	if err != nil {
+		return fmt.Errorf("delete external cal status mra: %w", err)
+	}
+	return nil
+}
+
+// GetImportedModeratorAvailabilityListMRA returns imported avails with user info for a moderator+client.
+func (r *UserRepo) GetImportedModeratorAvailabilityListMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error) {
+const q = `SELECT ma.id, moderator_id AS moderatorId, first_name AS firstName, last_name AS lastName,
+client_id AS clientId, start_time AS startTime, end_time AS endTime
+FROM imported_moderator_availability ma
+INNER JOIN user ON user.id = ma.moderator_id
+WHERE moderator_id = ? AND client_id = ?`
+rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
+if err != nil {
+return nil, fmt.Errorf("get imported moderator availability list mra: %w", err)
+}
+defer rows.Close()
+var result []map[string]any
+for rows.Next() {
+var id, modID int64
+var firstName, lastName string
+var cID int64
+var startTime, endTime string
+if err := rows.Scan(&id, &modID, &firstName, &lastName, &cID, &startTime, &endTime); err != nil {
+return nil, err
+}
+result = append(result, map[string]any{
+"id": id, "moderatorId": modID, "firstName": firstName, "lastName": lastName,
+"clientId": cID, "startTime": startTime, "endTime": endTime,
+})
+}
+if result == nil {
+result = []map[string]any{}
+}
+return result, rows.Err()
+}
+
+func (r *UserRepo) GetOverlappingManualAvailabilityMRA(ctx context.Context, moderatorID, clientID int64, startTime, endTime string) ([]map[string]any, error) {
+const q = `SELECT ima.id, moderator_id AS moderatorId, first_name AS firstName, last_name AS lastName,
+client_id AS clientId, start_time AS startTime, end_time AS endTime
+FROM moderator_availability ima
+INNER JOIN user ON user.id = ima.moderator_id
+WHERE moderator_id = ? AND client_id = ?
+AND ((start_time >= ? AND start_time < ?)
+OR (end_time > ? AND end_time <= ?)
+OR (start_time < ? AND end_time > ?))
+ORDER BY start_time`
+rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID,
+startTime, endTime, startTime, endTime, startTime, endTime)
+if err != nil {
+return nil, fmt.Errorf("get overlapping manual availability mra: %w", err)
+}
+defer rows.Close()
+var result []map[string]any
+for rows.Next() {
+var id, modID int64
+var firstName, lastName string
+var cID int64
+var st, et string
+if err := rows.Scan(&id, &modID, &firstName, &lastName, &cID, &st, &et); err != nil {
+return nil, err
+}
+result = append(result, map[string]any{
+"id": id, "moderatorId": modID, "firstName": firstName, "lastName": lastName,
+"clientId": cID, "startTime": st, "endTime": et,
+})
+}
+if result == nil {
+result = []map[string]any{}
+}
+return result, rows.Err()
+}
+
+
+func (r *UserRepo) DeleteImportedAvailByModAndIdMRA(ctx context.Context, moderatorID, id int64) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM imported_moderator_availability WHERE moderator_id = ? AND id = ?`, moderatorID, id)
+	if err != nil {
+		return fmt.Errorf("delete imported avail by mod and id mra: %w", err)
+	}
+	return nil
+}
+func (r *UserRepo) DeleteManualAvailByModAndIdMRA(ctx context.Context, moderatorID, id int64) error {
+_, err := r.db.ExecContext(ctx, `DELETE FROM moderator_availability WHERE moderator_id = ? AND id = ?`, moderatorID, id)
+if err != nil {
+return fmt.Errorf("delete manual moderator availability by id mra: %w", err)
+}
+return nil
+}
+
+func (r *UserRepo) AddManualAvailabilityMRA(ctx context.Context, moderatorID, clientID int64, startTime, endTime string) error {
+_, err := r.db.ExecContext(ctx,
+`INSERT INTO moderator_availability (moderator_id, client_id, start_time, end_time) VALUES (?, ?, ?, ?)`,
+moderatorID, clientID, startTime, endTime)
+if err != nil {
+return fmt.Errorf("add manual availability mra: %w", err)
+}
+return nil
+}
