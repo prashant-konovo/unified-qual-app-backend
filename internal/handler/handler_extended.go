@@ -13,6 +13,7 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
+	"github.com/InCrowd/unified-qual-api/internal/validate"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	qs "github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/go-chi/chi/v5"
@@ -37,11 +38,8 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 		LastName      string `json:"lastName"`
 		CognitoUserID string `json:"cognitoUserId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while adding user roles",
-		})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -110,11 +108,8 @@ func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
 		Email  string `json:"email"`
 		RoleID int    `json:"roleId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while removing user roles",
-		})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -202,11 +197,8 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 		UserID               int64  `json:"userId"`
 		UserSelectedTimeZone string `json:"userSelectedTimeZone"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while creating a new user",
-		})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -236,20 +228,10 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) SendPasswordResetEmail(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Email string `json:"email"`
+		Email string `json:"email" validate:"required,email"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": err.Error(),
-		})
-		return
-	}
-	if req.Email == "" {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "email required",
-			"errorMessage": "email required",
-		})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -290,11 +272,8 @@ func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request)
 	var req struct {
 		Email string `json:"email"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": err.Error(),
-		})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -335,22 +314,16 @@ func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request)
 // Response: Lambda proxy {status, headers, body:{passwordMatch:bool}, isBase64Encoded}
 func (h *Handler) CheckPasswordMatchesMRA(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "user_id")
-	if _, err := strconv.ParseInt(userIDStr, 10, 64); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "invalid user_id",
-			"errorMessage": "invalid user_id",
-		})
+	if _, err := validate.ParseIDParam(r, "user_id"); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	var req struct {
 		Password string `json:"password"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": err.Error(),
-		})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -371,13 +344,9 @@ func (h *Handler) CheckPasswordMatchesMRA(w http.ResponseWriter, r *http.Request
 // ──────────────────────────────────────────────
 
 func (h *Handler) CheckUserCommPreference(w http.ResponseWriter, r *http.Request) {
-	userIDStr := chi.URLParam(r, "userId")
-	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	userID, err := validate.ParseIDParam(r, "userId")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "invalid user id",
-			"errorMessage": "invalid user id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -413,11 +382,8 @@ func (h *Handler) UnsubscribeUser(w http.ResponseWriter, r *http.Request) {
 		PmUserID            string `json:"pmUserId"`
 		AllowContactByEmail int    `json:"allowContactByEmail"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": err.Error(),
-		})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -486,10 +452,9 @@ func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "projectId")
-	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "projectId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	source := h.resolveSource(r)
@@ -527,10 +492,9 @@ func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request)
 // ──────────────────────────────────────────────
 
 func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "projectId")
-	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "projectId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -587,10 +551,9 @@ func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) GetAvailableModeratorsCount(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "projectId")
-	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "projectId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	source := h.resolveSource(r)
@@ -618,10 +581,9 @@ func (h *Handler) GetAvailableModeratorsCount(w http.ResponseWriter, r *http.Req
 }
 
 func (h *Handler) GetUnavailableModerators(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "projectId")
-	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "projectId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	source := h.resolveSource(r)
@@ -650,8 +612,8 @@ func (h *Handler) SendNotificationEmail(w http.ResponseWriter, r *http.Request) 
 		Type       string   `json:"type"`
 		ProjectID  int64    `json:"projectId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -697,8 +659,8 @@ func (h *Handler) AddConferenceLink(w http.ResponseWriter, r *http.Request) {
 		TimeSlotID     int64  `json:"timeSlotId"`
 		ConferenceHash string `json:"conferenceHash"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 	if req.ConferenceHash == "" {
@@ -727,8 +689,8 @@ func (h *Handler) UpdateConferenceLinkHandler(w http.ResponseWriter, r *http.Req
 		ConferenceHash string `json:"conferenceHash"`
 		Pin            string `json:"pin"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -745,10 +707,9 @@ func (h *Handler) UpdateConferenceLinkHandler(w http.ResponseWriter, r *http.Req
 }
 
 func (h *Handler) GetConferenceLinkByTimeSlot(w http.ResponseWriter, r *http.Request) {
-	tsStr := chi.URLParam(r, "timeslotId")
-	tsID, err := strconv.ParseInt(tsStr, 10, 64)
+	tsID, err := validate.ParseIDParam(r, "timeslotId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid timeslot id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -828,8 +789,8 @@ func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 	var req map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -869,8 +830,8 @@ func (h *Handler) CheckQualEligibility(w http.ResponseWriter, r *http.Request) {
 		ResponderID int64 `json:"responderId"`
 		ProjectID   int64 `json:"projectId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -953,8 +914,8 @@ func (h *Handler) CreateExternalPayment(w http.ResponseWriter, r *http.Request) 
 		PaymentType string `json:"paymentType"`
 		ExternalRef string `json:"externalReference"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -1125,8 +1086,8 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	subID, _ := strconv.ParseInt(subStr, 10, 64)
 
 	var proposal ipProposal
-	if err := json.NewDecoder(r.Body).Decode(&proposal); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &proposal); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -1646,8 +1607,8 @@ func (h *Handler) UpdateGoogleSheetFirstDate(w http.ResponseWriter, r *http.Requ
 		CellRange string `json:"cellRange"`
 		Value     string `json:"value"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -1760,8 +1721,8 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 		TimeSlotID     int64  `json:"timeSlotId"`
 		ExternalID     string `json:"externalMeetingId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -1809,8 +1770,8 @@ func (h *Handler) CreateTranscriptionOrder(w http.ResponseWriter, r *http.Reques
 		MeetingID string `json:"meetingId"`
 		AudioURL  string `json:"audioUrl"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -1872,8 +1833,8 @@ func (h *Handler) SendSMS(w http.ResponseWriter, r *http.Request) {
 		From    string `json:"from"`
 		Message string `json:"message"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -1896,8 +1857,8 @@ func (h *Handler) SendSMS(w http.ResponseWriter, r *http.Request) {
 // Response: flat project details object (parsedJson[8]["records"][0]).
 func (h *Handler) CreateProjectMRA(w http.ResponseWriter, r *http.Request) {
 	var body map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -1931,10 +1892,9 @@ func (h *Handler) CreateProjectMRA(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy QS Tool: complex JOIN returning 24-field flat project object.
 // Response: getProjectDetails.records[0] equivalent.
 func (h *Handler) GetProjectMRA(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2077,13 +2037,9 @@ func (h *Handler) ListProjectsMRA(w http.ResponseWriter, r *http.Request) {
 // 3. else → set scheduler_generated = 1
 // Response: {} (empty object — legacy transaction result has no "records" key)
 func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "project_id")
-	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while updating project details",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2096,11 +2052,8 @@ func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while updating project details",
-		})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -2143,13 +2096,9 @@ func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy: updates external_survey_id + modified_on.
 // Request: {externalSurveyId}. Response: {} (empty object).
 func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "project_id")
-	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while updating external survey id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2164,11 +2113,8 @@ func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Reque
 	var body struct {
 		ExternalSurveyID string `json:"externalSurveyId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while updating external survey id",
-		})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -2189,13 +2135,9 @@ func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Reque
 // Reset: diffs moderatorIds against existing, adds/removes from projects_users + moderator_time_range.
 // Unassign: removes single moderator, returns updated moderator list.
 func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "project_id")
-	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while trying to reset project moderators",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2215,11 +2157,8 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 	var body struct {
 		ModeratorIDs []int64 `json:"moderatorIds"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while trying to reset project moderators",
-		})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -2338,13 +2277,9 @@ func (h *Handler) GetEmailTemplateMRA(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy: queries export data, generates Excel, uploads to S3,
 // returns presigned URL. Response: {fileURL: "<presigned url>"}.
 func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "project_id")
-	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while exporting project",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2460,13 +2395,9 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 // auto-transitions project_status_id between InProgress(2)↔Completed(3).
 // Response: empty body on success (legacy returns transaction result which serializes to nothing).
 func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "project_id")
-	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while updating project sample size",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2481,11 +2412,8 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		SampleSize int64 `json:"sampleSize"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while updating project sample size",
-		})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -2566,13 +2494,9 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy: checks moderator availability against project settings,
 // returns {displayError, displayWarning} flags.
 func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "project_id")
-	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while getting available and unavailable moderators assigned to the project",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2726,16 +2650,14 @@ func isWithinTimeRange(tr qs.ModeratorTimeRange, newStart, newEnd time.Time) boo
 // Contract-identical with legacy: checks project status is Defining (1), then upserts moderator_time_range.
 // Response: transaction result (serialized as the upsert response).
 func (h *Handler) UpsertModeratorTimeRangeMRA(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "project_id")
-	modStr := chi.URLParam(r, "moderator_id")
-	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	moderatorID, err := strconv.ParseInt(modStr, 10, 64)
+	moderatorID, err := validate.ParseIDParam(r, "moderator_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2749,8 +2671,8 @@ func (h *Handler) UpsertModeratorTimeRangeMRA(w http.ResponseWriter, r *http.Req
 		EndTime   string `json:"endTime"`
 		Timezone  string `json:"timezone"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -2783,22 +2705,14 @@ func (h *Handler) UpsertModeratorTimeRangeMRA(w http.ResponseWriter, r *http.Req
 // compares against sampleSize - completed to produce displayWarning flag.
 // Response: {avModCount, displayWarning}.
 func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "project_id")
-	ssStr := chi.URLParam(r, "sample_size")
-	projectID, err := strconv.ParseInt(pidStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while getting the number of available moderators",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	sampleSize, err := strconv.ParseInt(ssStr, 10, 64)
+	sampleSize, err := validate.ParseIDParam(r, "sample_size")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while getting the number of available moderators",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2861,9 +2775,9 @@ func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) 
 // Response: {clientId, data: records}.
 func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 	cidStr := chi.URLParam(r, "client_id")
-	clientID, err := strconv.ParseInt(cidStr, 10, 64)
+	clientID, err := validate.ParseIDParam(r, "client_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2882,8 +2796,8 @@ func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 		HandleScroll       any      `json:"handleScroll"`
 		PaymentStatusCode  string   `json:"paymentStatusCode"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -2972,11 +2886,8 @@ func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
 			HasImportedOverlap     any    `json:"hasImportedOverlap"`
 		} `json:"slot"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while scheduling the interview",
-		})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -3053,11 +2964,8 @@ func (h *Handler) RespondentRescheduleMRA(w http.ResponseWriter, r *http.Request
 			HasImportedOverlap     any    `json:"hasImportedOverlap"`
 		} `json:"slot"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "an error occurred in respondent reschedule",
-		})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -3113,8 +3021,8 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 		InvalidatedByUserID    any    `json:"invalidatedByUserId"`
 		IsInvalidateEmailSent  *bool  `json:"isInvalidateEmailSent"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Invalid JSON payload"})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -3237,8 +3145,8 @@ func (h *Handler) SendInvalidateRescheduleMailMRA(w http.ResponseWriter, r *http
 		ParticipantID   any   `json:"participantId"`
 		IsIneligibleMail *bool `json:"isIneligibleMail"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Invalid JSON payload"})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -3328,23 +3236,15 @@ func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projectIDStr := chi.URLParam(r, "project_id")
-	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "invalid project_id",
-			"errorMessage": "invalid project_id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	pgIDStr := chi.URLParam(r, "participant_group_id")
-	participantGroupID, err := strconv.ParseInt(pgIDStr, 10, 64)
+	participantGroupID, err := validate.ParseIDParam(r, "participant_group_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "invalid participant_group_id",
-			"errorMessage": "invalid participant_group_id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -3353,11 +3253,8 @@ func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 		MeetingInformation [][]any `json:"meetingInformation"`
 		UserID             any     `json:"userId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": err.Error(),
-		})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -3398,23 +3295,15 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	projectIDStr := chi.URLParam(r, "project_id")
-	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "invalid project_id",
-			"errorMessage": "invalid project_id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	pgIDStr := chi.URLParam(r, "participant_group_id")
-	participantGroupID, err := strconv.ParseInt(pgIDStr, 10, 64)
+	participantGroupID, err := validate.ParseIDParam(r, "participant_group_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "invalid participant_group_id",
-			"errorMessage": "invalid participant_group_id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -3423,11 +3312,8 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 		MeetingInformation [][]any `json:"meetingInformation"`
 		UserID             any     `json:"userId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": err.Error(),
-		})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -3489,13 +3375,9 @@ func (h *Handler) GetConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy: participant_group_id from path but used as project_id in query
-	pgIDStr := chi.URLParam(r, "participant_group_id")
-	projectID, err := strconv.ParseInt(pgIDStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "participant_group_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "invalid participant_group_id",
-			"errorMessage": "invalid participant_group_id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -3537,13 +3419,9 @@ func (h *Handler) GetConfLinkByTimeSlotMRA(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tsIDStr := chi.URLParam(r, "timeslot_id")
-	tsID, err := strconv.ParseInt(tsIDStr, 10, 64)
+	tsID, err := validate.ParseIDParam(r, "timeslot_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "invalid timeslot_id",
-			"errorMessage": "An error occured while getting conference link by timeslot id",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -3581,10 +3459,9 @@ func (h *Handler) GetAllModeratorsMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientIDStr := chi.URLParam(r, "client_id")
-	clientID, err := strconv.ParseInt(clientIDStr, 10, 64)
+	clientID, err := validate.ParseIDParam(r, "client_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "invalid client_id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -3614,17 +3491,11 @@ func (h *Handler) PostModeratorAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	var body struct {
 		ModeratorID int64  `json:"moderatorId"`
 		ClientID    int64  `json:"clientId"`
-		StartTime   string `json:"startTime"`
-		EndTime     string `json:"endTime"`
+		StartTime   string `json:"startTime" validate:"required"`
+		EndTime     string `json:"endTime" validate:"required"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-
-	// Validation: startTime and endTime required
-	if body.StartTime == "" || body.EndTime == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "Start time and end time are required"})
+	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -3898,8 +3769,8 @@ func (h *Handler) UpdateModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 		StartTime string `json:"startTime"`
 		EndTime   string `json:"endTime"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -4037,14 +3908,9 @@ writeJSON(w, http.StatusOK, result)
 // Returns moderator availability slots split into 15-min intervals grouped by date.
 func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	surveyIDStr := chi.URLParam(r, "survey_id")
-	surveyID, err := strconv.ParseInt(surveyIDStr, 10, 64)
+	surveyID, err := validate.ParseIDParam(r, "survey_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":           err.Error(),
-			"errorMessage":    "an error occurred while getting moderators availability",
-			"customErrorCode": "INVALID_SURVEY_ID",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -4593,11 +4459,10 @@ writeJSON(w, http.StatusOK, map[string]any{
 // Updates moderator buffer and cascades availability adjustments.
 // Contract-identical: returns [] (empty JSON array) on success.
 func (h *Handler) UpdateModeratorMRA(w http.ResponseWriter, r *http.Request) {
-modIDStr := chi.URLParam(r, "moderator_id")
-moderatorID, err := strconv.ParseInt(modIDStr, 10, 64)
+moderatorID, err := validate.ParseIDParam(r, "moderator_id")
 if err != nil {
-writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "invalid moderator_id"})
-return
+	writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+	return
 }
 
 if h.qsUserRepo == nil {
@@ -4609,9 +4474,9 @@ var body struct {
 ModeratorBuffer      int  `json:"moderatorBuffer"`
 UpdateAvailabilities *bool `json:"updateAvailabilities,omitempty"`
 }
-if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-return
+if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+	validate.WriteError(w, errs)
+	return
 }
 
 ctx := r.Context()
@@ -5149,9 +5014,9 @@ return
 var body struct {
 ProjectAccountID int `json:"projectAccountId"`
 }
-if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-return
+if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+	validate.WriteError(w, errs)
+	return
 }
 
 records, err := h.qsProjectRepo.GetSalesforceClientsWithFilterMRA(r.Context(), body.ProjectAccountID)
@@ -5237,9 +5102,9 @@ ShgHash             any    `json:"shgHash"`
 QsPath              any    `json:"qsPath"`
 RespondentIdentifer any    `json:"respondentIdentifer"`
 }
-if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-return
+if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+	validate.WriteError(w, errs)
+	return
 }
 
 slog.Info("front-end event",
@@ -5281,12 +5146,9 @@ UpdatedBy      string `json:"updated_by"`
 Reason         string `json:"reason"`
 Status         string `json:"status"`
 }
-if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-writeJSON(w, http.StatusInternalServerError, map[string]any{
-"error":        err.Error(),
-"errorMessage": err.Error(),
-})
-return
+if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+	validate.WriteError(w, errs)
+	return
 }
 
 // Validation
@@ -5371,24 +5233,16 @@ writeJSON(w, http.StatusInternalServerError, map[string]any{
 return
 }
 
-moderatorIDStr := chi.URLParam(r, "moderator_id")
-moderatorID, err := strconv.ParseInt(moderatorIDStr, 10, 64)
+moderatorID, err := validate.ParseIDParam(r, "moderator_id")
 if err != nil {
-writeJSON(w, http.StatusBadRequest, map[string]any{
-"error":        "invalid moderator_id",
-"errorMessage": "An error occured while getting moderator availability",
-})
-return
+	writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+	return
 }
 
-clientIDStr := chi.URLParam(r, "client_id")
-clientID, err := strconv.ParseInt(clientIDStr, 10, 64)
+clientID, err := validate.ParseIDParam(r, "client_id")
 if err != nil {
-writeJSON(w, http.StatusBadRequest, map[string]any{
-"error":        "invalid client_id",
-"errorMessage": "An error occured while getting moderator availability",
-})
-return
+	writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+	return
 }
 
 ctx := r.Context()
@@ -5418,18 +5272,16 @@ writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository
 return
 }
 
-moderatorIDStr := chi.URLParam(r, "moderator_id")
-moderatorID, err := strconv.ParseInt(moderatorIDStr, 10, 64)
+moderatorID, err := validate.ParseIDParam(r, "moderator_id")
 if err != nil {
-writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator_id"})
-return
+	writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+	return
 }
 
-clientIDStr := chi.URLParam(r, "client_id")
-clientID, err := strconv.ParseInt(clientIDStr, 10, 64)
+clientID, err := validate.ParseIDParam(r, "client_id")
 if err != nil {
-writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid client_id"})
-return
+	writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+	return
 }
 
 var body struct {
@@ -5438,9 +5290,9 @@ ExternalCalendarKeyInput string `json:"externalCalendarKeyInput"`
 ForceUpdate              bool   `json:"forceUpdate"`
 UserID                   any    `json:"userId"`
 }
-if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-return
+if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+	validate.WriteError(w, errs)
+	return
 }
 
 ctx := r.Context()
@@ -5495,18 +5347,16 @@ writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository
 return
 }
 
-moderatorIDStr := chi.URLParam(r, "moderator_id")
-moderatorID, err := strconv.ParseInt(moderatorIDStr, 10, 64)
+moderatorID, err := validate.ParseIDParam(r, "moderator_id")
 if err != nil {
-writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator_id"})
-return
+	writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+	return
 }
 
-clientIDStr := chi.URLParam(r, "client_id")
-clientID, err := strconv.ParseInt(clientIDStr, 10, 64)
+clientID, err := validate.ParseIDParam(r, "client_id")
 if err != nil {
-writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid client_id"})
-return
+	writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+	return
 }
 
 // PARTIAL: Legacy parses Google Sheets data. This returns DB-stored imported avails.
@@ -5546,10 +5396,9 @@ func (h *Handler) GetImportStatusMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	moderatorIDStr := chi.URLParam(r, "moderator_id")
-	moderatorID, err := strconv.ParseInt(moderatorIDStr, 10, 64)
+	moderatorID, err := validate.ParseIDParam(r, "moderator_id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator_id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -5589,18 +5438,17 @@ func (h *Handler) UnlinkImportedModeratorMRA(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	moderatorIDStr := chi.URLParam(r, "moderator_id")
-	moderatorID, err := strconv.ParseInt(moderatorIDStr, 10, 64)
+	moderatorID, err := validate.ParseIDParam(r, "moderator_id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator_id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	var req struct {
 		ClientID int64 `json:"clientId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -5674,10 +5522,9 @@ func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	projectIDStr := chi.URLParam(r, "project_id")
-	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project_id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -5741,10 +5588,9 @@ func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	projectIDStr := chi.URLParam(r, "project_id")
-	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project_id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -5752,11 +5598,8 @@ func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		TopicInfo [][]any `json:"topicInfo"`
 		UserID    any     `json:"userId"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": err.Error(),
-		})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -5814,10 +5657,9 @@ func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	projectIDStr := chi.URLParam(r, "project_id")
-	projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project_id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -5917,11 +5759,10 @@ writeJSON(w, http.StatusOK, map[string]any{
 // ──────────────────────────────────────────────────────────────────────────────
 
 func (h *Handler) DeleteTranslationMRA(w http.ResponseWriter, r *http.Request) {
-pidStr := chi.URLParam(r, "project_id")
-projectID, err := strconv.ParseInt(pidStr, 10, 64)
+projectID, err := validate.ParseIDParam(r, "project_id")
 if err != nil {
-writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project_id"})
-return
+	writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+	return
 }
 translationToDelete := chi.URLParam(r, "transaltion_to_delete")
 
@@ -5983,9 +5824,9 @@ ExternalUserID       string      `json:"externalUserId"`
 ExternalCreditOrderID string     `json:"externalCreditOrderId"`
 ExternalCountryID    string      `json:"externalCountryId"`
 }
-if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
-return
+if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+	validate.WriteError(w, errs)
+	return
 }
 
 // Validate required fields (legacy validation)
@@ -6049,12 +5890,9 @@ func (h *Handler) AddTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request)
 var body struct {
 TimeSlotIDs []int64 `json:"timeSlotIds"`
 }
-if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-writeJSON(w, http.StatusBadRequest, map[string]any{
-"error":        "Bad Request",
-"errorMessage": "timeSlotIds is not an array of int",
-})
-return
+if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+	validate.WriteError(w, errs)
+	return
 }
 
 if len(body.TimeSlotIDs) == 0 {
@@ -6304,13 +6142,9 @@ ExternalUserSurveyID string      `json:"externalUserSurveyId"`
 ExternalCreditOrderID string     `json:"externalCreditOrderId"`
 PaymentTypeCode      string      `json:"paymentTypeCode"`
 }
-if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-writeJSON(w, http.StatusInternalServerError, map[string]any{
-"error":           err.Error(),
-"errorMessage":    "an error occurred while getting data",
-"customErrorCode": err.Error(),
-})
-return
+if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+	validate.WriteError(w, errs)
+	return
 }
 
 // Get payment type list for resolving type codes
@@ -6394,9 +6228,9 @@ OldValue   float64 `json:"oldValue"`
 NewValue   float64 `json:"newValue"`
 ReasonCode string  `json:"reasonCode"`
 }
-if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
-return
+if errs := validate.DecodeAndValidate(r, &body); errs != nil {
+	validate.WriteError(w, errs)
+	return
 }
 
 // Get user from email header

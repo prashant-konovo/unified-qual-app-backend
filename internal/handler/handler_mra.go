@@ -4,10 +4,9 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"strconv"
 
 	qs "github.com/InCrowd/unified-qual-api/internal/repository/qs"
-	"github.com/go-chi/chi/v5"
+	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
 
 // ──────────────────────────────────────────────
@@ -17,12 +16,11 @@ import (
 // ──────────────────────────────────────────────
 
 func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
-	userIDStr := chi.URLParam(r, "user_id")
-	_, err := strconv.ParseInt(userIDStr, 10, 64)
+	userID, err := validate.ParseIDParam(r, "user_id")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "invalid user_id",
-			"errorMessage": "invalid user_id",
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
 		})
 		return
 	}
@@ -31,16 +29,13 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 		Token    string `json:"token"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": err.Error(),
-		})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
 	// Password changes are handled by Cognito; log the request.
-	slog.Info("patch user password requested (admin)", "userId", userIDStr)
+	slog.Info("patch user password requested (admin)", "userId", userID)
 
 	// Legacy returns parsedJson[0] on Lambda proxy result object → undefined → empty body.
 	// Match with empty response for contract-identical compliance.
@@ -55,20 +50,8 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
-	userIDStr := chi.URLParam(r, "user_id")
-	_, err := strconv.ParseInt(userIDStr, 10, 64)
+	userID, err := validate.ParseIDParam(r, "user_id")
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "invalid user_id",
-			"errorMessage": "invalid user_id",
-		})
-		return
-	}
-
-	var req struct {
-		Password string `json:"password"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
@@ -76,9 +59,17 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var req struct {
+		Password string `json:"password"`
+	}
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
+		return
+	}
+
 	// Token comes from the Authorization header (already validated by JWT middleware).
 	// Password changes are handled by Cognito; log the request.
-	slog.Info("patch user password requested (profile)", "userId", userIDStr)
+	slog.Info("patch user password requested (profile)", "userId", userID)
 
 	// Legacy returns full Lambda proxy result: {status, headers, body, isBase64Encoded}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -98,11 +89,10 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request) {
-	action := chi.URLParam(r, "action")
-	tsIDStr := chi.URLParam(r, "tsId")
-	tsID, err := strconv.ParseInt(tsIDStr, 10, 64)
+	action, _ := validate.ParseStringParam(r, "action")
+	tsID, err := validate.ParseIDParam(r, "tsId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid tsId"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 

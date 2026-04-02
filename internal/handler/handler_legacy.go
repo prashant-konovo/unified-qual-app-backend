@@ -14,6 +14,7 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
+	"github.com/InCrowd/unified-qual-api/internal/validate"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -25,10 +26,9 @@ import (
 // Contract-identical with legacy InCrowdAPI: GET /v1/survey/:id
 // Response: flat survey object (not wrapped)
 func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	surveyID, err := strconv.ParseInt(idStr, 10, 64)
+	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid survey id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	source := h.resolveSource(r)
@@ -87,10 +87,9 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 // Success: 200 {"error":{"message":"ready","developerMessage":"...","warnings":[...],"status":"OK","code":200}}
 // Failure: 422 {"error":{"developerMessage":"...","errors":[...],"warnings":[...],"status":"EXPECTATION FAILED","code":417}}
 func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	surveyID, err := strconv.ParseInt(idStr, 10, 64)
+	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid survey id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -151,10 +150,9 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 // Legacy contract: {"surveyId": id, "surveyCrowds": [adminJson|basicHonoJson|...]}
 // Query params: jsonType (admin|hono|subscriber|minimalJson), survey_detail_crowds (true/false)
 func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	surveyID, err := strconv.ParseInt(idStr, 10, 64)
+	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid survey id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -490,10 +488,9 @@ func (h *Handler) buildCrowdAdminJSONAvailable(ctx context.Context, crowdID, sur
 // Contract-identical with legacy InCrowdAPI: PUT /v1/survey/:id/close
 // Response: flat survey object (survey.refresh.adminJson)
 func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	surveyID, err := strconv.ParseInt(idStr, 10, 64)
+	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid survey id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -525,10 +522,9 @@ func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
 // Request: {"favorite": true/false}  (userId derived from JWT)
 // Response: full survey subscriberJson object
 func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	surveyID, err := strconv.ParseInt(idStr, 10, 64)
+	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid survey id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -536,8 +532,8 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Favorite bool `json:"favorite"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -752,10 +748,9 @@ func (h *Handler) buildSubscriberJSON(r *http.Request, s *iris.ICSurvey, callerU
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:id/surveys
 // Response: {"surveys": [...], "limit": N, "offset": N, "totalCount": N}
 func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	source := h.resolveSource(r)
@@ -810,10 +805,9 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:id/time_slots
 // Response: {"timeSlots": [...]}
 func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -844,10 +838,9 @@ func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:id/users
 // Response: {"users": [...], "offset": N, "limit": N, "totalCount": N}
 func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	source := h.resolveSource(r)
@@ -886,10 +879,9 @@ func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:pid/observers
 // Response: {"observers": [...]}
 func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "pid")
-	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -916,10 +908,9 @@ func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
 // GetProjectQualReschedBody returns the reschedule email template body.
 // Legacy contract: {"html": "<rendered email HTML>"}
 func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "pid")
-	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -947,10 +938,9 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:pid/availability
 // Response: flat array of availability objects
 func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "pid")
-	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -992,10 +982,9 @@ func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request)
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:pid/scheduler/moderators
 // Response: {"moderatorInfo": {...}}
 func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "pid")
-	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -1037,10 +1026,9 @@ func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.R
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/dashboard/availability_and_time_slots
 // Response: {"scheduled": N, "completed": N, "moderatorInfo": {"<modId>": {id, firstName, lastName, interviewCount}}}
 func (h *Handler) GetProjectDashboard(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "pid")
-	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -1062,10 +1050,9 @@ func (h *Handler) GetProjectDashboard(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/interview_media
 // Response: {"media": [...], "limit": N, "offset": N, "count": N}
 func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "pid")
-	projectID, err := strconv.ParseInt(idStr, 10, 64)
+	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -1123,10 +1110,8 @@ func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/interview_media/:mediaId
 // Response: full InterviewMedia JSON with basisPDF and pages array
 func (h *Handler) GetProjectMediaDetail(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "pid")
-	midStr := chi.URLParam(r, "mediaId")
-	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
-	mediaID, _ := strconv.ParseInt(midStr, 10, 64)
+	projectID, _ := validate.ParseIDParam(r, "pid")
+	mediaID, _ := validate.ParseIDParam(r, "mediaId")
 
 	if h.irisSurveyRepo != nil {
 		m, err := h.irisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
@@ -1157,10 +1142,8 @@ func (h *Handler) GetProjectMediaDetail(w http.ResponseWriter, r *http.Request) 
 // DownloadMediaPDF streams a media PDF from S3.
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/interview_media/:mediaId/media.pdf
 func (h *Handler) DownloadMediaPDF(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "pid")
-	midStr := chi.URLParam(r, "mediaId")
-	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
-	mediaID, _ := strconv.ParseInt(midStr, 10, 64)
+	projectID, _ := validate.ParseIDParam(r, "pid")
+	mediaID, _ := validate.ParseIDParam(r, "mediaId")
 
 	if h.irisSurveyRepo == nil || h.services.S3 == nil {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
@@ -1194,11 +1177,9 @@ func (h *Handler) DownloadMediaPDF(w http.ResponseWriter, r *http.Request) {
 // DownloadMediaPage streams a single page PDF from S3.
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/interview_media/:mediaId/pages/:page/img.png
 func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "pid")
-	midStr := chi.URLParam(r, "mediaId")
-	pageStr := chi.URLParam(r, "page")
-	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
-	mediaID, _ := strconv.ParseInt(midStr, 10, 64)
+	projectID, _ := validate.ParseIDParam(r, "pid")
+	mediaID, _ := validate.ParseIDParam(r, "mediaId")
+	pageStr, _ := validate.ParseStringParam(r, "page")
 	page, _ := strconv.Atoi(pageStr)
 
 	if h.irisSurveyRepo == nil || h.services.S3 == nil {
@@ -1235,10 +1216,9 @@ func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
 // GetMediaPageForConference serves a media page for a conference participant.
 // Contract-identical with legacy InCrowdAPI: validates participant cookie
 func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Request) {
-	confHash := chi.URLParam(r, "confHash")
-	midStr := chi.URLParam(r, "mediaId")
-	pageStr := chi.URLParam(r, "page")
-	mediaID, _ := strconv.ParseInt(midStr, 10, 64)
+	confHash, _ := validate.ParseStringParam(r, "confHash")
+	mediaID, _ := validate.ParseIDParam(r, "mediaId")
+	pageStr, _ := validate.ParseStringParam(r, "page")
 	page, _ := strconv.Atoi(pageStr)
 
 	if h.irisSurveyRepo == nil || h.services.S3 == nil {
@@ -1314,10 +1294,8 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 // Contract-identical with legacy InCrowdAPI: DELETE /v1/interview_media/:projectId/:mediaId
 // Response: {} (empty JSON object)
 func (h *Handler) DeleteProjectMedia(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "pid")
-	midStr := chi.URLParam(r, "mediaId")
-	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
-	mediaID, _ := strconv.ParseInt(midStr, 10, 64)
+	projectID, _ := validate.ParseIDParam(r, "pid")
+	mediaID, _ := validate.ParseIDParam(r, "mediaId")
 
 	if h.irisSurveyRepo != nil {
 		// Get media first for S3 cleanup
@@ -1375,10 +1353,9 @@ func mediaToJSON(m iris.ICInterviewMedia) map[string]any {
 // GetSubscriptionInterviews returns interviews for a subscription.
 // Legacy contract: response wrapped as {"interviews": [...]} with 16-field interview objects.
 func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	subID, err := strconv.ParseInt(idStr, 10, 64)
+	subID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid subscription id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -1416,10 +1393,9 @@ func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Reque
 // Legacy contract: response wrapped as {"crowds": [...], "limit": N, "offset": N, "totalCount": N}
 // Supports ?limit, ?offset, ?includeExclusionLists, ?jsonType=basic|admin (default admin).
 func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	subID, err := strconv.ParseInt(idStr, 10, 64)
+	subID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid subscription id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -1629,10 +1605,9 @@ func (h *Handler) GetSubscriptionQuestionTypes(w http.ResponseWriter, r *http.Re
 // GetSubscriptionInquiries returns inquiries for a subscription.
 // Legacy contract: returns [{"inquiry": {...adminJson}, "project": {...listJson}}]
 func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "subId")
-	subID, err := strconv.ParseInt(idStr, 10, 64)
+	subID, err := validate.ParseIDParam(r, "subId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid subscription id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -1728,10 +1703,8 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 // Contract-identical with legacy InCrowdAPI: GET /v1/subscription/:subscriptionId/project/:projectId/inquiry
 // Response: SavedProposal {project, crowds, proposal, costs} + isHardStop
 func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.Request) {
-	subStr := chi.URLParam(r, "subId")
-	pidStr := chi.URLParam(r, "pid")
-	subID, _ := strconv.ParseInt(subStr, 10, 64)
-	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
+	subID, _ := validate.ParseIDParam(r, "subId")
+	projectID, _ := validate.ParseIDParam(r, "pid")
 
 	if h.irisSurveyRepo == nil {
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
@@ -1849,10 +1822,9 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:subId/project_surveys
 // Response: { "projects": { "<projectId>": { "name", "projectStatusId", "surveys": [...] } } }
 func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "subId")
-	subID, err := strconv.ParseInt(idStr, 10, 64)
+	subID, err := validate.ParseIDParam(r, "subId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid subscription id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2088,10 +2060,9 @@ func (h *Handler) ListMarketsNPI(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/market/:id/crowdable_attributes
 // Response: {"attributes": [...]}
 func (h *Handler) GetCrowdableAttributes(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	marketID, err := strconv.ParseInt(idStr, 10, 64)
+	marketID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid market id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2116,10 +2087,9 @@ func (h *Handler) GetCrowdableAttributes(w http.ResponseWriter, r *http.Request)
 // Contract-identical with legacy InCrowdAPI: GET /v1/time_slot/:tsId/moderators
 // Response: flat array of moderator objects
 func (h *Handler) GetTimeslotModerators(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "tsId")
-	tsID, err := strconv.ParseInt(idStr, 10, 64)
+	tsID, err := validate.ParseIDParam(r, "tsId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid timeslot id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	source := h.resolveSource(r)
@@ -2147,10 +2117,9 @@ func (h *Handler) GetTimeslotModerators(w http.ResponseWriter, r *http.Request) 
 // Contract-identical with legacy InCrowdAPI: GET /v1/time_slot/:tsId/moderator_options
 // Response: flat array of moderator option objects
 func (h *Handler) GetTimeslotModeratorOptionsExt(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "tsId")
-	tsID, err := strconv.ParseInt(idStr, 10, 64)
+	tsID, err := validate.ParseIDParam(r, "tsId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid timeslot id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	source := h.resolveSource(r)
@@ -2192,18 +2161,17 @@ func (h *Handler) GetTimeslotModeratorOptionsExt(w http.ResponseWriter, r *http.
 // Contract-identical with legacy InCrowdAPI: POST /v1/time_slot/:tsId/moderators
 // Response: flat array of moderator objects (200, not 201)
 func (h *Handler) AssignTimeslotModerator(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "tsId")
-	tsID, err := strconv.ParseInt(idStr, 10, 64)
+	tsID, err := validate.ParseIDParam(r, "tsId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid timeslot id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	var req struct {
 		ModeratorID int64 `json:"moderatorId"`
 		IsHost      bool  `json:"isHost"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 	source := h.resolveSource(r)
@@ -2230,10 +2198,8 @@ func (h *Handler) AssignTimeslotModerator(w http.ResponseWriter, r *http.Request
 // Contract-identical with legacy InCrowdAPI: DELETE /v1/time_slot/:tsId/moderators/:modId
 // Response: flat array of remaining moderator objects
 func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Request) {
-	tsStr := chi.URLParam(r, "tsId")
-	modStr := chi.URLParam(r, "modId")
-	tsID, _ := strconv.ParseInt(tsStr, 10, 64)
-	modID, _ := strconv.ParseInt(modStr, 10, 64)
+	tsID, _ := validate.ParseIDParam(r, "tsId")
+	modID, _ := validate.ParseIDParam(r, "modId")
 	source := h.resolveSource(r)
 
 	if source == "iris" && h.irisSurveyRepo != nil {
@@ -2257,10 +2223,9 @@ func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Reque
 // Contract-identical with legacy InCrowdAPI: GET /v1/time_slot/:tsId/observers
 // Response: {"observers": [...]}
 func (h *Handler) GetTimeslotObservers(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "tsId")
-	tsID, err := strconv.ParseInt(idStr, 10, 64)
+	tsID, err := validate.ParseIDParam(r, "tsId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid timeslot id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2285,10 +2250,9 @@ func (h *Handler) GetTimeslotObservers(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: PUT /v1/time_slot/:tsId/observers
 // Response: {"observers": [...]}
 func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "tsId")
-	tsID, err := strconv.ParseInt(idStr, 10, 64)
+	tsID, err := validate.ParseIDParam(r, "tsId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid timeslot id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	var req struct {
@@ -2296,8 +2260,8 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 		ToAdd     []string `json:"toAdd"`
 		ToDelete  []string `json:"toDelete"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -2332,7 +2296,7 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 // Contract-identical with legacy InCrowdAPI: POST /v1/conf/:confId/login
 // Response: flat conference data object
 func (h *Handler) ConferenceLogin(w http.ResponseWriter, r *http.Request) {
-	confHashStr := chi.URLParam(r, "confId")
+	confHashStr, _ := validate.ParseStringParam(r, "confId")
 	var req struct {
 		Pin string `json:"pin"`
 	}
@@ -2363,7 +2327,7 @@ func (h *Handler) ConferenceLogin(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/conf/:confId/participants
 // Response: {"participants": [...], "timeSlot": {startTime, endTime, conferencePin, projectId, id}}
 func (h *Handler) GetConferenceParticipants(w http.ResponseWriter, r *http.Request) {
-	confHashStr := chi.URLParam(r, "confId")
+	confHashStr, _ := validate.ParseStringParam(r, "confId")
 
 	if h.qsConferenceRepo != nil {
 		ci, err := h.qsConferenceRepo.GetByHash(r.Context(), confHashStr)
@@ -2447,9 +2411,9 @@ func (h *Handler) GetMeetingMetadata(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: POST /v1/meeting/:joinId/join
 // Response: flat meeting metadata object
 func (h *Handler) MeetingJoin(w http.ResponseWriter, r *http.Request) {
-	joinID := chi.URLParam(r, "joinId")
-	if joinID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "joinId required"})
+	joinID, err := validate.ParseStringParam(r, "joinId")
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -2468,7 +2432,7 @@ func (h *Handler) MeetingJoin(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/meeting/:meetingId/attendees
 // Response: passthrough from conference service
 func (h *Handler) GetAttendeesByMeetingID(w http.ResponseWriter, r *http.Request) {
-	meetingID := chi.URLParam(r, "meetingId")
+	meetingID, _ := validate.ParseStringParam(r, "meetingId")
 	bearerToken := extractBearerToken(r)
 
 	// Try Conference Service for live attendee data
@@ -2498,7 +2462,7 @@ func (h *Handler) GetAttendeesByMeetingID(w http.ResponseWriter, r *http.Request
 // Contract-identical with legacy InCrowdAPI: GET /v1/meeting/:meetingId/recording
 // Response: passthrough from conference service
 func (h *Handler) GetRecordingStatus(w http.ResponseWriter, r *http.Request) {
-	meetingID := chi.URLParam(r, "meetingId")
+	meetingID, _ := validate.ParseStringParam(r, "meetingId")
 	bearerToken := extractBearerToken(r)
 
 	// Call Conference Service for real recording status
@@ -2543,10 +2507,8 @@ func (h *Handler) GetRecordingStatus(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/moderator/:modId/subscription/:subId/availability
 // Response: flat array of availability objects
 func (h *Handler) GetModeratorAvailabilityBySub(w http.ResponseWriter, r *http.Request) {
-	modStr := chi.URLParam(r, "modId")
-	subStr := chi.URLParam(r, "subId")
-	modID, _ := strconv.ParseInt(modStr, 10, 64)
-	subID, _ := strconv.ParseInt(subStr, 10, 64)
+	modID, _ := validate.ParseIDParam(r, "modId")
+	subID, _ := validate.ParseIDParam(r, "subId")
 	source := h.resolveSource(r)
 
 	if source == "iris" && h.irisSurveyRepo != nil {
@@ -2591,17 +2553,15 @@ func (h *Handler) GetModeratorAvailabilityBySub(w http.ResponseWriter, r *http.R
 // Contract-identical with legacy InCrowdAPI: POST /v1/moderator/:modId/subscription/:subId/availability
 // Response: flat array of availability objects (200, not 201)
 func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.Request) {
-	modStr := chi.URLParam(r, "modId")
-	subStr := chi.URLParam(r, "subId")
-	modID, _ := strconv.ParseInt(modStr, 10, 64)
-	subID, _ := strconv.ParseInt(subStr, 10, 64)
+	modID, _ := validate.ParseIDParam(r, "modId")
+	subID, _ := validate.ParseIDParam(r, "subId")
 
 	var req struct {
 		StartTime string `json:"startTime"`
 		EndTime   string `json:"endTime"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 	startTime, _ := time.Parse(time.RFC3339, req.StartTime)
@@ -2663,15 +2623,14 @@ func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.
 // Contract-identical with legacy InCrowdAPI: PUT /v1/moderator_availability/:maId
 // Response: flat array of availability objects
 func (h *Handler) UpdateModeratorAvailabilityExt(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "maId")
-	maID, _ := strconv.ParseInt(idStr, 10, 64)
+	maID, _ := validate.ParseIDParam(r, "maId")
 
 	var req struct {
 		StartTime string `json:"startTime"`
 		EndTime   string `json:"endTime"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 	startTime, _ := time.Parse(time.RFC3339, req.StartTime)
@@ -2703,8 +2662,7 @@ func (h *Handler) UpdateModeratorAvailabilityExt(w http.ResponseWriter, r *http.
 // Contract-identical with legacy InCrowdAPI: DELETE /v1/moderator_availability/:maId
 // Response: flat array of availability objects
 func (h *Handler) DeleteModeratorAvailabilityExt(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "maId")
-	maID, _ := strconv.ParseInt(idStr, 10, 64)
+	maID, _ := validate.ParseIDParam(r, "maId")
 	source := h.resolveSource(r)
 
 	if source == "iris" && h.irisSurveyRepo != nil {
@@ -2754,10 +2712,8 @@ func (h *Handler) GetNoShowCheck(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: PUT /v1/selfservice/project/:pid/timeslot/:tid
 // Response: full updated TimeSlot adminJson
 func (h *Handler) MarkNoShow(w http.ResponseWriter, r *http.Request) {
-	pidStr := chi.URLParam(r, "pid")
-	tidStr := chi.URLParam(r, "tid")
-	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
-	timeSlotID, _ := strconv.ParseInt(tidStr, 10, 64)
+	projectID, _ := validate.ParseIDParam(r, "pid")
+	timeSlotID, _ := validate.ParseIDParam(r, "tid")
 
 	if h.irisSurveyRepo != nil {
 		if err := h.irisSurveyRepo.MarkNoShow(r.Context(), projectID, timeSlotID); err != nil {
@@ -2794,12 +2750,11 @@ func (h *Handler) MarkNoShow(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy QS Tool: GET /user/user-info/{user_id}
 // Response: flat user object with account/client selections
 func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	userID, err := strconv.ParseInt(idStr, 10, 64)
+	userID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "An error occured while fetching user info",
-			"errorMessage": "An error occured while fetching user info",
+			"error":        err.Error(),
+			"errorMessage": err.Error(),
 		})
 		return
 	}
@@ -2893,10 +2848,9 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: PUT /v1/user/:id
 // Response: flat user object
 func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	userID, err := strconv.ParseInt(idStr, 10, 64)
+	userID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid user id"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	var req struct {
@@ -2905,8 +2859,8 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		TimeZone  string `json:"timeZone"`
 		Source    string `json:"source"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -2948,8 +2902,8 @@ func (h *Handler) CreateEventLog(w http.ResponseWriter, r *http.Request) {
 		TimeSlotID  int64  `json:"timeSlotId"`
 		MetaData    string `json:"metaData"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -3081,8 +3035,8 @@ func (h *Handler) CreatePaymentReal(w http.ResponseWriter, r *http.Request) {
 		Amount      int    `json:"amount"`
 		PaymentType string `json:"paymentType"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
@@ -3106,8 +3060,8 @@ func (h *Handler) CreateCustomHonorariumReal(w http.ResponseWriter, r *http.Requ
 		Amount     int    `json:"amount"`
 		Reason     string `json:"reason"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request"})
+	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
+		validate.WriteError(w, errs)
 		return
 	}
 
