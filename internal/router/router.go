@@ -130,6 +130,9 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Get("/hono-value-update-reason-list", h.GetHonoValueUpdateReasonListMRA)
 				r.Post("/time-slot-payments", h.AddTimeSlotPaymentsMRA)
 				r.Post("/time-slot-payments-external", h.AddExternalTimeSlotPaymentsMRA)
+				// MRA #79-82
+				r.Post("/time-slot-custom-hono", h.AddTimeSlotCustomHonorariumMRA)
+				r.Get("/interview-payment-status-list", h.GetInterviewPaymentStatusListMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)

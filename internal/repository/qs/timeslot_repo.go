@@ -1164,3 +1164,160 @@ return 0, fmt.Errorf("get user by email mra: %w", err)
 }
 return userID, nil
 }
+
+// ──────────────────────────────────────────────
+// MRA #79: AddTimeSlotCustomHonorarium
+// ──────────────────────────────────────────────
+
+func (repo *TimeSlotRepo) AddTimeSlotCustomHonorariumMRA(ctx context.Context, timeSlotID int64, oldValue, newValue float64, reasonID, createdBy int64) error {
+const q = `INSERT INTO time_slot_custom_honorarium (time_slot_id, old_value, new_value, reason_id, created_by)
+VALUES (?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE old_value = ?, new_value = ?, reason_id = ?, created_by = ?`
+_, err := repo.db.ExecContext(ctx, q, timeSlotID, oldValue, newValue, reasonID, createdBy,
+oldValue, newValue, reasonID, createdBy)
+if err != nil {
+return fmt.Errorf("add time slot custom honorarium mra: %w", err)
+}
+return nil
+}
+
+func (repo *TimeSlotRepo) GetExternalSurveyIdByTimeSlotIdMRA(ctx context.Context, timeSlotID int64) (string, error) {
+const q = `SELECT ha.external_user_survey_id FROM time_slot ts
+JOIN time_slot_event tse ON tse.time_slot_id = ts.id
+JOIN responder r ON r.id = tse.responder_id
+JOIN honorarium_amount ha ON ha.sessKey = r.sess_key
+WHERE ts.id = ?`
+var extUserSurveyID sql.NullString
+err := repo.db.QueryRowContext(ctx, q, timeSlotID).Scan(&extUserSurveyID)
+if err != nil {
+return "", fmt.Errorf("get external survey id by time slot id mra: %w", err)
+}
+if extUserSurveyID.Valid {
+return extUserSurveyID.String, nil
+}
+return "", nil
+}
+
+// ──────────────────────────────────────────────
+// MRA #80: GetInterviewPaymentStatusList
+// ──────────────────────────────────────────────
+
+func (repo *TimeSlotRepo) GetTimeSlotPaymentStatusListMRA(ctx context.Context) ([]map[string]any, error) {
+const q = `SELECT id, code, display FROM time_slot_payment_status`
+rows, err := repo.db.QueryContext(ctx, q)
+if err != nil {
+return nil, fmt.Errorf("get time slot payment status list mra: %w", err)
+}
+defer rows.Close()
+var result []map[string]any
+for rows.Next() {
+var id int64
+var code, display string
+if err := rows.Scan(&id, &code, &display); err != nil {
+return nil, err
+}
+result = append(result, map[string]any{"id": id, "code": code, "display": display})
+}
+if result == nil {
+result = []map[string]any{}
+}
+return result, rows.Err()
+}
+
+// ──────────────────────────────────────────────
+// MRA #81: ResetProjectModerators
+// ──────────────────────────────────────────────
+
+func (repo *TimeSlotRepo) GetProjectModeratorsIdsMRA(ctx context.Context, projectID int64) ([]int64, error) {
+const q = `SELECT user_id AS id FROM projects_users WHERE project_id = ?`
+rows, err := repo.db.QueryContext(ctx, q, projectID)
+if err != nil {
+return nil, fmt.Errorf("get project moderators ids mra: %w", err)
+}
+defer rows.Close()
+var result []int64
+for rows.Next() {
+var id int64
+if err := rows.Scan(&id); err != nil {
+return nil, err
+}
+result = append(result, id)
+}
+return result, rows.Err()
+}
+
+func (repo *TimeSlotRepo) ResetProjectModeratorsMRA(ctx context.Context, projectID int64, newModIDs, existingModIDs []int64) error {
+newSet := make(map[int64]bool)
+for _, id := range newModIDs {
+newSet[id] = true
+}
+existSet := make(map[int64]bool)
+for _, id := range existingModIDs {
+existSet[id] = true
+}
+
+var modsToAdd, modsToRemove []int64
+for _, id := range existingModIDs {
+if !newSet[id] {
+modsToRemove = append(modsToRemove, id)
+}
+}
+for _, id := range newModIDs {
+if !existSet[id] {
+modsToAdd = append(modsToAdd, id)
+}
+}
+
+if len(newModIDs) == 0 {
+_, err := repo.db.ExecContext(ctx, `DELETE FROM projects_users WHERE project_id = ?`, projectID)
+if err != nil {
+return fmt.Errorf("reset project moderators mra delete all: %w", err)
+}
+_, err = repo.db.ExecContext(ctx, `DELETE FROM moderator_time_range WHERE project_id = ?`, projectID)
+if err != nil {
+return fmt.Errorf("reset project moderators mra delete ranges: %w", err)
+}
+return nil
+}
+
+for _, id := range modsToAdd {
+_, err := repo.db.ExecContext(ctx,
+`INSERT INTO projects_users (project_id, user_id) VALUES (?, ?)`, projectID, id)
+if err != nil {
+return fmt.Errorf("reset project moderators mra insert: %w", err)
+}
+}
+
+for _, id := range modsToRemove {
+_, err := repo.db.ExecContext(ctx,
+`DELETE FROM projects_users WHERE project_id = ? AND user_id = ?`, projectID, id)
+if err != nil {
+return fmt.Errorf("reset project moderators mra delete: %w", err)
+}
+}
+
+if len(modsToRemove) > 0 {
+_, err := repo.db.ExecContext(ctx,
+`DELETE FROM moderator_time_range WHERE moderator_id NOT IN (SELECT user_id FROM projects_users WHERE project_id = ?) AND project_id = ?`,
+projectID, projectID)
+if err != nil {
+return fmt.Errorf("reset project moderators mra cleanup ranges: %w", err)
+}
+}
+
+return nil
+}
+
+func (repo *TimeSlotRepo) UnassignModeratorFromProjectMRA(ctx context.Context, moderatorID, projectID int64) error {
+_, err := repo.db.ExecContext(ctx,
+`DELETE FROM projects_users WHERE user_id = ? AND project_id = ?`, moderatorID, projectID)
+if err != nil {
+return fmt.Errorf("unassign moderator from project mra: %w", err)
+}
+_, err = repo.db.ExecContext(ctx,
+`DELETE FROM moderator_time_range WHERE project_id = ? AND moderator_id = ?`, projectID, moderatorID)
+if err != nil {
+return fmt.Errorf("unassign moderator time range mra: %w", err)
+}
+return nil
+}

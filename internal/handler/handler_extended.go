@@ -6227,3 +6227,83 @@ return
 
 writeJSON(w, http.StatusCreated, map[string]any{"message": "Success"})
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MRA #79: POST /time-slot-custom-hono
+// Legacy: addTimeSlotCustomHonorariumFactory — upsert custom honorarium + Step Function call (PARTIAL)
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) AddTimeSlotCustomHonorariumMRA(w http.ResponseWriter, r *http.Request) {
+var body struct {
+TimeSlotID int64   `json:"timeSlotId"`
+OldValue   float64 `json:"oldValue"`
+NewValue   float64 `json:"newValue"`
+ReasonCode string  `json:"reasonCode"`
+}
+if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+return
+}
+
+// Get user from email header
+var userID int64
+email := r.Header.Get("X-User-Email")
+if email != "" {
+userID, _ = h.qsTimeSlotRepo.GetUserByEmailMRA(r.Context(), email)
+}
+
+// Resolve reason code to ID
+reasons, err := h.qsProjectRepo.GetHonoValueUpdateReasonListMRA(r.Context())
+if err != nil {
+slog.Error("add time slot custom honorarium mra: get reasons", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+return
+}
+
+var reasonID int64
+for _, reason := range reasons {
+if code, ok := reason["code"].(string); ok && code == body.ReasonCode {
+reasonID, _ = reason["id"].(int64)
+break
+}
+}
+if reasonID == 0 {
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        fmt.Sprintf("Invalid reason code: %s", body.ReasonCode),
+"errorMessage": fmt.Sprintf("Invalid reason code: %s", body.ReasonCode),
+})
+return
+}
+
+if err := h.qsTimeSlotRepo.AddTimeSlotCustomHonorariumMRA(r.Context(), body.TimeSlotID, body.OldValue, body.NewValue, reasonID, userID); err != nil {
+slog.Error("add time slot custom honorarium mra", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+return
+}
+
+// PARTIAL: Step Function call to update IRIS hono not implemented
+slog.Info("AddTimeSlotCustomHonorariumMRA: Step Function external-calls-StateMachine PARTIAL — not called")
+
+writeJSON(w, http.StatusOK, map[string]any{"message": "Successfully Added honorarium amount"})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MRA #80: GET /interview-payment-status-list
+// Legacy: getInterviewPaymentStatusListFactory — returns flat array from time_slot_payment_status
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) GetInterviewPaymentStatusListMRA(w http.ResponseWriter, r *http.Request) {
+result, err := h.qsTimeSlotRepo.GetTimeSlotPaymentStatusListMRA(r.Context())
+if err != nil {
+slog.Error("get interview payment status list mra", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":           err.Error(),
+"errorMessage":    "an error occurred while getting data",
+"customErrorCode": err.Error(),
+})
+return
+}
+
+writeJSON(w, http.StatusOK, result)
+}
+
