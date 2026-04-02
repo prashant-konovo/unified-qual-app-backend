@@ -59,8 +59,9 @@ func main() {
 		}
 	}
 
-	h := handler.New(cfg, db, integration.NewServiceClients(cfg), irisProjectRepo, qsProjectRepo, irisUserRepo, qsUserRepo, qsTimeSlotRepo, qsRespondentRepo, qsSurveyRepo, irisSurveyRepo, qsConferenceRepo, qsAnswerRepo)
-	r := router.New(h, jwtAuth)
+	deps := handler.NewDeps(cfg, db, integration.NewServiceClients(cfg), irisProjectRepo, qsProjectRepo, irisUserRepo, qsUserRepo, qsTimeSlotRepo, qsRespondentRepo, qsSurveyRepo, irisSurveyRepo, qsConferenceRepo, qsAnswerRepo)
+	hs := handler.NewHandlers(deps)
+	r := router.New(hs, jwtAuth)
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	slog.Info("server starting", "addr", addr, "env", cfg.Environment, "dummy", cfg.IsDummy())
