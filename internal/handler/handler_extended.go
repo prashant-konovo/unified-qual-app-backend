@@ -3962,3 +3962,67 @@ func (h *Handler) UpdateModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 
 	writeJSON(w, http.StatusOK, result)
 }
+// DeleteModeratorAvailabilityMRA handles DELETE /moderator/{availability_id}/delete-availability (MRA).
+// Contract-identical with legacy: checks external calendar, re-creates overlapping imported avails as manual,
+// deletes the availability, returns merged availability list with imported overlap resolution.
+func (h *Handler) DeleteModeratorAvailabilityMRA(w http.ResponseWriter, r *http.Request) {
+idStr := chi.URLParam(r, "availability_id")
+avID, _ := strconv.ParseInt(idStr, 10, 64)
+
+if h.qsUserRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "user repository not available"})
+return
+}
+
+ctx := r.Context()
+
+// Step 1: Find existing availability
+oldAv, err := h.qsUserRepo.FindModeratorAvailabilityByIdMRA(ctx, avID)
+if err != nil {
+slog.Error("find availability failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+if oldAv == nil {
+writeJSON(w, http.StatusNotFound, map[string]any{"error": "availability not found"})
+return
+}
+
+modID := oldAv["moderatorId"].(int64)
+clientID := oldAv["clientId"].(int64)
+
+// Step 2: Check external calendar status
+calStatus, _ := h.qsUserRepo.GetModExternalCalendarStatusMRA(ctx, modID)
+if calStatus == "In Progress" {
+writeJSON(w, http.StatusMethodNotAllowed, map[string]any{
+"errorMessage": "There is a running import process for this moderator, try again later",
+})
+return
+}
+
+// Step 3: Before deleting, check for overlapping imported avails and re-create them as manual
+oldST := fmt.Sprint(oldAv["startTime"])
+oldET := fmt.Sprint(oldAv["endTime"])
+overlappingImported, err := h.qsUserRepo.GetOverlappingImportedAvailabilityMRA(ctx, modID, clientID, oldST, oldET)
+if err != nil {
+slog.Error("get overlapping imported failed", "error", err)
+}
+for _, imp := range overlappingImported {
+impModID, _ := imp["moderatorId"].(int64)
+impClientID, _ := imp["clientId"].(int64)
+impST := fmt.Sprint(imp["startTime"])
+impET := fmt.Sprint(imp["endTime"])
+_ = h.qsUserRepo.AddModeratorAvailabilityFromImportedMRA(ctx, impModID, impClientID, impST, impET)
+}
+
+// Step 4: Delete the availability
+if err := h.qsUserRepo.DeleteModeratorAvailability(ctx, avID); err != nil {
+slog.Error("delete availability failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+// Step 5: Return all availabilities with imported overlap resolution
+result := h.getAllModeratorAvailabilityWithImported(ctx, modID, clientID)
+writeJSON(w, http.StatusOK, result)
+}

@@ -92,6 +92,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Get("/user/get_all_moderators/{client_id}", h.GetAllModeratorsMRA)
 				r.Post("/moderator/post-availability", h.PostModeratorAvailabilityMRA)
 				r.Put("/moderator/{availability_id}/update-availability", h.UpdateModeratorAvailabilityMRA)
+				r.Delete("/moderator/{availability_id}/delete-availability", h.DeleteModeratorAvailabilityMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)

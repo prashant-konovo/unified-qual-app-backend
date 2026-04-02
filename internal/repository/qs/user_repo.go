@@ -1034,3 +1034,24 @@ func (r *UserRepo) GetAllModeratorAvailabilityWithUserMRA(ctx context.Context, m
 		WHERE moderator_id = ? AND client_id = ?`
 	return r.scanAvailabilityRows(ctx, q, moderatorID, clientID)
 }
+
+// GetOverlappingImportedAvailabilityMRA returns imported availabilities overlapping a given time range.
+func (r *UserRepo) GetOverlappingImportedAvailabilityMRA(ctx context.Context, moderatorID, clientID int64, startTime, endTime string) ([]map[string]any, error) {
+	q := `SELECT ima.id, moderator_id AS moderatorId, first_name AS firstName, last_name AS lastName,
+		client_id AS clientId, start_time AS startTime, end_time AS endTime
+		FROM imported_moderator_availability ima
+		INNER JOIN user ON user.id = ima.moderator_id
+		WHERE moderator_id = ? AND client_id = ?
+		AND ((start_time >= ? AND start_time < ?)
+			OR (end_time > ? AND end_time <= ?)
+			OR (start_time < ? AND end_time > ?))
+		ORDER BY start_time`
+	return r.scanAvailabilityRows(ctx, q, moderatorID, clientID, startTime, endTime, startTime, endTime, startTime, endTime)
+}
+
+// AddModeratorAvailabilityFromImportedMRA creates a manual availability record from imported availability data.
+func (r *UserRepo) AddModeratorAvailabilityFromImportedMRA(ctx context.Context, moderatorID, clientID int64, startTime, endTime string) error {
+	q := `INSERT INTO moderator_availability (moderator_id, client_id, start_time, end_time) VALUES (?, ?, ?, ?)`
+	_, err := r.db.ExecContext(ctx, q, moderatorID, clientID, startTime, endTime)
+	return err
+}
