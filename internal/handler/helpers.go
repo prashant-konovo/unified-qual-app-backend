@@ -163,3 +163,19 @@ func buildTimeSlotResponse(ts *qs.TimeSlot) map[string]any {
 		"isInvalid":              ts.IsInvalid,
 	}
 }
+
+// resolveSource extracts the data source ("iris" or "qs") from query params.
+func resolveSource(r *http.Request) string {
+	if s := r.URL.Query().Get("source"); s != "" {
+		return strings.ToLower(s)
+	}
+	if sc := strings.ToUpper(r.URL.Query().Get("serviceCategory")); sc != "" {
+		switch sc {
+		case "LS":
+			return "iris"
+		case "MRA":
+			return "qs"
+		}
+	}
+	return ""
+}

@@ -49,13 +49,21 @@ func NewDeps(cfg *config.Config, db *config.DBPair, services *integration.Servic
 	return d
 }
 
+// LSHandler handles LS (Life Sciences / IRIS) brand-specific endpoints.
+type LSHandler struct{ *Deps }
+
+// MRAHandler handles MRA (Market Research & Analysis / QS) brand-specific endpoints.
+type MRAHandler struct{ *Deps }
+
 // Handlers groups all domain handlers for router registration.
 type Handlers struct {
 	Auth      *AuthHandler
 	Project   *ProjectHandler
 	Survey    *SurveyHandler
 	Interview *InterviewHandler
-	Handler   *Handler // remaining non-domain-specific handlers
+	LS        *LSHandler
+	MRA       *MRAHandler
+	Handler   *Handler // shared non-brand-specific handlers
 }
 
 // NewHandlers creates all domain handlers from shared deps.
@@ -65,6 +73,8 @@ func NewHandlers(d *Deps) *Handlers {
 		Project:   &ProjectHandler{d},
 		Survey:    &SurveyHandler{d},
 		Interview: &InterviewHandler{d},
+		LS:        &LSHandler{d},
+		MRA:       &MRAHandler{d},
 		Handler:   &Handler{d},
 	}
 }
