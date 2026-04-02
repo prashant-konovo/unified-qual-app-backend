@@ -720,6 +720,301 @@ func (r *UserRepo) GetAllModeratorsListMRA(ctx context.Context, clientID int64) 
 	return records, rows.Err()
 }
 
+// ──────────────────────────────────────────────
+// MRA #50 — UpdateModeratorMRA repo methods
+// ──────────────────────────────────────────────
+
+// FetchUserInfoByUserIdMRA returns moderatorBuffer and clientId for a user.
+func (r *UserRepo) FetchUserInfoByUserIdMRA(ctx context.Context, userID int64) (int, int64, error) {
+	q := `SELECT u.id, u.first_name, u.last_name, u.time_zone, ur.modified_on,
+		u.email, r.id as roles, u.moderator_buffer as moderatorBuffer,
+		u.moderator_buffer_modified_on as moderatorBufferModifiedOn, c.client_id as clientId
+		FROM user u LEFT OUTER JOIN user_role ur ON (u.id = ur.user_id)
+		LEFT OUTER JOIN role r ON (ur.role_id = r.id)
+		LEFT OUTER JOIN user_client c ON (c.user_id = u.id)
+		WHERE u.id = ?
+		ORDER BY ur.modified_on DESC
+		LIMIT 1`
+	var (
+		id                        int64
+		firstName, lastName       sql.NullString
+		timeZone                  sql.NullString
+		modifiedOn                sql.NullTime
+		email                     sql.NullString
+		roles                     sql.NullInt64
+		moderatorBuffer           sql.NullInt64
+		moderatorBufferModifiedOn sql.NullTime
+		clientID                  sql.NullInt64
+	)
+	err := r.db.QueryRowContext(ctx, q, userID).Scan(
+		&id, &firstName, &lastName, &timeZone, &modifiedOn,
+		&email, &roles, &moderatorBuffer, &moderatorBufferModifiedOn, &clientID,
+	)
+	if err != nil {
+		return 0, 0, fmt.Errorf("fetch user info by id mra %d: %w", userID, err)
+	}
+	buf := 0
+	if moderatorBuffer.Valid {
+		buf = int(moderatorBuffer.Int64)
+	}
+	cid := int64(0)
+	if clientID.Valid {
+		cid = clientID.Int64
+	}
+	return buf, cid, nil
+}
+
+// UpdateModeratorBufferMRA updates the moderator_buffer for a user.
+func (r *UserRepo) UpdateModeratorBufferMRA(ctx context.Context, userID int64, buffer int) error {
+	q := `UPDATE user SET moderator_buffer = ?, moderator_buffer_modified_on = now() WHERE id = ?`
+	_, err := r.db.ExecContext(ctx, q, buffer, userID)
+	if err != nil {
+		return fmt.Errorf("update moderator buffer mra %d: %w", userID, err)
+	}
+	return nil
+}
+
+// ModeratorTimeslotMRA represents a future scheduled interview for a moderator.
+type ModeratorTimeslotMRA struct {
+	TimeSlotID     int64          `json:"timeSlotId"`
+	StartTime      time.Time      `json:"startTime"`
+	EndTime        time.Time      `json:"endTime"`
+	Completed      int            `json:"completed"`
+	Duration       sql.NullInt64  `json:"duration"`
+	ImportedOverlap string        `json:"importedOverLap"`
+	IntervieweeID  sql.NullInt64  `json:"intervieweeId"`
+	ProjectID      int64          `json:"projectId"`
+	ProjectName    sql.NullString `json:"projectName"`
+}
+
+// GetFutureModeratorTimeslotsMRA returns future scheduled interviews for a moderator+client.
+func (r *UserRepo) GetFutureModeratorTimeslotsMRA(ctx context.Context, moderatorID, clientID int64) ([]ModeratorTimeslotMRA, error) {
+	q := `SELECT t.id AS timeSlotId, t.start_time AS startTime, t.end_time AS endTime,
+		t.status_id AS completed, t.duration,
+		(CASE WHEN t.has_imported_overlap IS NULL THEN '0' ELSE t.has_imported_overlap END) AS importedOverLap,
+		ad.responder_id AS intervieweeId, t.project_id AS projectId, p.name AS projectName
+		FROM time_slot t INNER JOIN project p ON p.id = t.project_id
+		INNER JOIN answer_details ad ON ad.time_slot_id = t.id
+		WHERE t.id IN (SELECT time_slot_id FROM moderator_time_slot WHERE moderator_id = ?)
+		AND t.status_id IN (2, 7, 8, 9) AND p.client_id = ? AND t.start_time > now()`
+	rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get future moderator timeslots mra: %w", err)
+	}
+	defer rows.Close()
+	var records []ModeratorTimeslotMRA
+	for rows.Next() {
+		var ts ModeratorTimeslotMRA
+		if err := rows.Scan(&ts.TimeSlotID, &ts.StartTime, &ts.EndTime, &ts.Completed,
+			&ts.Duration, &ts.ImportedOverlap, &ts.IntervieweeID, &ts.ProjectID, &ts.ProjectName); err != nil {
+			return nil, fmt.Errorf("scan future moderator timeslot mra: %w", err)
+		}
+		records = append(records, ts)
+	}
+	return records, rows.Err()
+}
+
+// AvailWithProximityMRA represents an availability near a scheduled interview.
+type AvailWithProximityMRA struct {
+	ID        int64     `json:"id"`
+	StartTime time.Time `json:"startTime"`
+	EndTime   time.Time `json:"endTime"`
+}
+
+// GetFutureAvailsWithProximityMRA returns manual availabilities near future interviews (60min proximity).
+func (r *UserRepo) GetFutureAvailsWithProximityMRA(ctx context.Context, moderatorID, clientID int64) ([]AvailWithProximityMRA, error) {
+	q := `SELECT DISTINCT ma.id AS id, ma.start_time AS startTime, ma.end_time AS endTime
+		FROM moderator_availability ma
+		INNER JOIN user u ON u.id = ma.moderator_id
+		INNER JOIN (
+			SELECT ts.start_time AS startTime, ts.end_time AS endTime
+			FROM moderator_time_slot mts INNER JOIN time_slot ts ON mts.time_slot_id = ts.id
+			WHERE mts.moderator_id = ? AND ts.start_time > now() AND ts.status_id IN (2, 7, 8, 9)
+		) moderator_future_interviews
+		ON DATE_ADD(ma.end_time, INTERVAL 60 MINUTE) >= moderator_future_interviews.startTime
+		AND DATE_SUB(ma.start_time, INTERVAL 60 MINUTE) <= moderator_future_interviews.endTime
+		WHERE ma.moderator_id = ? AND ma.client_id = ? AND ma.start_time > now()`
+	rows, err := r.db.QueryContext(ctx, q, moderatorID, moderatorID, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get future avails with proximity mra: %w", err)
+	}
+	defer rows.Close()
+	var records []AvailWithProximityMRA
+	for rows.Next() {
+		var a AvailWithProximityMRA
+		if err := rows.Scan(&a.ID, &a.StartTime, &a.EndTime); err != nil {
+			return nil, fmt.Errorf("scan avail with proximity mra: %w", err)
+		}
+		records = append(records, a)
+	}
+	return records, rows.Err()
+}
+
+// GetFutureImportedAvailsWithProximityMRA returns imported availabilities near future interviews (60min proximity).
+func (r *UserRepo) GetFutureImportedAvailsWithProximityMRA(ctx context.Context, moderatorID, clientID int64) ([]AvailWithProximityMRA, error) {
+	q := `SELECT DISTINCT ma.id AS id, ma.start_time AS startTime, ma.end_time AS endTime
+		FROM imported_moderator_availability ma
+		INNER JOIN user u ON u.id = ma.moderator_id
+		INNER JOIN (
+			SELECT ts.start_time AS startTime, ts.end_time AS endTime
+			FROM moderator_time_slot mts INNER JOIN time_slot ts ON mts.time_slot_id = ts.id
+			WHERE mts.moderator_id = ? AND ts.start_time > now() AND ts.status_id IN (2, 7, 8, 9)
+		) moderator_future_interviews
+		ON DATE_ADD(ma.end_time, INTERVAL 60 MINUTE) >= moderator_future_interviews.startTime
+		AND DATE_SUB(ma.start_time, INTERVAL 60 MINUTE) <= moderator_future_interviews.endTime
+		WHERE ma.moderator_id = ? AND ma.client_id = ? AND ma.start_time > now()`
+	rows, err := r.db.QueryContext(ctx, q, moderatorID, moderatorID, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get future imported avails with proximity mra: %w", err)
+	}
+	defer rows.Close()
+	var records []AvailWithProximityMRA
+	for rows.Next() {
+		var a AvailWithProximityMRA
+		if err := rows.Scan(&a.ID, &a.StartTime, &a.EndTime); err != nil {
+			return nil, fmt.Errorf("scan imported avail with proximity mra: %w", err)
+		}
+		records = append(records, a)
+	}
+	return records, rows.Err()
+}
+
+// AvailLengthMRA holds start, end, and length in minutes for an availability.
+type AvailLengthMRA struct {
+	StartTime time.Time
+	EndTime   time.Time
+	Length    int
+}
+
+// GetModeratorAvailabilityLengthMRA returns start_time, end_time, and length in minutes.
+func (r *UserRepo) GetModeratorAvailabilityLengthMRA(ctx context.Context, availID int64) (*AvailLengthMRA, error) {
+	q := `SELECT start_time, end_time, TIMESTAMPDIFF(MINUTE, start_time, end_time) AS av_length
+		FROM moderator_availability WHERE id = ?`
+	var a AvailLengthMRA
+	err := r.db.QueryRowContext(ctx, q, availID).Scan(&a.StartTime, &a.EndTime, &a.Length)
+	if err != nil {
+		return nil, fmt.Errorf("get moderator availability length mra %d: %w", availID, err)
+	}
+	return &a, nil
+}
+
+// GetImportedModeratorAvailabilityLengthMRA returns start_time, end_time, and length for imported avail.
+func (r *UserRepo) GetImportedModeratorAvailabilityLengthMRA(ctx context.Context, availID int64) (*AvailLengthMRA, error) {
+	q := `SELECT start_time, end_time, TIMESTAMPDIFF(MINUTE, start_time, end_time) AS av_length
+		FROM imported_moderator_availability WHERE id = ?`
+	var a AvailLengthMRA
+	err := r.db.QueryRowContext(ctx, q, availID).Scan(&a.StartTime, &a.EndTime, &a.Length)
+	if err != nil {
+		return nil, fmt.Errorf("get imported moderator availability length mra %d: %w", availID, err)
+	}
+	return &a, nil
+}
+
+// DeleteModeratorAvailabilityByIdMRA deletes from moderator_availability by id.
+func (r *UserRepo) DeleteModeratorAvailabilityByIdMRA(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM moderator_availability WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("delete moderator availability mra %d: %w", id, err)
+	}
+	return nil
+}
+
+// DeleteImportedModeratorAvailabilityByIdMRA deletes from imported_moderator_availability by id.
+func (r *UserRepo) DeleteImportedModeratorAvailabilityByIdMRA(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM imported_moderator_availability WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("delete imported moderator availability mra %d: %w", id, err)
+	}
+	return nil
+}
+
+// UpdateModeratorAvailabilityStartTimeMRA updates start_time for a moderator_availability.
+func (r *UserRepo) UpdateModeratorAvailabilityStartTimeMRA(ctx context.Context, id int64, startTime time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE moderator_availability SET start_time = ? WHERE id = ?", startTime, id)
+	if err != nil {
+		return fmt.Errorf("update moderator availability start time mra %d: %w", id, err)
+	}
+	return nil
+}
+
+// UpdateModeratorAvailabilityEndTimeMRA updates end_time for a moderator_availability.
+func (r *UserRepo) UpdateModeratorAvailabilityEndTimeMRA(ctx context.Context, id int64, endTime time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE moderator_availability SET end_time = ? WHERE id = ?", endTime, id)
+	if err != nil {
+		return fmt.Errorf("update moderator availability end time mra %d: %w", id, err)
+	}
+	return nil
+}
+
+// UpdateImportedModeratorAvailabilityStartTimeMRA updates start_time for imported_moderator_availability.
+func (r *UserRepo) UpdateImportedModeratorAvailabilityStartTimeMRA(ctx context.Context, id int64, startTime time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE imported_moderator_availability SET start_time = ? WHERE id = ?", startTime, id)
+	if err != nil {
+		return fmt.Errorf("update imported moderator availability start time mra %d: %w", id, err)
+	}
+	return nil
+}
+
+// UpdateImportedModeratorAvailabilityEndTimeMRA updates end_time for imported_moderator_availability.
+func (r *UserRepo) UpdateImportedModeratorAvailabilityEndTimeMRA(ctx context.Context, id int64, endTime time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE imported_moderator_availability SET end_time = ? WHERE id = ?", endTime, id)
+	if err != nil {
+		return fmt.Errorf("update imported moderator availability end time mra %d: %w", id, err)
+	}
+	return nil
+}
+
+// CleanUpAvailabilitiesByModeratorIdMRA deletes availabilities where start_time >= end_time.
+func (r *UserRepo) CleanUpAvailabilitiesByModeratorIdMRA(ctx context.Context, moderatorID int64) error {
+	_, err := r.db.ExecContext(ctx,
+		"DELETE FROM imported_moderator_availability WHERE start_time >= end_time AND moderator_id = ?", moderatorID)
+	if err != nil {
+		return fmt.Errorf("cleanup imported availabilities mra %d: %w", moderatorID, err)
+	}
+	_, err = r.db.ExecContext(ctx,
+		"DELETE FROM moderator_availability WHERE start_time >= end_time AND moderator_id = ?", moderatorID)
+	if err != nil {
+		return fmt.Errorf("cleanup availabilities mra %d: %w", moderatorID, err)
+	}
+	return nil
+}
+
+// RemoveNestedAvailabilitiesMRA removes availabilities that are fully contained within another.
+func (r *UserRepo) RemoveNestedAvailabilitiesMRA(ctx context.Context, moderatorID int64) error {
+	q1 := `DELETE FROM moderator_availability WHERE id IN (
+		SELECT innerTable.id FROM (
+			SELECT ma1.id FROM moderator_availability ma1 JOIN moderator_availability ma2
+			ON ma1.start_time >= ma2.start_time AND ma1.end_time <= ma2.end_time
+				AND ma1.end_time <= ma2.end_time AND ma1.start_time <= ma2.end_time
+				AND ma1.end_time <= ma2.end_time AND ma1.moderator_id = ma2.moderator_id
+			WHERE ma1.id != ma2.id AND ma1.moderator_id = ?
+		) innerTable
+	) AND moderator_id = ?`
+	_, err := r.db.ExecContext(ctx, q1, moderatorID, moderatorID)
+	if err != nil {
+		return fmt.Errorf("remove nested availabilities mra %d: %w", moderatorID, err)
+	}
+
+	q2 := `DELETE FROM imported_moderator_availability WHERE id IN (
+		SELECT innerTable.id FROM (
+			SELECT ma1.id FROM imported_moderator_availability ma1 JOIN imported_moderator_availability ma2
+			ON ma1.start_time >= ma2.start_time AND ma1.end_time <= ma2.end_time
+				AND ma1.end_time <= ma2.end_time AND ma1.start_time <= ma2.end_time
+				AND ma1.end_time <= ma2.end_time AND ma1.moderator_id = ma2.moderator_id
+			WHERE ma1.id != ma2.id AND ma1.moderator_id = ?
+		) innerTable
+	) AND moderator_id = ?`
+	_, err = r.db.ExecContext(ctx, q2, moderatorID, moderatorID)
+	if err != nil {
+		return fmt.Errorf("remove nested imported availabilities mra %d: %w", moderatorID, err)
+	}
+	return nil
+}
+
 // GetModeratorBufferMRA returns the moderator_buffer for a user (default 15 if NULL).
 func (r *UserRepo) GetModeratorBufferMRA(ctx context.Context, moderatorID int64) (int, error) {
 	q := `SELECT COALESCE(moderator_buffer, 15) FROM user WHERE id = ?`

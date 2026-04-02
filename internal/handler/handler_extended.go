@@ -4583,3 +4583,268 @@ writeJSON(w, http.StatusOK, map[string]any{
 "moderatorInfo": records,
 })
 }
+
+// ──────────────────────────────────────────────
+// MRA #50 — UpdateModeratorMRA
+// PUT /v1/moderator/get/{moderator_id}
+// ──────────────────────────────────────────────
+
+// UpdateModeratorMRA handles PUT /moderator/get/{moderator_id} (MRA).
+// Updates moderator buffer and cascades availability adjustments.
+// Contract-identical: returns [] (empty JSON array) on success.
+func (h *Handler) UpdateModeratorMRA(w http.ResponseWriter, r *http.Request) {
+modIDStr := chi.URLParam(r, "moderator_id")
+moderatorID, err := strconv.ParseInt(modIDStr, 10, 64)
+if err != nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "invalid moderator_id"})
+return
+}
+
+if h.qsUserRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+return
+}
+
+var body struct {
+ModeratorBuffer      int  `json:"moderatorBuffer"`
+UpdateAvailabilities *bool `json:"updateAvailabilities,omitempty"`
+}
+if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+ctx := r.Context()
+
+// Step 1: fetch old buffer and clientId
+oldBuffer, clientID, err := h.qsUserRepo.FetchUserInfoByUserIdMRA(ctx, moderatorID)
+if err != nil {
+slog.Error("fetch user info failed", "error", err, "moderatorId", moderatorID)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+newBuffer := body.ModeratorBuffer
+
+// Step 2: update moderator buffer
+if err := h.qsUserRepo.UpdateModeratorBufferMRA(ctx, moderatorID, newBuffer); err != nil {
+slog.Error("update moderator buffer failed", "error", err, "moderatorId", moderatorID)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+increase := newBuffer > oldBuffer
+
+// Step 3: update manual availabilities based on buffer
+if err := h.updateAvailabilitiesBasedOnBufferMRA(ctx, newBuffer, moderatorID, clientID, increase); err != nil {
+slog.Error("update availabilities based on buffer failed", "error", err, "moderatorId", moderatorID)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+// Step 4: update imported availabilities based on buffer
+if err := h.updateImportedAvailabilitiesBasedOnBufferMRA(ctx, newBuffer, moderatorID, clientID, increase); err != nil {
+slog.Error("update imported availabilities based on buffer failed", "error", err, "moderatorId", moderatorID)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+// Step 5: clean up invalid availabilities (start >= end)
+if err := h.qsUserRepo.CleanUpAvailabilitiesByModeratorIdMRA(ctx, moderatorID); err != nil {
+slog.Error("cleanup availabilities failed", "error", err, "moderatorId", moderatorID)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+// Step 6: remove nested availabilities
+if err := h.qsUserRepo.RemoveNestedAvailabilitiesMRA(ctx, moderatorID); err != nil {
+slog.Error("remove nested availabilities failed", "error", err, "moderatorId", moderatorID)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+// Legacy returns result.records from an UPDATE query — empty array.
+writeJSON(w, http.StatusOK, []any{})
+}
+
+// updateAvailabilitiesBasedOnBufferMRA adjusts manual moderator availabilities
+// based on proximity to scheduled interviews after a buffer change.
+func (h *Handler) updateAvailabilitiesBasedOnBufferMRA(ctx context.Context, newBuffer int, moderatorID, clientID int64, increase bool) error {
+// Get future interviews for this moderator
+interviews, err := h.qsUserRepo.GetFutureModeratorTimeslotsMRA(ctx, moderatorID, clientID)
+if err != nil {
+return fmt.Errorf("get future timeslots: %w", err)
+}
+if len(interviews) == 0 {
+return nil
+}
+
+// Get all future manual availabilities with proximity to interviews
+avails, err := h.qsUserRepo.GetFutureAvailsWithProximityMRA(ctx, moderatorID, clientID)
+if err != nil {
+return fmt.Errorf("get future avails with proximity: %w", err)
+}
+
+for _, avail := range avails {
+if err := h.processAvailabilityBufferAdjustmentMRA(ctx, avail.ID, avail.StartTime, avail.EndTime,
+interviews, newBuffer, false); err != nil {
+return err
+}
+}
+return nil
+}
+
+// updateImportedAvailabilitiesBasedOnBufferMRA adjusts imported moderator availabilities
+// based on proximity to scheduled interviews after a buffer change.
+func (h *Handler) updateImportedAvailabilitiesBasedOnBufferMRA(ctx context.Context, newBuffer int, moderatorID, clientID int64, increase bool) error {
+interviews, err := h.qsUserRepo.GetFutureModeratorTimeslotsMRA(ctx, moderatorID, clientID)
+if err != nil {
+return fmt.Errorf("get future timeslots: %w", err)
+}
+if len(interviews) == 0 {
+return nil
+}
+
+avails, err := h.qsUserRepo.GetFutureImportedAvailsWithProximityMRA(ctx, moderatorID, clientID)
+if err != nil {
+return fmt.Errorf("get future imported avails with proximity: %w", err)
+}
+
+for _, avail := range avails {
+if err := h.processAvailabilityBufferAdjustmentMRA(ctx, avail.ID, avail.StartTime, avail.EndTime,
+interviews, newBuffer, true); err != nil {
+return err
+}
+}
+return nil
+}
+
+// processAvailabilityBufferAdjustmentMRA handles the two-pass availability adjustment
+// for a single availability against all interviews. Works for both manual and imported tables.
+func (h *Handler) processAvailabilityBufferAdjustmentMRA(ctx context.Context,
+availID int64, availStart, availEnd time.Time,
+interviews []qs.ModeratorTimeslotMRA, newBuffer int, imported bool) error {
+
+bufferDur := time.Duration(newBuffer) * time.Minute
+
+// Pass 1: find nearest interview END TIME to availability START TIME (within 3600s)
+var nearestEndTime *time.Time
+minDiffStart := int64(3601) // > 3600 sentinel
+for i := range interviews {
+diff := int64(availStart.Sub(interviews[i].EndTime).Seconds())
+if diff < 0 {
+diff = -diff
+}
+if diff <= 3600 && diff < minDiffStart {
+minDiffStart = diff
+t := interviews[i].EndTime
+nearestEndTime = &t
+}
+}
+
+if nearestEndTime != nil {
+// Re-query availability length (may have been modified by previous iteration)
+var al *qs.AvailLengthMRA
+var err error
+if imported {
+al, err = h.qsUserRepo.GetImportedModeratorAvailabilityLengthMRA(ctx, availID)
+} else {
+al, err = h.qsUserRepo.GetModeratorAvailabilityLengthMRA(ctx, availID)
+}
+if err != nil {
+return fmt.Errorf("get availability length: %w", err)
+}
+
+shouldDelete := al.Length < 0 ||
+(al.Length != 0 && al.Length < 60 && newBuffer > al.Length &&
+!al.EndTime.After(nearestEndTime.Add(bufferDur)))
+
+if shouldDelete {
+if imported {
+return h.qsUserRepo.DeleteImportedModeratorAvailabilityByIdMRA(ctx, availID)
+}
+return h.qsUserRepo.DeleteModeratorAvailabilityByIdMRA(ctx, availID)
+}
+
+// If interview end is before availability end AND within 3600s of availability start
+if nearestEndTime.Before(al.EndTime) {
+diff := int64(nearestEndTime.Sub(al.StartTime).Seconds())
+if diff < 0 {
+diff = -diff
+}
+if diff <= 3600 {
+newStart := nearestEndTime.Add(bufferDur)
+if imported {
+if err := h.qsUserRepo.UpdateImportedModeratorAvailabilityStartTimeMRA(ctx, availID, newStart); err != nil {
+return err
+}
+} else {
+if err := h.qsUserRepo.UpdateModeratorAvailabilityStartTimeMRA(ctx, availID, newStart); err != nil {
+return err
+}
+}
+}
+}
+}
+
+// Pass 2: find nearest interview START TIME to availability END TIME (within 3600s)
+var nearestStartTime *time.Time
+minDiffEnd := int64(3601)
+for i := range interviews {
+diff := int64(interviews[i].StartTime.Sub(availEnd).Seconds())
+if diff < 0 {
+diff = -diff
+}
+if diff <= 3600 && diff < minDiffEnd {
+minDiffEnd = diff
+t := interviews[i].StartTime
+nearestStartTime = &t
+}
+}
+
+if nearestStartTime != nil {
+var al *qs.AvailLengthMRA
+var err error
+if imported {
+al, err = h.qsUserRepo.GetImportedModeratorAvailabilityLengthMRA(ctx, availID)
+} else {
+al, err = h.qsUserRepo.GetModeratorAvailabilityLengthMRA(ctx, availID)
+}
+if err != nil {
+return fmt.Errorf("get availability length (pass 2): %w", err)
+}
+
+shouldDelete := al.Length < 0 ||
+(al.Length != 0 && al.Length < 60 && newBuffer > al.Length &&
+!al.StartTime.Before(nearestStartTime.Add(-bufferDur)))
+
+if shouldDelete {
+if imported {
+return h.qsUserRepo.DeleteImportedModeratorAvailabilityByIdMRA(ctx, availID)
+}
+return h.qsUserRepo.DeleteModeratorAvailabilityByIdMRA(ctx, availID)
+}
+
+// If interview start is after availability start AND within 60 min of availability end
+if nearestStartTime.After(al.StartTime) {
+diff := int64(nearestStartTime.Sub(al.EndTime).Seconds())
+if diff < 0 {
+diff = -diff
+}
+if diff <= 3600 {
+newEnd := nearestStartTime.Add(-bufferDur)
+if imported {
+if err := h.qsUserRepo.UpdateImportedModeratorAvailabilityEndTimeMRA(ctx, availID, newEnd); err != nil {
+return err
+}
+} else {
+if err := h.qsUserRepo.UpdateModeratorAvailabilityEndTimeMRA(ctx, availID, newEnd); err != nil {
+return err
+}
+}
+}
+}
+}
+
+return nil
+}
