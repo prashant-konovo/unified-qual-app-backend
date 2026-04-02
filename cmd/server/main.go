@@ -29,22 +29,28 @@ func main() {
 		cfg.Cognito.AllClientIDs,
 	)
 
-	// Repository layer
-	var irisProjectRepo *iris.ProjectRepo
-	var irisUserRepo *iris.UserRepo
-	var irisSurveyRepo *iris.SurveyRepo
+	// Repository layer — IRIS (read-write + read-only replica)
+	var (
+		irisProjectRepo iris.ProjectRepository
+		irisUserRepo    iris.UserRepository
+		irisSurveyRepo  iris.SurveyRepository
+	)
 	if db.IRIS != nil {
 		irisProjectRepo = iris.NewProjectRepo(db.IRIS, db.IRISReadOnly)
 		irisUserRepo = iris.NewUserRepo(db.IRIS, db.IRISReadOnly)
 		irisSurveyRepo = iris.NewSurveyRepo(db.IRIS, db.IRISReadOnly)
 	}
-	var qsProjectRepo *qs.ProjectRepo
-	var qsUserRepo *qs.UserRepo
-	var qsTimeSlotRepo *qs.TimeSlotRepo
-	var qsRespondentRepo *qs.RespondentRepo
-	var qsSurveyRepo *qs.SurveyRepo
-	var qsConferenceRepo *qs.ConferenceRepo
-	var qsAnswerRepo *qs.AnswerRepo
+
+	// Repository layer — QS (single connection pool)
+	var (
+		qsProjectRepo    qs.ProjectRepository
+		qsUserRepo       qs.UserRepository
+		qsTimeSlotRepo   qs.TimeSlotRepository
+		qsRespondentRepo qs.RespondentRepository
+		qsSurveyRepo     *qs.SurveyRepo // concrete for EnsureTable
+		qsConferenceRepo qs.ConferenceRepository
+		qsAnswerRepo     qs.AnswerRepository
+	)
 	if db.QS != nil {
 		qsProjectRepo = qs.NewProjectRepo(db.QS)
 		qsUserRepo = qs.NewUserRepo(db.QS)
@@ -53,13 +59,19 @@ func main() {
 		qsSurveyRepo = qs.NewSurveyRepo(db.QS)
 		qsConferenceRepo = qs.NewConferenceRepo(db.QS)
 		qsAnswerRepo = qs.NewAnswerRepo(db.QS)
-		// Ensure survey table exists
 		if err := qsSurveyRepo.EnsureTable(context.Background()); err != nil {
 			slog.Warn("failed to ensure survey table", "error", err)
 		}
 	}
 
-	deps := handler.NewDeps(cfg, db, integration.NewServiceClients(cfg), irisProjectRepo, qsProjectRepo, irisUserRepo, qsUserRepo, qsTimeSlotRepo, qsRespondentRepo, qsSurveyRepo, irisSurveyRepo, qsConferenceRepo, qsAnswerRepo)
+	// Wire handlers + router
+	deps := handler.NewDeps(cfg, db, integration.NewServiceClients(cfg),
+		irisProjectRepo, qsProjectRepo,
+		irisUserRepo, qsUserRepo,
+		qsTimeSlotRepo, qsRespondentRepo,
+		qsSurveyRepo, irisSurveyRepo,
+		qsConferenceRepo, qsAnswerRepo,
+	)
 	hs := handler.NewHandlers(deps)
 	r := router.New(hs, jwtAuth)
 
