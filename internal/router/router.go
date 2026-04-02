@@ -123,6 +123,13 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Get("/project/get_topics_by_project/{project_id}", h.GetTopicsByProjectMRA)
 				r.Post("/update-topic-translation/{project_id}", h.UpdateTopicTranslationMRA)
 				r.Delete("/translations/delete-topic-translation/{project_id}/{transaltion_to_delete}", h.DeleteTopicTranslationMRA)
+				// MRA #73-78
+				r.Get("/translations/get-all-localisations", h.GetAllLocalisationsMRA)
+				r.Delete("/translations/delete-translation/{project_id}/{transaltion_to_delete}", h.DeleteTranslationMRA)
+				r.Post("/add-honorarium-amount", h.AddHonorariumAmountMRA)
+				r.Get("/hono-value-update-reason-list", h.GetHonoValueUpdateReasonListMRA)
+				r.Post("/time-slot-payments", h.AddTimeSlotPaymentsMRA)
+				r.Post("/time-slot-payments-external", h.AddExternalTimeSlotPaymentsMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)

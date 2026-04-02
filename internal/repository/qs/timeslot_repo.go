@@ -1003,3 +1003,164 @@ return fmt.Errorf("reset ineligible mail sent mra: %w", err)
 }
 return nil
 }
+
+// ──────────────────────────────────────────────
+// MRA #77: GetPaymentInfoByTimeSlotIds + AddQSTimeSlotPayments
+// ──────────────────────────────────────────────
+
+func (repo *TimeSlotRepo) GetPaymentInfoByTimeSlotIdsMRA(ctx context.Context, timeSlotIDs []int64) ([]map[string]any, error) {
+if len(timeSlotIDs) == 0 {
+return []map[string]any{}, nil
+}
+placeholders := make([]string, len(timeSlotIDs))
+args := make([]any, len(timeSlotIDs))
+for i, id := range timeSlotIDs {
+placeholders[i] = "?"
+args[i] = id
+}
+q := fmt.Sprintf(`SELECT time_slot.id AS timeSlotId,
+defaultHonorarium.amount AS defaultHonorariumAmount,
+defaultHonorarium.currency AS defaultHonorariumCurrency,
+customHonorarium.new_value AS customHonorariumAmount,
+defaultHonorarium.externalUserSurveyId AS externalUserSurveyId,
+defaultHonorarium.externalUserId AS externalUserId,
+defaultHonorarium.externalCreditOrderId AS externalCreditOrderId,
+defaultHonorarium.externalProjectId AS externalProjectId,
+defaultHonorarium.externalCountryId AS externalCountryId
+FROM time_slot
+JOIN (
+SELECT MAX(ha.honorarium) AS amount, MAX(ha.currency) AS currency,
+MAX(ha.external_user_survey_id) AS externalUserSurveyId,
+MAX(ha.external_user_id) AS externalUserId,
+MAX(ha.external_credit_order_id) AS externalCreditOrderId,
+MAX(ha.external_project_id) AS externalProjectId,
+MAX(ha.external_country_id) AS externalCountryId,
+ts.id AS timeSlotId
+FROM time_slot ts
+JOIN time_slot_event tse ON tse.time_slot_id = ts.id
+JOIN responder r ON r.id = tse.responder_id
+JOIN honorarium_amount ha ON ha.sessKey = r.sess_key
+WHERE ha.external_user_survey_id IS NOT NULL
+AND ha.external_user_id IS NOT NULL
+AND ha.external_credit_order_id IS NOT NULL
+AND ha.external_project_id IS NOT NULL
+AND ha.external_country_id IS NOT NULL
+GROUP BY ts.id
+) defaultHonorarium ON defaultHonorarium.timeSlotId = time_slot.id
+LEFT JOIN time_slot_custom_honorarium customHonorarium ON customHonorarium.time_slot_id = time_slot.id
+WHERE time_slot.id IN (%s)`, strings.Join(placeholders, ","))
+rows, err := repo.db.QueryContext(ctx, q, args...)
+if err != nil {
+return nil, fmt.Errorf("get payment info by time slot ids mra: %w", err)
+}
+defer rows.Close()
+var result []map[string]any
+for rows.Next() {
+var tsID int64
+var defAmount, defCurrency, custAmount sql.NullString
+var extUserSurveyID, extUserID, extCreditOrderID, extProjectID, extCountryID sql.NullString
+if err := rows.Scan(&tsID, &defAmount, &defCurrency, &custAmount,
+&extUserSurveyID, &extUserID, &extCreditOrderID, &extProjectID, &extCountryID); err != nil {
+return nil, err
+}
+row := map[string]any{"timeSlotId": tsID}
+if defAmount.Valid {
+row["defaultHonorariumAmount"] = defAmount.String
+}
+if defCurrency.Valid {
+row["defaultHonorariumCurrency"] = defCurrency.String
+}
+if custAmount.Valid {
+row["customHonorariumAmount"] = custAmount.String
+}
+if extUserSurveyID.Valid {
+row["externalUserSurveyId"] = extUserSurveyID.String
+}
+if extUserID.Valid {
+row["externalUserId"] = extUserID.String
+}
+if extCreditOrderID.Valid {
+row["externalCreditOrderId"] = extCreditOrderID.String
+}
+if extProjectID.Valid {
+row["externalProjectId"] = extProjectID.String
+}
+if extCountryID.Valid {
+row["externalCountryId"] = extCountryID.String
+}
+result = append(result, row)
+}
+if result == nil {
+result = []map[string]any{}
+}
+return result, rows.Err()
+}
+
+func (repo *TimeSlotRepo) GetTimeSlotPaymentTypeListMRA(ctx context.Context) ([]map[string]any, error) {
+const q = `SELECT id, code, display FROM time_slot_payment_type`
+rows, err := repo.db.QueryContext(ctx, q)
+if err != nil {
+return nil, fmt.Errorf("get time slot payment type list mra: %w", err)
+}
+defer rows.Close()
+var result []map[string]any
+for rows.Next() {
+var id int64
+var code, display string
+if err := rows.Scan(&id, &code, &display); err != nil {
+return nil, err
+}
+result = append(result, map[string]any{"id": id, "code": code, "display": display})
+}
+if result == nil {
+result = []map[string]any{}
+}
+return result, rows.Err()
+}
+
+func (repo *TimeSlotRepo) AddQSTimeSlotPaymentsMRA(ctx context.Context, payments []map[string]any) error {
+if len(payments) == 0 {
+return nil
+}
+for _, p := range payments {
+_, err := repo.db.ExecContext(ctx,
+`INSERT INTO time_slot_payment_history (time_slot_id, amount, currency, source, payment_date, payment_user_id, payment_type_id, payment_status)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+p["timeSlotId"], p["amount"], p["currency"], p["source"],
+p["paymentDate"], p["paymentUserId"], p["paymentTypeId"], p["paymentStatus"])
+if err != nil {
+return fmt.Errorf("add qs time slot payment mra: %w", err)
+}
+}
+return nil
+}
+
+// ──────────────────────────────────────────────
+// MRA #78: AddExternalTimeSlotPayments
+// ──────────────────────────────────────────────
+
+func (repo *TimeSlotRepo) AddExternalTimeSlotPaymentsMRA(ctx context.Context, payments []map[string]any) error {
+if len(payments) == 0 {
+return nil
+}
+for _, p := range payments {
+_, err := repo.db.ExecContext(ctx,
+`INSERT INTO time_slot_payment_history (amount, currency, source, payment_date, payment_user_id, external_user_survey_id, external_credit_order_id, payment_type_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+p["amount"], p["currency"], p["source"], p["paymentDate"],
+p["paymentUserId"], p["externalUserSurveyId"], p["externalCreditOrderId"], p["paymentTypeId"])
+if err != nil {
+return fmt.Errorf("add external time slot payment mra: %w", err)
+}
+}
+return nil
+}
+
+func (repo *TimeSlotRepo) GetUserByEmailMRA(ctx context.Context, email string) (int64, error) {
+var userID int64
+err := repo.db.QueryRowContext(ctx, `SELECT id FROM user WHERE email = ?`, email).Scan(&userID)
+if err != nil {
+return 0, fmt.Errorf("get user by email mra: %w", err)
+}
+return userID, nil
+}

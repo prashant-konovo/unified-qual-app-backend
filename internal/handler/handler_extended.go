@@ -5866,3 +5866,364 @@ func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		"transactionStatus": "Transaction Committed",
 	})
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MRA #73: GET /translations/get-all-localisations
+// Legacy: getAllLanguageLocalisationsFactory — returns 3 arrays in one object
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) GetAllLocalisationsMRA(w http.ResponseWriter, r *http.Request) {
+allLangs, err := h.qsProjectRepo.GetAllLanguageLocalisationsMRA(r.Context())
+if err != nil {
+slog.Error("get all localisations mra: all", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+return
+}
+
+langData, err := h.qsProjectRepo.GetDataFromLanguageLocalisationsMRA(r.Context())
+if err != nil {
+slog.Error("get all localisations mra: data", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+return
+}
+
+countriesData, err := h.qsProjectRepo.GetCountriesWithLocalisationsMRA(r.Context())
+if err != nil {
+slog.Error("get all localisations mra: countries", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+return
+}
+
+writeJSON(w, http.StatusOK, map[string]any{
+"getAllLanguageLocalisations":     allLangs,
+"getDataFromLanguageLocalisation": langData,
+"getCountriesWithLocalisations":   countriesData,
+})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MRA #74: DELETE /translations/delete-translation/{project_id}/{transaltion_to_delete}
+// Legacy: deleteTranslationFactory — checks scheduled interviews, deletes project_meeting_translation
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) DeleteTranslationMRA(w http.ResponseWriter, r *http.Request) {
+pidStr := chi.URLParam(r, "project_id")
+projectID, err := strconv.ParseInt(pidStr, 10, 64)
+if err != nil {
+writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid project_id"})
+return
+}
+translationToDelete := chi.URLParam(r, "transaltion_to_delete")
+
+// Check for scheduled interviews
+projectStatusID, err := h.qsProjectRepo.GetProjectStatusByIdMRA(r.Context(), projectID)
+if err != nil {
+slog.Error("delete translation mra: get project status", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+return
+}
+
+if projectStatusID == 2 {
+respondersLanguages, err := h.qsProjectRepo.GetRespondersLanguagesByProjectIdMRA(r.Context(), projectID)
+if err != nil {
+slog.Error("delete translation mra: get responders languages", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+return
+}
+for _, lang := range respondersLanguages {
+if lang == translationToDelete {
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"errorMessage": "Scheduled Interviews exists with the language trying to be deleted",
+})
+return
+}
+}
+}
+
+languageID := langCodeToID[translationToDelete]
+if languageID == 0 {
+writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid language code"})
+return
+}
+
+result, err := h.qsProjectRepo.DeleteMeetingInformationTranslationMRA(r.Context(), projectID, languageID)
+if err != nil {
+slog.Error("delete translation mra", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+return
+}
+
+writeJSON(w, http.StatusOK, result)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MRA #75: POST /add-honorarium-amount
+// Legacy: AddHonorariumAmountFactory — validates fields, inserts into honorarium_amount
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) AddHonorariumAmountMRA(w http.ResponseWriter, r *http.Request) {
+var body struct {
+ProjectID            json.Number `json:"projectId"`
+Honorarium           json.Number `json:"honorarium"`
+Currency             string      `json:"currency"`
+SessKey              string      `json:"sessKey"`
+ExternalProjectID    string      `json:"externalProjectId"`
+ExternalUserSurveyID string      `json:"externalUserSurveyId"`
+ExternalUserID       string      `json:"externalUserId"`
+ExternalCreditOrderID string     `json:"externalCreditOrderId"`
+ExternalCountryID    string      `json:"externalCountryId"`
+}
+if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+return
+}
+
+// Validate required fields (legacy validation)
+projectID, _ := body.ProjectID.Int64()
+honorarium, _ := body.Honorarium.Int64()
+
+if projectID == 0 {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "missing projectId param"})
+return
+}
+if honorarium == 0 {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "missing honorarium param"})
+return
+}
+if body.Currency == "" {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "missing currency param"})
+return
+}
+if body.SessKey == "" {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"message": "missing sessKey param"})
+return
+}
+
+if err := h.qsProjectRepo.AddHonorariumAmountMRA(r.Context(), projectID, honorarium, body.Currency, body.SessKey,
+body.ExternalProjectID, body.ExternalUserSurveyID, body.ExternalUserID,
+body.ExternalCreditOrderID, body.ExternalCountryID); err != nil {
+slog.Error("add honorarium amount mra", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+return
+}
+
+writeJSON(w, http.StatusOK, map[string]any{"message": "Successfully Added honorarium amount"})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MRA #76: GET /hono-value-update-reason-list
+// Legacy: getHonoValueUpdateReasonListFactory — returns flat array from hono_value_update_reason
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) GetHonoValueUpdateReasonListMRA(w http.ResponseWriter, r *http.Request) {
+result, err := h.qsProjectRepo.GetHonoValueUpdateReasonListMRA(r.Context())
+if err != nil {
+slog.Error("get hono value update reason list mra", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":           err.Error(),
+"errorMessage":    "an error occurred while getting data",
+"customErrorCode": err.Error(),
+})
+return
+}
+
+writeJSON(w, http.StatusOK, result)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MRA #77: POST /time-slot-payments
+// Legacy: addTimeSlotPaymentsFactory — bulk payment creation with user lookup + pending processing
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) AddTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request) {
+var body struct {
+TimeSlotIDs []int64 `json:"timeSlotIds"`
+}
+if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+writeJSON(w, http.StatusBadRequest, map[string]any{
+"error":        "Bad Request",
+"errorMessage": "timeSlotIds is not an array of int",
+})
+return
+}
+
+if len(body.TimeSlotIDs) == 0 {
+writeJSON(w, http.StatusBadRequest, map[string]any{
+"error":        "Bad Request",
+"errorMessage": "timeSlotIds is not an array of int",
+})
+return
+}
+
+// Get payment info for all time slot IDs
+paymentInfo, err := h.qsTimeSlotRepo.GetPaymentInfoByTimeSlotIdsMRA(r.Context(), body.TimeSlotIDs)
+if err != nil {
+slog.Error("add time slot payments mra: get payment info", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":           "Internal Error",
+"errorMessage":    "Internal Error",
+"customErrorCode": "Internal Error",
+})
+return
+}
+
+// Get user ID from email in auth token (best-effort)
+var userID int64
+email := r.Header.Get("X-User-Email")
+if email != "" {
+userID, _ = h.qsTimeSlotRepo.GetUserByEmailMRA(r.Context(), email)
+}
+
+// Get payment type list for resolving INTERVIEW type code
+paymentTypes, err := h.qsTimeSlotRepo.GetTimeSlotPaymentTypeListMRA(r.Context())
+if err != nil {
+slog.Error("add time slot payments mra: get payment types", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":           "Internal Error",
+"errorMessage":    "Internal Error",
+"customErrorCode": "Internal Error",
+})
+return
+}
+
+// Find INTERVIEW payment type ID
+var interviewTypeID int64
+for _, pt := range paymentTypes {
+if code, ok := pt["code"].(string); ok && code == "INTERVIEW" {
+interviewTypeID, _ = pt["id"].(int64)
+break
+}
+}
+
+// Build payment records
+var payments []map[string]any
+for _, info := range paymentInfo {
+amount := info["customHonorariumAmount"]
+if amount == nil || amount == "" {
+amount = info["defaultHonorariumAmount"]
+}
+if amount == nil || amount == "" {
+continue
+}
+payments = append(payments, map[string]any{
+"timeSlotId":    info["timeSlotId"],
+"amount":        amount,
+"currency":      info["defaultHonorariumCurrency"],
+"source":        "QS",
+"paymentDate":   time.Now().UTC().Format("2006-01-02 15:04:05"),
+"paymentUserId": userID,
+"paymentTypeId": interviewTypeID,
+"paymentStatus": "PENDING",
+})
+}
+
+if len(payments) > 0 {
+if err := h.qsTimeSlotRepo.AddQSTimeSlotPaymentsMRA(r.Context(), payments); err != nil {
+slog.Error("add time slot payments mra: insert", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":           "Internal Error",
+"errorMessage":    "Internal Error",
+"customErrorCode": "Internal Error",
+})
+return
+}
+// PARTIAL: processPendingPaymentsForTimeslotIds (Lambda call) not implemented
+slog.Info("AddTimeSlotPaymentsMRA: processPendingPaymentsForTimeslotIds PARTIAL — Lambda Credit-Rewards not called")
+}
+
+writeJSON(w, http.StatusCreated, map[string]any{"message": "Success"})
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MRA #78: POST /time-slot-payments-external
+// Legacy: addExternalTimeSlotPaymentsExternalFactory — bulk external payment creation
+// ──────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) AddExternalTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request) {
+var body []struct {
+Amount               json.Number `json:"amount"`
+Currency             string      `json:"currency"`
+Source               string      `json:"source"`
+PaymentDate          string      `json:"paymentDate"`
+PaymentUserID        json.Number `json:"paymentUserId"`
+ExternalUserSurveyID string      `json:"externalUserSurveyId"`
+ExternalCreditOrderID string     `json:"externalCreditOrderId"`
+PaymentTypeCode      string      `json:"paymentTypeCode"`
+}
+if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":           err.Error(),
+"errorMessage":    "an error occurred while getting data",
+"customErrorCode": err.Error(),
+})
+return
+}
+
+// Get payment type list for resolving type codes
+paymentTypes, err := h.qsTimeSlotRepo.GetTimeSlotPaymentTypeListMRA(r.Context())
+if err != nil {
+slog.Error("add external time slot payments mra: get payment types", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":           err.Error(),
+"errorMessage":    "an error occurred while getting data",
+"customErrorCode": err.Error(),
+})
+return
+}
+
+// Build type code → ID map
+typeCodeMap := make(map[string]int64)
+for _, pt := range paymentTypes {
+code, _ := pt["code"].(string)
+id, _ := pt["id"].(int64)
+typeCodeMap[code] = id
+}
+
+var payments []map[string]any
+for _, p := range body {
+typeID, ok := typeCodeMap[p.PaymentTypeCode]
+if !ok {
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":           fmt.Sprintf("Invalid payment type code: %s", p.PaymentTypeCode),
+"errorMessage":    "an error occurred while getting data",
+"customErrorCode": fmt.Sprintf("Invalid payment type code: %s", p.PaymentTypeCode),
+})
+return
+}
+
+paymentDate := p.PaymentDate
+if paymentDate == "" {
+paymentDate = time.Now().UTC().Format("2006-01-02 15:04:05")
+}
+
+source := p.Source
+if source == "" {
+source = "IRIS"
+}
+
+payments = append(payments, map[string]any{
+"amount":               p.Amount.String(),
+"currency":             p.Currency,
+"source":               source,
+"paymentDate":          paymentDate,
+"paymentUserId":        p.PaymentUserID.String(),
+"externalUserSurveyId": p.ExternalUserSurveyID,
+"externalCreditOrderId": p.ExternalCreditOrderID,
+"paymentTypeId":        typeID,
+})
+}
+
+if len(payments) > 0 {
+if err := h.qsTimeSlotRepo.AddExternalTimeSlotPaymentsMRA(r.Context(), payments); err != nil {
+slog.Error("add external time slot payments mra", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":           err.Error(),
+"errorMessage":    "an error occurred while getting data",
+"customErrorCode": err.Error(),
+})
+return
+}
+}
+
+writeJSON(w, http.StatusCreated, map[string]any{"message": "Success"})
+}

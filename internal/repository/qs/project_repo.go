@@ -1616,3 +1616,158 @@ func (r *ProjectRepo) DeleteTopicByProjectAndLanguageMRA(ctx context.Context, pr
 
 
 
+
+// ──────────────────────────────────────────────
+// MRA #73: GetAllLocalisations
+// ──────────────────────────────────────────────
+
+func (r *ProjectRepo) GetAllLanguageLocalisationsMRA(ctx context.Context) ([]map[string]any, error) {
+const q = `SELECT * FROM language_localisation ORDER BY country ASC`
+rows, err := r.db.QueryContext(ctx, q)
+if err != nil {
+return nil, fmt.Errorf("get all language localisations mra: %w", err)
+}
+defer rows.Close()
+cols, _ := rows.Columns()
+var result []map[string]any
+for rows.Next() {
+vals := make([]any, len(cols))
+ptrs := make([]any, len(cols))
+for i := range vals {
+ptrs[i] = &vals[i]
+}
+if err := rows.Scan(ptrs...); err != nil {
+return nil, err
+}
+row := make(map[string]any, len(cols))
+for i, c := range cols {
+v := vals[i]
+if b, ok := v.([]byte); ok {
+row[c] = string(b)
+} else {
+row[c] = v
+}
+}
+result = append(result, row)
+}
+if result == nil {
+result = []map[string]any{}
+}
+return result, rows.Err()
+}
+
+func (r *ProjectRepo) GetDataFromLanguageLocalisationsMRA(ctx context.Context) ([]map[string]any, error) {
+const q = `SELECT DISTINCT language_name, language_code FROM language_localisation WHERE language_name <> 'English' ORDER BY language_name ASC`
+rows, err := r.db.QueryContext(ctx, q)
+if err != nil {
+return nil, fmt.Errorf("get data from language localisations mra: %w", err)
+}
+defer rows.Close()
+var result []map[string]any
+for rows.Next() {
+var langName, langCode string
+if err := rows.Scan(&langName, &langCode); err != nil {
+return nil, err
+}
+result = append(result, map[string]any{"language_name": langName, "language_code": langCode})
+}
+if result == nil {
+result = []map[string]any{}
+}
+return result, rows.Err()
+}
+
+func (r *ProjectRepo) GetCountriesWithLocalisationsMRA(ctx context.Context) ([]map[string]any, error) {
+const q = `SELECT * FROM language_localisation
+WHERE language_name IN (
+SELECT language_name FROM language_localisation GROUP BY language_name HAVING COUNT(language_name) > 1
+) ORDER BY country`
+rows, err := r.db.QueryContext(ctx, q)
+if err != nil {
+return nil, fmt.Errorf("get countries with localisations mra: %w", err)
+}
+defer rows.Close()
+cols, _ := rows.Columns()
+var result []map[string]any
+for rows.Next() {
+vals := make([]any, len(cols))
+ptrs := make([]any, len(cols))
+for i := range vals {
+ptrs[i] = &vals[i]
+}
+if err := rows.Scan(ptrs...); err != nil {
+return nil, err
+}
+row := make(map[string]any, len(cols))
+for i, c := range cols {
+v := vals[i]
+if b, ok := v.([]byte); ok {
+row[c] = string(b)
+} else {
+row[c] = v
+}
+}
+result = append(result, row)
+}
+if result == nil {
+result = []map[string]any{}
+}
+return result, rows.Err()
+}
+
+// ──────────────────────────────────────────────
+// MRA #74: DeleteTranslation (project_meeting_translation)
+// ──────────────────────────────────────────────
+
+func (r *ProjectRepo) DeleteMeetingInformationTranslationMRA(ctx context.Context, projectID, languageID int64) (map[string]any, error) {
+res, err := r.db.ExecContext(ctx,
+`DELETE FROM project_meeting_translation WHERE project_id = ? AND language_id = ?`,
+projectID, languageID)
+if err != nil {
+return nil, fmt.Errorf("delete meeting information translation mra: %w", err)
+}
+affected, _ := res.RowsAffected()
+return map[string]any{"numberOfRecordsUpdated": affected}, nil
+}
+
+// ──────────────────────────────────────────────
+// MRA #75: AddHonorariumAmount
+// ──────────────────────────────────────────────
+
+func (r *ProjectRepo) AddHonorariumAmountMRA(ctx context.Context, projectID int64, honorarium int64, currency, sessKey string, extProjectID, extUserSurveyID, extUserID, extCreditOrderID, extCountryID string) error {
+const q = `INSERT INTO honorarium_amount (project_id, honorarium, currency, sessKey, external_user_survey_id, external_user_id, external_project_id, external_credit_order_id, external_country_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON DUPLICATE KEY UPDATE currency = ?`
+_, err := r.db.ExecContext(ctx, q, projectID, honorarium, currency, sessKey,
+extUserSurveyID, extUserID, extProjectID, extCreditOrderID, extCountryID, currency)
+if err != nil {
+return fmt.Errorf("add honorarium amount mra: %w", err)
+}
+return nil
+}
+
+// ──────────────────────────────────────────────
+// MRA #76: GetHonoValueUpdateReasonList
+// ──────────────────────────────────────────────
+
+func (r *ProjectRepo) GetHonoValueUpdateReasonListMRA(ctx context.Context) ([]map[string]any, error) {
+const q = `SELECT id, code, display FROM hono_value_update_reason`
+rows, err := r.db.QueryContext(ctx, q)
+if err != nil {
+return nil, fmt.Errorf("get hono value update reason list mra: %w", err)
+}
+defer rows.Close()
+var result []map[string]any
+for rows.Next() {
+var id int64
+var code, display string
+if err := rows.Scan(&id, &code, &display); err != nil {
+return nil, err
+}
+result = append(result, map[string]any{"id": id, "code": code, "display": display})
+}
+if result == nil {
+result = []map[string]any{}
+}
+return result, rows.Err()
+}
