@@ -1350,3 +1350,28 @@ func (r *ProjectRepo) GetModeratorsTimeRangePerProjectMRA(ctx context.Context, p
 	}
 	return records, rows.Err()
 }
+
+// GetProjectsForModeratorMRA returns projects assigned to a moderator for a client.
+func (r *ProjectRepo) GetProjectsForModeratorMRA(ctx context.Context, clientID, moderatorID int64) ([]map[string]any, error) {
+q := `SELECT p.id, p.name FROM project p
+INNER JOIN projects_users pu ON pu.project_id = p.id
+WHERE pu.user_id = ? AND p.client_id = ?`
+rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
+if err != nil {
+return nil, fmt.Errorf("get projects for moderator mra: %w", err)
+}
+defer rows.Close()
+var records []map[string]any
+for rows.Next() {
+var id int64
+var name string
+if err := rows.Scan(&id, &name); err != nil {
+return nil, err
+}
+records = append(records, map[string]any{"id": id, "name": name})
+}
+if records == nil {
+records = []map[string]any{}
+}
+return records, rows.Err()
+}

@@ -4526,3 +4526,60 @@ func (h *Handler) GetModeratorInterviewsMRA(w http.ResponseWriter, r *http.Reque
 
 	writeJSON(w, http.StatusOK, records)
 }
+
+// GetProjectsForModeratorMRA handles GET /moderator/get-projects/{moderator_id}/client/{client_id} (MRA).
+// Contract-identical with legacy: returns {clientId, moderatorId, data: [{id, name}]}
+func (h *Handler) GetProjectsForModeratorMRA(w http.ResponseWriter, r *http.Request) {
+modIDStr := chi.URLParam(r, "moderator_id")
+modID, _ := strconv.ParseInt(modIDStr, 10, 64)
+clientIDStr := chi.URLParam(r, "client_id")
+clientID, _ := strconv.ParseInt(clientIDStr, 10, 64)
+
+if h.qsProjectRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+return
+}
+
+records, err := h.qsProjectRepo.GetProjectsForModeratorMRA(r.Context(), clientID, modID)
+if err != nil {
+slog.Error("get projects for moderator mra failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        err.Error(),
+"errorMessage": "An error occured while getting projects for moderator",
+})
+return
+}
+
+writeJSON(w, http.StatusOK, map[string]any{
+"clientId":    clientIDStr,
+"moderatorId": modIDStr,
+"data":        records,
+})
+}
+
+// GetModeratorsListForProjectMRA handles GET /moderator/client/{project_id}/list (MRA).
+// Legacy path param is named client_id but actually passes project_id.
+// Contract-identical: returns {moderatorInfo: [{firstName, lastName, id, clientId, interviewCount, startTime, endTime, timezone}]}
+func (h *Handler) GetModeratorsListForProjectMRA(w http.ResponseWriter, r *http.Request) {
+projectIDStr := chi.URLParam(r, "project_id")
+projectID, _ := strconv.ParseInt(projectIDStr, 10, 64)
+
+if h.qsUserRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+return
+}
+
+records, err := h.qsUserRepo.GetModeratorsListMRA(r.Context(), projectID)
+if err != nil {
+slog.Error("get moderators list mra failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        err.Error(),
+"errorMessage": "An error occured while getting the list of moderators",
+})
+return
+}
+
+writeJSON(w, http.StatusOK, map[string]any{
+"moderatorInfo": records,
+})
+}

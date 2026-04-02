@@ -1090,3 +1090,47 @@ func (r *UserRepo) GetAllModeratorsAvailabilityPerClientMRA(ctx context.Context,
 	}
 	return records, rows.Err()
 }
+
+// GetModeratorsListMRA returns moderators for a project matching legacy getModeratorsList query.
+func (r *UserRepo) GetModeratorsListMRA(ctx context.Context, projectID int64) ([]map[string]any, error) {
+q := `SELECT DISTINCT user.first_name AS firstName, user.last_name AS lastName, user.id AS id,
+user_client.client_id AS clientId,
+COUNT(DISTINCT moderator_time_slot.id) AS interviewCount,
+COALESCE(mtr.start_time, '') AS startTime,
+COALESCE(mtr.end_time, '') AS endTime,
+COALESCE(mtr.timezone, '') AS timezone
+FROM user
+INNER JOIN user_client ON user.id = user_client.user_id
+INNER JOIN projects_users ON user_client.user_id = projects_users.user_id
+INNER JOIN user_role ON user.id = user_role.user_id
+LEFT OUTER JOIN (SELECT moderator_time_slot.* FROM moderator_time_slot
+INNER JOIN time_slot ON time_slot.id = moderator_time_slot.time_slot_id
+AND time_slot.status_id = 2 AND time_slot.is_invalid = FALSE
+AND time_slot.project_id = ?) moderator_time_slot ON moderator_time_slot.moderator_id = user.id
+LEFT OUTER JOIN (SELECT * FROM moderator_time_range WHERE project_id = ?) mtr ON mtr.moderator_id = user.id
+WHERE user_role.role_id = 1 AND user.deleted = 0 AND projects_users.project_id = ?
+GROUP BY user.id`
+rows, err := r.db.QueryContext(ctx, q, projectID, projectID, projectID)
+if err != nil {
+return nil, fmt.Errorf("get moderators list mra: %w", err)
+}
+defer rows.Close()
+var records []map[string]any
+for rows.Next() {
+var id, clientID int64
+var interviewCount int
+var firstName, lastName, startTime, endTime, timezone string
+if err := rows.Scan(&firstName, &lastName, &id, &clientID, &interviewCount, &startTime, &endTime, &timezone); err != nil {
+return nil, fmt.Errorf("scan moderator list mra: %w", err)
+}
+records = append(records, map[string]any{
+"firstName": firstName, "lastName": lastName, "id": id,
+"clientId": clientID, "interviewCount": interviewCount,
+"startTime": startTime, "endTime": endTime, "timezone": timezone,
+})
+}
+if records == nil {
+records = []map[string]any{}
+}
+return records, rows.Err()
+}
