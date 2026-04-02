@@ -81,49 +81,10 @@ func (h *InterviewHandler) ListTimeslots(w http.ResponseWriter, r *http.Request)
 
 	result := make([]map[string]any, 0, len(slots))
 	for _, s := range slots {
-		item := map[string]any{
-			"id":                     s.ID,
-			"projectId":              s.ProjectID,
-			"projectName":            s.ProjectName,
-			"startTime":              s.StartTime.Format(time.RFC3339),
-			"endTime":                s.EndTime.Format(time.RFC3339),
-			"duration":               s.Duration,
-			"statusId":               s.StatusID,
-			"status":                 s.StatusName,
-			"confirmed":              s.Confirmed,
-			"isInvalid":              s.IsInvalid,
-			"isInvalidatedInterview": s.IsInvalidatedInterview,
-			"source":                 "qs",
-			"serviceCategory":        "MRA",
-			"modifiedOn":             s.ModifiedOn.Format(time.RFC3339),
-		}
-		if s.ModeratorID.Valid {
-			item["moderatorId"] = s.ModeratorID.Int64
-			item["moderatorName"] = s.ModeratorName.String
-			item["isHost"] = s.IsHost.Valid && s.IsHost.Bool
-		}
-		if s.ResponderID.Valid {
-			item["responderId"] = s.ResponderID.Int64
-			item["responderName"] = s.ResponderName.String
-		}
-		if s.ConferenceHash.Valid {
-			item["conferenceHash"] = s.ConferenceHash.String
-		}
-		if s.InvalidationReasonCode.Valid {
-			item["invalidationReasonCode"] = s.InvalidationReasonCode.String
-		}
-		result = append(result, item)
+		result = append(result, dto.TimeslotFromListRow(s))
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"data":    result,
-		"meta": map[string]any{
-			"page":       page,
-			"pageSize":   pageSize,
-			"totalCount": total,
-		},
-	})
+	writeJSON(w, http.StatusOK, dto.NewPaginated(result, page, pageSize, total))
 }
 
 func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request) {
@@ -209,33 +170,7 @@ func (h *InterviewHandler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := map[string]any{
-		"id":                     ts.ID,
-		"projectId":              ts.ProjectID,
-		"startTime":              ts.StartTime.Format(time.RFC3339),
-		"endTime":                ts.EndTime.Format(time.RFC3339),
-		"confirmed":              ts.Confirmed,
-		"statusId":               ts.StatusID,
-		"duration":               ts.Duration,
-		"isInvalid":              ts.IsInvalid,
-		"isInvalidatedInterview": ts.IsInvalidatedInterview,
-		"isPreviousNoShow":       ts.IsPreviousNoShow,
-		"source":                 "qs",
-		"serviceCategory":        "MRA",
-		"modifiedOn":             ts.ModifiedOn.Format(time.RFC3339),
-	}
-	if ts.ConferenceHash.Valid {
-		result["conferenceHash"] = ts.ConferenceHash.String
-	}
-	if ts.ParticipantHash.Valid {
-		result["participantHash"] = ts.ParticipantHash.String
-	}
-	if ts.InvalidationReasonCode.Valid {
-		result["invalidationReasonCode"] = ts.InvalidationReasonCode.String
-	}
-	if ts.InvalidationReasonText.Valid {
-		result["invalidationReasonText"] = ts.InvalidationReasonText.String
-	}
+	result := dto.TimeslotFromDetail(ts)
 
 	// Get assigned moderators
 	mods, err := h.qsTimeSlotRepo.GetModerators(ctx, tsID)
@@ -245,10 +180,7 @@ func (h *InterviewHandler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 	if mods != nil {
 		modList := make([]map[string]any, 0, len(mods))
 		for _, m := range mods {
-			modList = append(modList, map[string]any{
-				"moderatorId": m.ModeratorID,
-				"isHost":      m.IsHost,
-			})
+			modList = append(modList, dto.TimeslotModerator(m))
 		}
 		result["moderators"] = modList
 	}
@@ -259,12 +191,7 @@ func (h *InterviewHandler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(ctx, "get timeslot respondent failed", "error", err)
 	}
 	if resp != nil {
-		result["respondent"] = map[string]any{
-			"id":        resp.ID,
-			"firstName": resp.FirstName,
-			"lastName":  resp.LastName,
-			"timeZone":  resp.TimeZone.String,
-		}
+		result["respondent"] = dto.TimeslotRespondent(resp)
 	}
 
 	writeJSON(w, http.StatusOK, result)
@@ -395,18 +322,7 @@ func (h *InterviewHandler) GetAvailableSlots(w http.ResponseWriter, r *http.Requ
 
 	result := make([]map[string]any, 0, len(slots))
 	for _, s := range slots {
-		item := map[string]any{
-			"id":        s.ID,
-			"projectId": s.ProjectID,
-			"startTime": s.StartTime.Format(time.RFC3339),
-			"endTime":   s.EndTime.Format(time.RFC3339),
-			"duration":  s.Duration,
-		}
-		if s.ModeratorID.Valid {
-			item["moderatorId"] = s.ModeratorID.Int64
-			item["moderatorName"] = s.ModeratorName.String
-		}
-		result = append(result, item)
+		result = append(result, dto.SlotFromListRowSimple(s))
 	}
 	writeJSON(w, http.StatusOK, result)
 }

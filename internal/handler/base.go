@@ -8,25 +8,26 @@ import (
 )
 
 // Deps holds shared dependencies injected into all domain handlers.
+// Repository fields use interfaces for testability (mock injection).
 type Deps struct {
 	cfg              *config.Config
 	db               *config.DBPair
 	services         *integration.ServiceClients
-	irisProjectRepo  *iris.ProjectRepo
-	qsProjectRepo   *qs.ProjectRepo
-	irisUserRepo    *iris.UserRepo
-	qsUserRepo      *qs.UserRepo
-	qsTimeSlotRepo  *qs.TimeSlotRepo
-	qsRespondentRepo *qs.RespondentRepo
-	qsSurveyRepo    *qs.SurveyRepo
-	irisSurveyRepo   *iris.SurveyRepo
-	qsConferenceRepo *qs.ConferenceRepo
-	qsAnswerRepo     *qs.AnswerRepo
-	qsInterviewsRepo *qs.InterviewsRepo
+	irisProjectRepo  iris.ProjectRepository
+	qsProjectRepo   qs.ProjectRepository
+	irisUserRepo    iris.UserRepository
+	qsUserRepo      qs.UserRepository
+	qsTimeSlotRepo  qs.TimeSlotRepository
+	qsRespondentRepo qs.RespondentRepository
+	qsSurveyRepo    qs.SurveyRepository
+	irisSurveyRepo   iris.SurveyRepository
+	qsConferenceRepo qs.ConferenceRepository
+	qsAnswerRepo     qs.AnswerRepository
+	qsInterviewsRepo qs.InterviewsRepository
 }
 
 // NewDeps creates the shared dependency container.
-func NewDeps(cfg *config.Config, db *config.DBPair, services *integration.ServiceClients, irisRepo *iris.ProjectRepo, qsRepo *qs.ProjectRepo, irisUserRepo *iris.UserRepo, qsUserRepo *qs.UserRepo, qsTimeSlotRepo *qs.TimeSlotRepo, qsRespondentRepo *qs.RespondentRepo, qsSurveyRepo *qs.SurveyRepo, irisSurveyRepo *iris.SurveyRepo, qsConferenceRepo *qs.ConferenceRepo, qsAnswerRepo *qs.AnswerRepo) *Deps {
+func NewDeps(cfg *config.Config, db *config.DBPair, services *integration.ServiceClients, irisRepo iris.ProjectRepository, qsRepo qs.ProjectRepository, irisUserRepo iris.UserRepository, qsUserRepo qs.UserRepository, qsTimeSlotRepo qs.TimeSlotRepository, qsRespondentRepo qs.RespondentRepository, qsSurveyRepo qs.SurveyRepository, irisSurveyRepo iris.SurveyRepository, qsConferenceRepo qs.ConferenceRepository, qsAnswerRepo qs.AnswerRepository) *Deps {
 	d := &Deps{
 		cfg:              cfg,
 		db:               db,
