@@ -45,9 +45,9 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"id": s.ID, "subscriptionId": niVal(s.SubscriptionID),
+			"id": s.ID, "subscriptionId": nullInt64(s.SubscriptionID),
 			"surveyTypeId": s.SurveyTypeID, "namePublic": s.NamePublic,
-			"namePrivate": nsVal(s.NamePrivate), "topicName": nsVal(s.TopicName),
+			"namePrivate": nullStr(s.NamePrivate), "topicName": nullStr(s.TopicName),
 			"projectId": s.ProjectID, "status": s.Status,
 			"completionsNeeded": s.CompletionsNeeded,
 			"createdOn": s.CreatedOn.Format(time.RFC3339),
@@ -70,7 +70,7 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"id": s.ID, "projectId": niVal(s.ProjectID),
+			"id": s.ID, "projectId": nullInt64(s.ProjectID),
 			"title": s.Title, "status": s.Status,
 			"questions": json.RawMessage(s.Questions), "rules": json.RawMessage(s.Rules),
 			"createdOn": s.CreatedOn.Format(time.RFC3339),
@@ -236,14 +236,14 @@ func (h *Handler) buildSurveyCrowdFlatJSON(ctx context.Context, sc iris.ICSurvey
 		"answerTotal":       answerTotal,
 		"slAnswerRequest":   sc.SLAnswerRequest,
 		"slAnswerPercent":   sc.SLAnswerPercent,
-		"qualHonorarium":    niVal(sc.QualHonorarium),
+		"qualHonorarium":    nullInt64(sc.QualHonorarium),
 		"honorarium":        honorarium,
 		"excluded":          sc.Excluded,
 		"isInvitationPaused": sc.IsInvitationPaused,
 		"isReminderPaused":  sc.IsReminderPaused,
 		"isSampleClosed":    sc.IsSampleClosed,
 		"pausedByQf":        sc.PausedByQf,
-		"afterQfResumedOn":  ntVal(sc.AfterQfResumedOn),
+		"afterQfResumedOn":  nullTime(sc.AfterQfResumedOn),
 	}
 }
 
@@ -285,7 +285,7 @@ func (h *Handler) buildSurveyCrowdAdminJSON(ctx context.Context, sc iris.ICSurve
 	var surveyTimeStarted any
 	var surveyStatus any
 	if survey != nil {
-		surveyTimeStarted = ntVal(survey.FieldedOn)
+		surveyTimeStarted = nullTime(survey.FieldedOn)
 		surveyStatus = survey.Status
 	}
 
@@ -379,7 +379,7 @@ func (h *Handler) buildSurveyCrowdDetailJSON(ctx context.Context, sc iris.ICSurv
 	var surveyTimeStarted any
 	var surveyStatus any
 	if survey != nil {
-		surveyTimeStarted = ntVal(survey.FieldedOn)
+		surveyTimeStarted = nullTime(survey.FieldedOn)
 		surveyStatus = survey.Status
 	}
 
@@ -395,7 +395,7 @@ func (h *Handler) buildSurveyCrowdDetailJSON(ctx context.Context, sc iris.ICSurv
 	flat["isInvitationPaused"] = sc.IsInvitationPaused
 	flat["isReminderPaused"] = sc.IsReminderPaused
 	flat["isSampleClosed"] = sc.IsSampleClosed
-	flat["groupId"] = niVal(sc.CrowdGroupID)
+	flat["groupId"] = nullInt64(sc.CrowdGroupID)
 
 	return flat
 }
@@ -697,19 +697,19 @@ func (h *Handler) buildSubscriberJSON(r *http.Request, s *iris.ICSurvey, callerU
 	result := map[string]any{
 		"id":                    s.ID,
 		"projectId":             s.ProjectID,
-		"subscriptionId":        niVal(s.SubscriptionID),
+		"subscriptionId":        nullInt64(s.SubscriptionID),
 		"subscriptionCompany":   subscriptionCompany,
 		"surveyTypeId":          s.SurveyTypeID,
 		"projectTypeId":         projectTypeID,
 		"languageId":            s.LanguageID,
 		"namePublic":            s.NamePublic,
-		"namePrivate":           nsVal(s.NamePrivate),
-		"topicName":             nsVal(s.TopicName),
+		"namePrivate":           nullStr(s.NamePrivate),
+		"topicName":             nullStr(s.TopicName),
 		"isArchived":            s.IsArchived,
-		"salesforceProjectId":   nsVal(s.SalesforceProjectID),
+		"salesforceProjectId":   nullStr(s.SalesforceProjectID),
 		"createdOn":             s.CreatedOn.Format(time.RFC3339),
 		"createdBy":             s.CreatedBy,
-		"modifiedOn":            ntVal(s.ModifiedOn),
+		"modifiedOn":            nullTime(s.ModifiedOn),
 		// listJson fields
 		"numCompletions":    numCompletions,
 		"completionsNeeded": s.CompletionsNeeded,
@@ -722,7 +722,7 @@ func (h *Handler) buildSubscriberJSON(r *http.Request, s *iris.ICSurvey, callerU
 		"favorite":          favorite,
 		"numCrowds":         numCrowds,
 		"qualCrowdName":     qualCrowdName,
-		"lengthOfInterview": niVal(s.LengthOfInterview),
+		"lengthOfInterview": nullInt64(s.LengthOfInterview),
 		// pricing
 		"surveyPricingTypeId": pricing["surveyPricingTypeId"],
 		"freeScreeners":       pricing["freeScreeners"],
@@ -896,7 +896,7 @@ func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
 		for _, o := range observers {
 			result = append(result, map[string]any{
 				"id": o.ID, "projectId": o.ProjectID, "email": o.Email,
-				"timeSlotId": niVal(o.TimeSlotID),
+				"timeSlotId": nullInt64(o.TimeSlotID),
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"observers": result})
@@ -1328,24 +1328,6 @@ func (h *Handler) DeleteProjectMedia(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 }
 
-// mediaToJSON converts ICInterviewMedia to the legacy JSON response shape.
-func mediaToJSON(m iris.ICInterviewMedia) map[string]any {
-	result := map[string]any{
-		"id": m.ID, "name": m.Name, "description": m.Description,
-		"projectId": m.ProjectID, "s3Key": nil, "hash": nil,
-		"status": m.Status, "createdOn": m.CreatedOn.Format(time.RFC3339),
-		"createdBy": m.CreatedBy, "pageCount": m.PageCount,
-		"pagesProcessed": m.PagesProcessed, "shared": m.Shared,
-	}
-	if m.S3Key.Valid {
-		result["s3Key"] = m.S3Key.String
-	}
-	if m.Hash.Valid {
-		result["hash"] = m.Hash.String
-	}
-	return result
-}
-
 // ──────────────────────────────────────────────
 // Subscription Domain
 // ──────────────────────────────────────────────
@@ -1537,12 +1519,12 @@ func (h *Handler) buildCrowdBasicJSON(ctx context.Context, c iris.ICCrowd) map[s
 		"countryName":                 countryName,
 		"countryLanguage":             countryLanguage,
 		"deleted":                     c.Deleted,
-		"andOr":                       niVal(c.AndOr),
-		"deletedOn":                   ntVal(c.DeletedOn),
-		"deletedBy":                   niVal(c.DeletedBy),
+		"andOr":                       nullInt64(c.AndOr),
+		"deletedOn":                   nullTime(c.DeletedOn),
+		"deletedBy":                   nullInt64(c.DeletedBy),
 		"createdOn":                   c.CreatedOn.Format(time.RFC3339),
 		"isArchived":                  c.IsArchived,
-		"createdFromSampleTemplateId": niVal(c.CreatedFromSampleTemplateID),
+		"createdFromSampleTemplateId": nullInt64(c.CreatedFromSampleTemplateID),
 		"isNewbie":                    c.IsNewbie,
 		"createdViaListMatch":         createdViaListMatch,
 		"incrowdTPA":                  nullStr(c.IncrowdTPA),
@@ -1651,7 +1633,7 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 			"inquiryTypeId":          pi.InquiryTypeID,
 			"inquiryType":            h.irisSurveyRepo.GetInquiryTypeName(ctx, pi.InquiryTypeID),
 			"interviewLength":        pi.InterviewLength,
-			"requiredCompletionDate": ntVal(pi.RequiredCompletionDate),
+			"requiredCompletionDate": nullTime(pi.RequiredCompletionDate),
 			"projectId":              pi.ProjectID,
 			"createdOn":              pi.CreatedOn.Format(time.RFC3339),
 			"createdBy":              pi.CreatedBy,
@@ -1673,19 +1655,19 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 					"description":          nullStr(p.Description),
 					"subscriptionId":       p.SubscriptionID,
 					"createdOn":            p.CreatedOn.Format(time.RFC3339),
-					"createdBy":            niVal(p.CreatedBy),
-					"modifiedOn":           ntVal(p.ModifiedOn),
+					"createdBy":            nullInt64(p.CreatedBy),
+					"modifiedOn":           nullTime(p.ModifiedOn),
 					"budget":               nullStr(p.Budget),
 					"isPrivate":            p.IsPrivate,
-					"qualModeratorId":      niVal(p.QualModeratorID),
+					"qualModeratorId":      nullInt64(p.QualModeratorID),
 					"projectStatusId":      p.ProjectStatusID,
 					"projectTypeId":        p.ProjectTypeID,
 					"salesforceProjectId":  nullStr(p.SalesforceProjectID),
-					"completedOn":          ntVal(p.CompletedOn),
+					"completedOn":          nullTime(p.CompletedOn),
 					"isArchived":           p.IsArchived,
-					"archivedBy":           niVal(p.ArchivedBy),
-					"archivedOn":           ntVal(p.ArchivedOn),
-					"finalizedOn":          ntVal(p.FinalizedOn),
+					"archivedBy":           nullInt64(p.ArchivedBy),
+					"archivedOn":           nullTime(p.ArchivedOn),
+					"finalizedOn":          nullTime(p.FinalizedOn),
 				}
 			}
 		}
@@ -1754,7 +1736,7 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 		"name":                 project["name"],
 		"salesforceProjectId":  sfProjectID,
 		"completionDate":       completionDate,
-		"notes":                nsVal(pi.Notes),
+		"notes":                nullStr(pi.Notes),
 		"crowds":               standardCrowds,
 		"customCrowds":         customCrowds,
 		"projectId":            projectID,
@@ -1898,7 +1880,7 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 			surveyList = append(surveyList, map[string]any{
 				"id":               s.ID,
 				"namePublic":       s.NamePublic,
-				"namePrivate":      nsVal(s.NamePrivate),
+				"namePrivate":      nullStr(s.NamePrivate),
 				"favorite":         favorite,
 				"status":           statusObj,
 				"qualCrowdName":    qualCrowdName,
@@ -2000,7 +1982,7 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 				name = translated
 			}
 		}
-		rollup := nsVal(m.Rollup)
+		rollup := nullStr(m.Rollup)
 		if lang != "en_us" {
 			if translated := h.irisSurveyRepo.GetMarketRollupTranslation(ctx, m.ID, lang); translated != "" {
 				rollup = translated
@@ -2237,7 +2219,7 @@ func (h *Handler) GetTimeslotObservers(w http.ResponseWriter, r *http.Request) {
 		result := make([]map[string]any, 0, len(observers))
 		for _, o := range observers {
 			result = append(result, map[string]any{
-				"id": o.ID, "email": o.Email, "timeSlotId": niVal(o.TimeSlotID),
+				"id": o.ID, "email": o.Email, "timeSlotId": nullInt64(o.TimeSlotID),
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"observers": result})
@@ -2279,7 +2261,7 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 		result := make([]map[string]any, 0, len(observers))
 		for _, o := range observers {
 			result = append(result, map[string]any{
-				"id": o.ID, "email": o.Email, "timeSlotId": niVal(o.TimeSlotID),
+				"id": o.ID, "email": o.Email, "timeSlotId": nullInt64(o.TimeSlotID),
 			})
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"observers": result})
@@ -3133,28 +3115,4 @@ func (h *Handler) resolveSource(r *http.Request) string {
 		}
 	}
 	return ""
-}
-
-// nsVal extracts value from sql.NullString for JSON output.
-func nsVal(ns sql.NullString) any {
-	if ns.Valid {
-		return ns.String
-	}
-	return nil
-}
-
-// niVal extracts value from sql.NullInt64 for JSON output.
-func niVal(ni sql.NullInt64) any {
-	if ni.Valid {
-		return ni.Int64
-	}
-	return nil
-}
-
-// ntVal extracts value from sql.NullTime for JSON output (RFC3339 format).
-func ntVal(nt sql.NullTime) any {
-	if nt.Valid {
-		return nt.Time.Format(time.RFC3339)
-	}
-	return nil
 }

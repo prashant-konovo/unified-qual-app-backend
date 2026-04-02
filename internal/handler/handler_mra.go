@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	qs "github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
 
@@ -179,20 +178,4 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, buildTimeSlotResponse(tsUpdated))
-}
-
-// buildTimeSlotResponse returns the timeslot fields matching legacy getTimeSlotByIdForCancelReschedule response.
-func buildTimeSlotResponse(ts *qs.TimeSlot) map[string]any {
-	return map[string]any{
-		"id":                       ts.ID,
-		"projectId":                ts.ProjectID,
-		"isInvalidatedInterview":   ts.IsInvalidatedInterview,
-		"isInvalidateEmailSent":    ts.IsInvalidateEmailSent,
-		"invalidationReasonCode":   nullStr(ts.InvalidationReasonCode),
-		"startTime":                ts.StartTime,
-		"endTime":                  ts.EndTime,
-		"statusId":                 ts.StatusID,
-		"duration":                 ts.Duration,
-		"isInvalid":                ts.IsInvalid,
-	}
 }
