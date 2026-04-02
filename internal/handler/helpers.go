@@ -97,43 +97,8 @@ func toNullInt64(n int64) sql.NullInt64 {
 }
 
 // ──────────────────────────────────────────────
-// Domain mapping helpers
+// Role / CSV helpers
 // ──────────────────────────────────────────────
-
-func surveyToMap(s *qs.SurveyRow) map[string]any {
-	var questions []any
-	var rules []any
-	_ = json.Unmarshal([]byte(s.Questions), &questions)
-	_ = json.Unmarshal([]byte(s.Rules), &rules)
-	if questions == nil {
-		questions = []any{}
-	}
-	if rules == nil {
-		rules = []any{}
-	}
-	m := map[string]any{
-		"id":        fmt.Sprintf("%d", s.ID),
-		"title":     s.Title,
-		"status":    s.Status,
-		"questions": questions,
-		"rules":     rules,
-		"crowdId":   "",
-		"crowdName": "",
-		"createdAt": s.CreatedOn.Format(time.RFC3339),
-		"updatedAt": s.ModifiedOn.Format(time.RFC3339),
-	}
-	if s.ProjectID.Valid {
-		m["projectId"] = fmt.Sprintf("%d", s.ProjectID.Int64)
-	} else {
-		m["projectId"] = ""
-	}
-	if s.ProjectName.Valid {
-		m["projectName"] = s.ProjectName.String
-	} else {
-		m["projectName"] = ""
-	}
-	return m
-}
 
 // qsRoleName maps QS role_id to a human-readable name.
 func qsRoleName(id int) string {
@@ -186,15 +151,15 @@ func mediaToJSON(m iris.ICInterviewMedia) map[string]any {
 // buildTimeSlotResponse returns the timeslot fields matching legacy getTimeSlotByIdForCancelReschedule response.
 func buildTimeSlotResponse(ts *qs.TimeSlot) map[string]any {
 	return map[string]any{
-		"id":                       ts.ID,
-		"projectId":                ts.ProjectID,
-		"isInvalidatedInterview":   ts.IsInvalidatedInterview,
-		"isInvalidateEmailSent":    ts.IsInvalidateEmailSent,
-		"invalidationReasonCode":   nullStr(ts.InvalidationReasonCode),
-		"startTime":                ts.StartTime,
-		"endTime":                  ts.EndTime,
-		"statusId":                 ts.StatusID,
-		"duration":                 ts.Duration,
-		"isInvalid":                ts.IsInvalid,
+		"id":                     ts.ID,
+		"projectId":              ts.ProjectID,
+		"isInvalidatedInterview": ts.IsInvalidatedInterview,
+		"isInvalidateEmailSent":  ts.IsInvalidateEmailSent,
+		"invalidationReasonCode": nullStr(ts.InvalidationReasonCode),
+		"startTime":              ts.StartTime,
+		"endTime":                ts.EndTime,
+		"statusId":               ts.StatusID,
+		"duration":               ts.Duration,
+		"isInvalid":              ts.IsInvalid,
 	}
 }

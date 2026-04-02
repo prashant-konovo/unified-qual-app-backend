@@ -117,15 +117,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	if result == nil {
 		result = []map[string]any{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"data":    result,
-		"meta": map[string]any{
-			"page":       pg.Page,
-			"pageSize":   pg.PageSize,
-			"totalCount": len(result),
-		},
-	})
+	writeJSON(w, http.StatusOK, dto.NewPaginated(result, pg.Page, pg.PageSize, len(result)))
 }
 
 type createProjectRequest struct {
