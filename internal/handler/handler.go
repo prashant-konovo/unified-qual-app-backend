@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -113,19 +115,6 @@ type loginRequest struct {
 	TermsAccepted *bool  `json:"termsAccepted"`
 }
 
-type centralAuthLoginRequest struct {
-	UserName   string `json:"UserName"`
-	Password   string `json:"Password"`
-	UserPoolId string `json:"UserPoolId"`
-	ClientId   string `json:"ClientId"`
-}
-
-type centralAuthRefreshRequest struct {
-	RefreshToken string `json:"RefreshToken"`
-	UserPoolId   string `json:"UserPoolId"`
-	ClientId     string `json:"ClientId"`
-}
-
 func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -137,61 +126,104 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Authenticate via Cognito (central service first, direct fallback)
-	var cognitoBody []byte
-	var cognitoStatus int
+	// ── Primary path: proxy to InCrowdAPI ───────────────────────────
+	if h.services.ICAuth != nil && h.services.ICAuth.Configured() {
+		loginResp, statusCode, err := h.services.ICAuth.Login(r.Context(), req.Email, req.Password, 1)
+		if err == nil && loginResp != nil {
+			// Terms acceptance check
+			if !loginResp.AcceptedTerms {
+				if req.TermsAccepted != nil && *req.TermsAccepted {
+					_ = h.services.ICAuth.AcceptTerms(r.Context(), loginResp.ID)
+					if h.qsUserRepo != nil {
+						_ = h.qsUserRepo.AcceptTerms(r.Context(), loginResp.ID)
+					}
+				} else {
+					writeJSON(w, 203, map[string]any{
+						"termsAcceptedRes": map[string]any{
+							"termsAccepted": false,
+							"userId":        loginResp.ID,
+						},
+					})
+					return
+				}
+			}
 
-	if h.cfg.AuthAPIURL != "" {
-		payload := centralAuthLoginRequest{
-			UserName:   req.Email,
-			Password:   req.Password,
-			UserPoolId: h.cfg.Cognito.UserPoolID,
-			ClientId:   h.cfg.Cognito.AppClientID,
-		}
-		body, status, err := h.callAuthService(r.Context(), "/authentication/qs/login", payload)
-		if err == nil && status >= 200 && status < 500 {
-			cognitoBody = body
-			cognitoStatus = status
-		} else {
-			slog.Warn("central auth service failed, falling back to direct Cognito", "status", status, "error", err)
-		}
-	}
+			userInfo := map[string]any{
+				"IdToken":   loginResp.CognitoToken,
+				"id":        loginResp.ID,
+				"firstName": loginResp.FirstName,
+				"lastName":  loginResp.LastName,
+				"email":     loginResp.Email,
+				"roles":     loginResp.Roles,
+			}
 
-	if cognitoBody == nil {
-		body, status, err := h.cognitoAdminAuth(r.Context(), req.Email, req.Password)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]any{
-				"error":        "An error occured while log in",
-				"errorMessage": "An error occured while log in",
+			// Enrich with QS DB data if available
+			if h.qsUserRepo != nil {
+				u, err := h.qsUserRepo.GetByEmail(r.Context(), req.Email)
+				if err == nil && u != nil {
+					userInfo["id"] = u.ID
+					userInfo["firstName"] = nullStr(u.FirstName)
+					userInfo["lastName"] = nullStr(u.LastName)
+				}
+			}
+
+			writeJSON(w, http.StatusOK, map[string]any{
+				"statusCode": 200,
+				"body": map[string]any{
+					"statusCode": 200,
+					"body": map[string]any{
+						"userInfo":    userInfo,
+						"apiKey":      h.cfg.AuthAPIKey,
+						"icUserId":    loginResp.ID,
+						"icAuthToken": loginResp.AccessToken,
+						// Tokens at body level for frontend convenience
+						"IdToken":      loginResp.CognitoToken,
+						"AccessToken":  loginResp.AccessToken,
+						"RefreshToken": "",
+					},
+				},
 			})
 			return
 		}
-		cognitoBody = body
-		cognitoStatus = status
+
+		// InCrowdAPI returned an error
+		if err != nil && statusCode > 0 {
+			slog.Warn("InCrowdAPI login failed", "status", statusCode, "error", err)
+			if statusCode == http.StatusUnauthorized || statusCode == http.StatusUnprocessableEntity {
+				writeJSON(w, http.StatusUnauthorized, map[string]any{
+					"error":        "Invalid email or password",
+					"errorMessage": "Invalid email or password",
+				})
+				return
+			}
+			slog.Warn("InCrowdAPI login error, falling back to direct Cognito", "status", statusCode, "error", err)
+		}
 	}
 
-	// Non-200 from Cognito → forward error in legacy format
-	if cognitoStatus != http.StatusOK {
+	// ── Fallback: direct Cognito auth ───────────────────────────────
+	body, status, err := h.cognitoAdminAuth(r.Context(), req.Email, req.Password)
+	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        "An error occured while log in",
-			"errorMessage": "An error occured while log in",
+			"error":        "An error occurred while logging in",
+			"errorMessage": "An error occurred while logging in",
 		})
 		return
 	}
 
-	// Parse Cognito tokens from response
-	var tokens map[string]any
-	_ = json.Unmarshal(cognitoBody, &tokens)
+	if status != http.StatusOK {
+		// Cognito returned an error — forward it
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write(body)
+		return
+	}
 
-	// Enrich with user profile from QS DB (legacy side effect)
-	var userInfo map[string]any
-	if tokens != nil {
-		userInfo = map[string]any{}
-		for k, v := range tokens {
-			userInfo[k] = v
-		}
-	} else {
-		userInfo = map[string]any{}
+	var tokens map[string]any
+	_ = json.Unmarshal(body, &tokens)
+
+	userInfo := map[string]any{}
+	for k, v := range tokens {
+		userInfo[k] = v
 	}
 
 	if h.qsUserRepo != nil {
@@ -201,7 +233,6 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 			userInfo["firstName"] = nullStr(u.FirstName)
 			userInfo["lastName"] = nullStr(u.LastName)
 
-			// Handle termsAccepted: update DB if accepted, check status if not
 			if req.TermsAccepted != nil && *req.TermsAccepted {
 				_ = h.qsUserRepo.AcceptTerms(r.Context(), u.ID)
 			} else if u.TermsAccepted != 1 {
@@ -216,19 +247,20 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build legacy-shaped response: nested {statusCode, body: {statusCode, body: {userInfo, apiKey}}}
-	legacyResp := map[string]any{
+	writeJSON(w, http.StatusOK, map[string]any{
 		"statusCode": 200,
 		"body": map[string]any{
 			"statusCode": 200,
 			"body": map[string]any{
 				"userInfo": userInfo,
 				"apiKey":   h.cfg.AuthAPIKey,
+				// Tokens at body level for frontend convenience
+				"IdToken":      tokens["IdToken"],
+				"AccessToken":  tokens["AccessToken"],
+				"RefreshToken": tokens["RefreshToken"],
 			},
 		},
-	}
-
-	writeJSON(w, http.StatusOK, legacyResp)
+	})
 }
 
 func (h *Handler) AuthMagicLink(w http.ResponseWriter, r *http.Request) {
@@ -240,6 +272,8 @@ func (h *Handler) AuthMagicLink(w http.ResponseWriter, r *http.Request) {
 
 type refreshRequest struct {
 	RefreshToken string `json:"refreshToken"`
+	ICUserID     int64  `json:"icUserId"`
+	ICAuthToken  string `json:"icAuthToken"`
 }
 
 func (h *Handler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
@@ -248,32 +282,29 @@ func (h *Handler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
 		return
 	}
+
+	// ── Primary path: proxy to InCrowdAPI ───────────────────────────
+	if h.services.ICAuth != nil && h.services.ICAuth.Configured() && req.ICUserID > 0 && req.ICAuthToken != "" {
+		newIDToken, err := h.services.ICAuth.RefreshToken(r.Context(), req.ICUserID, req.ICAuthToken)
+		if err == nil && newIDToken != "" {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"IdToken":     newIDToken,
+				"AccessToken": req.ICAuthToken,
+			})
+			return
+		}
+		slog.Warn("InCrowdAPI token refresh failed, falling back to direct Cognito", "error", err)
+	}
+
+	// ── Fallback: direct Cognito refresh ────────────────────────────
 	if req.RefreshToken == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "refreshToken is required"})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "refreshToken or icUserId+icAuthToken is required"})
 		return
 	}
 
-	// Try central auth service first
-	if h.cfg.AuthAPIURL != "" {
-		payload := centralAuthRefreshRequest{
-			RefreshToken: req.RefreshToken,
-			UserPoolId:   h.cfg.Cognito.UserPoolID,
-			ClientId:     h.cfg.Cognito.AppClientID,
-		}
-		body, status, err := h.callAuthService(r.Context(), "/authentication/qs/refresh", payload)
-		if err == nil && status >= 200 && status < 400 {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(status)
-			_, _ = w.Write(body)
-			return
-		}
-		slog.Warn("central auth refresh failed, falling back to direct Cognito", "status", status, "error", err)
-	}
-
-	// Fallback: call Cognito InitiateAuth with REFRESH_TOKEN flow directly
 	body, status, err := h.cognitoRefresh(r.Context(), req.RefreshToken)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("cognito refresh error: %v", err)})
+		writeJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("token refresh error: %v", err)})
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -283,24 +314,62 @@ func (h *Handler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) AuthPassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Password string `json:"password"`
-		Token    string `json:"token"`
-		UserID   int64  `json:"userId"`
+		OldPassword string `json:"currentPassword"`
+		NewPassword string `json:"newPassword"`
+		Password    string `json:"password"`
+		Token       string `json:"token"`
+		UserID      int64  `json:"userId"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error":        err.Error(),
-			"errorMessage": "An error occured while creating a new user",
-		})
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
 		return
 	}
 
-	// Password change delegated to Cognito (frontend calls Cognito directly).
-	// This endpoint acknowledges and returns user profile matching legacy proxy response.
-	slog.Info("password change requested", "userId", req.UserID)
+	user := middleware.GetUser(r)
 
-	if req.UserID > 0 && h.qsUserRepo != nil {
-		u, err := h.qsUserRepo.GetByID(r.Context(), req.UserID)
+	newPwd := req.NewPassword
+	if newPwd == "" {
+		newPwd = req.Password
+	}
+	if newPwd == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "newPassword is required"})
+		return
+	}
+
+	// Derive user ID: prefer JWT-authenticated identity, fall back to request body
+	targetUserID := req.UserID
+	if targetUserID == 0 && h.qsUserRepo != nil && user != nil && user.Email != "" {
+		u, err := h.qsUserRepo.GetByEmail(r.Context(), user.Email)
+		if err == nil && u != nil {
+			targetUserID = u.ID
+		}
+	}
+
+	// Proxy to InCrowdAPI
+	if h.services.ICAuth == nil || !h.services.ICAuth.Configured() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "password change service unavailable"})
+		return
+	}
+
+	// Extract IC-Auth token from request header for authentication
+	icAuthToken := ""
+	if icAuth := r.Header.Get("IC-Auth"); icAuth != "" {
+		if parts := strings.SplitN(icAuth, ":", 2); len(parts) == 2 {
+			icAuthToken = parts[1]
+		}
+	}
+
+	err := h.services.ICAuth.ChangePassword(r.Context(), targetUserID, icAuthToken, req.OldPassword, newPwd)
+	if err != nil {
+		slog.Warn("InCrowdAPI password change failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "password change failed"})
+		return
+	}
+
+	slog.Info("password changed", "userId", targetUserID, "sub", user.Sub)
+
+	if targetUserID > 0 && h.qsUserRepo != nil {
+		u, err := h.qsUserRepo.GetByID(r.Context(), targetUserID)
 		if err == nil && u != nil {
 			writeJSON(w, http.StatusOK, map[string]any{
 				"id":         u.ID,
@@ -331,170 +400,179 @@ func (h *Handler) AuthMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ──────────────────────────────────────────────
-// SSO — Cognito Hosted UI OAuth2 authorization code flow
-// ──────────────────────────────────────────────
+// AuthLogout revokes the user's session via InCrowdAPI and clears server-side state.
+func (h *Handler) AuthLogout(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ICUserID    int64  `json:"icUserId"`
+		ICAuthToken string `json:"icAuthToken"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
 
-// AuthSSOConfig returns the SSO authorize URL so the frontend can redirect.
-func (h *Handler) AuthSSOConfig(w http.ResponseWriter, r *http.Request) {
-	c := h.cfg.Cognito
-	if c.SSOClientID == "" || c.Domain == "" || c.SSORedirectURI == "" {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "SSO not configured"})
+	// Proxy logout to InCrowdAPI to revoke IC session
+	if h.services.ICAuth != nil && h.services.ICAuth.Configured() && req.ICUserID > 0 {
+		if err := h.services.ICAuth.Logout(r.Context(), req.ICUserID, req.ICAuthToken); err != nil {
+			slog.Warn("InCrowdAPI logout failed", "error", err)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"message": "logged out"})
+}
+
+// AuthAcceptTerms proxies terms acceptance to InCrowdAPI and updates local QS DB.
+func (h *Handler) AuthAcceptTerms(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UserID int64 `json:"userId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.UserID == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "userId is required"})
 		return
 	}
 
+	// Proxy to InCrowdAPI
+	if h.services.ICAuth != nil && h.services.ICAuth.Configured() {
+		if err := h.services.ICAuth.AcceptTerms(r.Context(), req.UserID); err != nil {
+			slog.Warn("InCrowdAPI accept terms failed", "error", err)
+		}
+	}
+
+	// Also update local QS DB
+	if h.qsUserRepo != nil {
+		_ = h.qsUserRepo.AcceptTerms(r.Context(), req.UserID)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"message": "terms accepted"})
+}
+
+// ──────────────────────────────────────────────
+// SSO — OAuth2 Authorization Code flow via Cognito Hosted UI
+// ──────────────────────────────────────────────
+
+// AuthSSOConfig returns the Cognito authorize URL so the frontend can redirect.
+func (h *Handler) AuthSSOConfig(w http.ResponseWriter, r *http.Request) {
+	cfg := h.cfg.Cognito
+	if cfg.Domain == "" || cfg.SSOClientID == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "SSO is not configured for this environment",
+		})
+		return
+	}
+
+	// Allow frontend to override redirect URI (for different environments)
+	redirectURI := cfg.SSORedirectURI
+	if override := r.URL.Query().Get("redirectUri"); override != "" {
+		redirectURI = override
+	}
+
 	authorizeURL := fmt.Sprintf(
-		"https://%s/oauth2/authorize?response_type=code&client_id=%s&scope=email+openid&redirect_uri=%s",
-		c.Domain, c.SSOClientID, c.SSORedirectURI,
+		"https://%s/oauth2/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=email+openid+profile",
+		cfg.Domain,
+		cfg.SSOClientID,
+		url.QueryEscape(redirectURI),
 	)
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"authorizeUrl": authorizeURL,
-		"clientId":     c.SSOClientID,
-		"redirectUri":  c.SSORedirectURI,
+		"data": map[string]any{
+			"authorizeUrl": authorizeURL,
+			"redirectUri":  redirectURI,
+		},
 	})
 }
 
-type ssoCallbackRequest struct {
-	Code        string `json:"code"`
-	RedirectURI string `json:"redirectUri"`
-}
-
-// AuthSSOCallback exchanges an OAuth2 authorization code for Cognito tokens.
+// AuthSSOCallback exchanges an authorization code for tokens via the Cognito token endpoint.
 func (h *Handler) AuthSSOCallback(w http.ResponseWriter, r *http.Request) {
-	var req ssoCallbackRequest
+	var req struct {
+		Code        string `json:"code"`
+		RedirectURI string `json:"redirectUri"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid request body"})
 		return
 	}
-	if req.Code == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "code is required"})
+	if req.Code == "" || req.RedirectURI == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "code and redirectUri are required"})
 		return
 	}
 
-	c := h.cfg.Cognito
-	if c.SSOClientID == "" || c.Domain == "" {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "SSO not configured"})
+	cfg := h.cfg.Cognito
+	if cfg.Domain == "" || cfg.SSOClientID == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "SSO is not configured"})
 		return
 	}
 
-	redirectURI := req.RedirectURI
-	if redirectURI == "" {
-		redirectURI = c.SSORedirectURI
-	}
-
-	body, status, err := h.cognitoTokenExchange(r.Context(), req.Code, redirectURI)
+	tokens, err := h.cognitoExchangeCode(r.Context(), req.Code, req.RedirectURI)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("token exchange error: %v", err)})
+		slog.Warn("SSO code exchange failed", "error", err)
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "SSO authentication failed"})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = w.Write(body)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"statusCode": 200,
+		"body": map[string]any{
+			"statusCode": 200,
+			"body": map[string]any{
+				"userInfo": map[string]any{
+					"IdToken": tokens.IDToken,
+				},
+				"IdToken":      tokens.IDToken,
+				"AccessToken":  tokens.AccessToken,
+				"RefreshToken": tokens.RefreshToken,
+			},
+		},
+	})
 }
 
-// cognitoTokenExchange calls the Cognito /oauth2/token endpoint to exchange
-// an authorization code for id_token, access_token, and refresh_token.
-func (h *Handler) cognitoTokenExchange(ctx context.Context, code, redirectURI string) ([]byte, int, error) {
-	c := h.cfg.Cognito
-	tokenURL := fmt.Sprintf("https://%s/oauth2/token", c.Domain)
+// cognitoExchangeCode exchanges an authorization code for tokens via the Cognito OAuth2 token endpoint.
+func (h *Handler) cognitoExchangeCode(ctx context.Context, code, redirectURI string) (*ssoTokens, error) {
+	cfg := h.cfg.Cognito
+	tokenURL := fmt.Sprintf("https://%s/oauth2/token", cfg.Domain)
 
-	form := fmt.Sprintf(
-		"grant_type=authorization_code&client_id=%s&client_secret=%s&code=%s&redirect_uri=%s",
-		c.SSOClientID, c.SSOClientSecret, code, redirectURI,
-	)
+	data := url.Values{
+		"grant_type":   {"authorization_code"},
+		"client_id":    {cfg.SSOClientID},
+		"code":         {code},
+		"redirect_uri": {redirectURI},
+	}
 
+	// If client secret is configured, add it as Basic auth
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, bytes.NewBufferString(form))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
-		return nil, 0, fmt.Errorf("create token request: %w", err)
+		return nil, fmt.Errorf("create token request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
+	if cfg.SSOClientSecret != "" {
+		creds := base64.StdEncoding.EncodeToString([]byte(cfg.SSOClientID + ":" + cfg.SSOClientSecret))
+		req.Header.Set("Authorization", "Basic "+creds)
+	}
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("call cognito token: %w", err)
+		return nil, fmt.Errorf("call cognito token endpoint: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, 0, fmt.Errorf("read token response: %w", err)
-	}
-
-	// Cognito returns {id_token, access_token, refresh_token, expires_in, token_type}
-	// Normalize to our standard shape
-	if resp.StatusCode == http.StatusOK {
-		var tokenResp struct {
-			IDToken      string `json:"id_token"`
-			AccessToken  string `json:"access_token"`
-			RefreshToken string `json:"refresh_token"`
-			ExpiresIn    int    `json:"expires_in"`
-			TokenType    string `json:"token_type"`
-		}
-		if err := json.Unmarshal(body, &tokenResp); err == nil && tokenResp.IDToken != "" {
-			normalized, _ := json.Marshal(map[string]any{
-				"IdToken":      tokenResp.IDToken,
-				"AccessToken":  tokenResp.AccessToken,
-				"RefreshToken": tokenResp.RefreshToken,
-				"ExpiresIn":    tokenResp.ExpiresIn,
-				"TokenType":    tokenResp.TokenType,
-			})
-			return normalized, http.StatusOK, nil
-		}
-	}
-
-	// On error, return Cognito's error response
+	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		var cognitoErr struct {
-			Error string `json:"error"`
-		}
-		if err := json.Unmarshal(body, &cognitoErr); err == nil && cognitoErr.Error != "" {
-			errorResp, _ := json.Marshal(map[string]any{"error": cognitoErr.Error})
-			return errorResp, http.StatusUnauthorized, nil
-		}
+		return nil, fmt.Errorf("cognito token endpoint returned %d: %s", resp.StatusCode, string(body))
 	}
 
-	return body, resp.StatusCode, nil
+	var result ssoTokens
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("parse token response: %w", err)
+	}
+	return &result, nil
 }
 
-// callAuthService sends a JSON payload to the central auth API Gateway endpoint.
-func (h *Handler) callAuthService(ctx context.Context, path string, payload any) ([]byte, int, error) {
-	if h.cfg.AuthAPIURL == "" {
-		return nil, 0, fmt.Errorf("AUTH_API_URL not configured")
-	}
-
-	jsonBody, err := json.Marshal(payload)
-	if err != nil {
-		return nil, 0, fmt.Errorf("marshal payload: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, h.cfg.AuthAPIURL+path, bytes.NewReader(jsonBody))
-	if err != nil {
-		return nil, 0, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if h.cfg.AuthAPIKey != "" {
-		req.Header.Set("X-API-Key", h.cfg.AuthAPIKey)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, 0, fmt.Errorf("call auth service: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, 0, fmt.Errorf("read response: %w", err)
-	}
-
-	return body, resp.StatusCode, nil
+type ssoTokens struct {
+	IDToken      string `json:"id_token"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+	TokenType    string `json:"token_type"`
 }
 
 // cognitoAdminAuth calls the Cognito InitiateAuth API directly via HTTPS.
