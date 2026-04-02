@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
@@ -61,22 +60,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 				log.Error("iris project list failed", "error", err)
 			} else {
 				for _, p := range irisProjects {
-					result = append(result, map[string]any{
-						"id":                  p.ID,
-						"name":                p.Name,
-						"description":         nullStr(p.Description),
-						"subscriptionId":      p.SubscriptionID,
-						"subscriptionCompany": nullStr(p.SubscriptionCompany),
-						"statusId":            p.ProjectStatusID,
-						"status":              p.ProjectStatusName,
-						"projectTypeId":       p.ProjectTypeID,
-						"salesforceProjectId": nullStr(p.SalesforceProjectID),
-						"isArchived":          p.IsArchived,
-						"createdAt":           p.CreatedOn.Format(time.RFC3339),
-						"modifiedAt":          nullTime(p.ModifiedOn),
-						"source":              "iris",
-						"serviceCategory":     "LS",
-					})
+					result = append(result, dto.ProjectFromIRISList(p))
 				}
 				_ = irisTotal
 			}
@@ -91,23 +75,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 				log.Error("qs project list failed", "error", err)
 			} else {
 				for _, p := range qsProjects {
-					result = append(result, map[string]any{
-						"id":                  p.ID,
-						"name":                p.Name,
-						"salesforceJobNumber": nullStr(p.SalesforceJobNumber),
-						"clientId":            nullInt64(p.ClientID),
-						"clientCompany":       nullStr(p.ClientCompany),
-						"sampleSize":          nullInt64(p.SampleSize),
-						"interviewLength":     nullInt64(p.InterviewLength),
-						"statusId":            p.ProjectStatusID,
-						"status":              p.ProjectStatusName,
-						"scheduledCount":      p.ScheduledCount,
-						"completedCount":      p.CompletedCount,
-						"createdAt":           p.CreatedOn.Format(time.RFC3339),
-						"modifiedAt":          nullTime(p.ModifiedOn),
-						"source":              "qs",
-						"serviceCategory":     "MRA",
-					})
+					result = append(result, dto.ProjectFromQSList(p))
 				}
 				_ = qsTotal
 			}
@@ -215,26 +183,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 			for _, t := range topics {
 				topicNames = append(topicNames, t.TopicName)
 			}
-			writeJSON(w, http.StatusOK, map[string]any{
-				"id":                  p.ID,
-				"name":                p.Name,
-				"externalSurveyId":    nullStr(p.ExternalSurveyID),
-				"salesforceJobNumber": nullStr(p.SalesforceJobNumber),
-				"clientId":            nullInt64(p.ClientID),
-				"sampleSize":          nullInt64(p.SampleSize),
-				"interviewLength":     nullInt64(p.InterviewLength),
-				"statusId":            p.ProjectStatusID,
-				"schedulerGenerated":  p.SchedulerGenerated,
-				"postScreeninBuffer":  nullStr(p.PostScreeninBuffer),
-				"moderatorBuffer":     nullStr(p.ModeratorBuffer),
-				"topics":              topicNames,
-				"scheduledCount":      scheduled,
-				"completedCount":      completed,
-				"createdAt":           p.CreatedOn.Format(time.RFC3339),
-				"modifiedAt":          nullTime(p.ModifiedOn),
-				"source":              "qs",
-				"serviceCategory":     "MRA",
-			})
+			writeJSON(w, http.StatusOK, dto.ProjectDetailFromQS(p, scheduled, completed, topicNames))
 			return
 		}
 	}
@@ -248,22 +197,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if p != nil {
-			writeJSON(w, http.StatusOK, map[string]any{
-				"id":                  p.ID,
-				"name":                p.Name,
-				"description":         nullStr(p.Description),
-				"subscriptionId":      p.SubscriptionID,
-				"statusId":            p.ProjectStatusID,
-				"status":              irisStatusName[p.ProjectStatusID],
-				"projectTypeId":       p.ProjectTypeID,
-				"salesforceProjectId": nullStr(p.SalesforceProjectID),
-				"isPrivate":           p.IsPrivate,
-				"isArchived":          p.IsArchived,
-				"createdAt":           p.CreatedOn.Format(time.RFC3339),
-				"modifiedAt":          nullTime(p.ModifiedOn),
-				"source":              "iris",
-				"serviceCategory":     "LS",
-			})
+			writeJSON(w, http.StatusOK, dto.ProjectDetailFromIRIS(p, irisStatusName[p.ProjectStatusID]))
 			return
 		}
 	}
