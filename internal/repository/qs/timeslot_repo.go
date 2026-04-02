@@ -488,3 +488,248 @@ func (repo *TimeSlotRepo) GetPendingTimeslotByProjectAndResponderMRA(ctx context
 	}
 	return records, rows.Err()
 }
+
+// GetModeratorTimeSlotsMRA returns moderator timeslots matching legacy getModeratorTimeSlotsByModeratorId.
+func (r *TimeSlotRepo) GetModeratorTimeSlotsMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error) {
+q := `SELECT t.id AS timeSlotId, t.start_time AS startTime, t.end_time AS endTime,
+t.status_id AS completed, t.duration,
+t.is_invalidated_interview AS isInvalidatedInterview,
+t.is_invalidate_email_sent AS isInvalidateEmailSent,
+CASE WHEN EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id = t.id AND tsph.payment_status = 'COMPLETED') THEN true ELSE false END AS paymentStatus,
+(CASE WHEN t.has_imported_overlap IS NULL THEN '0' ELSE t.has_imported_overlap END) AS importedOverLap,
+ad.responder_id AS intervieweeId,
+t.project_id AS projectId,
+COALESCE(topics.topic_name, '') AS topicName,
+p.name AS projectName
+FROM time_slot t
+INNER JOIN project p ON p.id = t.project_id
+LEFT JOIN topics ON p.id = topics.project_id AND topics.language_id = 1
+INNER JOIN answer_details ad ON ad.time_slot_id = t.id
+WHERE t.id IN (SELECT time_slot_id FROM moderator_time_slot WHERE moderator_id = ?)
+AND t.status_id IN (2, 7, 8, 9) AND p.client_id = ?`
+rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
+if err != nil {
+return nil, fmt.Errorf("get moderator timeslots mra: %w", err)
+}
+defer rows.Close()
+var records []map[string]any
+for rows.Next() {
+var tsID, projectID, intervieweeID int64
+var completed, duration int
+var isInvalidatedInterview, isInvalidateEmailSent, paymentStatus bool
+var importedOverLap, topicName, projectName, startTime, endTime string
+if err := rows.Scan(&tsID, &startTime, &endTime, &completed, &duration,
+&isInvalidatedInterview, &isInvalidateEmailSent, &paymentStatus,
+&importedOverLap, &intervieweeID, &projectID, &topicName, &projectName); err != nil {
+return nil, fmt.Errorf("scan moderator timeslot mra: %w", err)
+}
+records = append(records, map[string]any{
+"timeSlotId": tsID, "startTime": startTime, "endTime": endTime,
+"completed": completed, "duration": duration,
+"isInvalidatedInterview": isInvalidatedInterview,
+"isInvalidateEmailSent": isInvalidateEmailSent,
+"paymentStatus": paymentStatus, "importedOverLap": importedOverLap,
+"intervieweeId": intervieweeID, "projectId": projectID,
+"topicName": topicName, "projectName": projectName,
+})
+}
+if records == nil {
+records = []map[string]any{}
+}
+return records, rows.Err()
+}
+
+// GetModeratorTimeSlotsWithFilterMRA returns moderator timeslots with project exclusion filter.
+func (r *TimeSlotRepo) GetModeratorTimeSlotsWithFilterMRA(ctx context.Context, moderatorID, clientID int64, excludeProjectIDs []int64) ([]map[string]any, error) {
+if len(excludeProjectIDs) == 0 {
+return r.GetModeratorTimeSlotsMRA(ctx, moderatorID, clientID)
+}
+placeholders := make([]string, len(excludeProjectIDs))
+args := []any{moderatorID}
+for i, pid := range excludeProjectIDs {
+placeholders[i] = "?"
+args = append(args, pid)
+}
+args = append(args, clientID)
+
+q := fmt.Sprintf(`SELECT t.id AS timeSlotId, t.start_time AS startTime, t.end_time AS endTime,
+t.status_id AS completed, t.duration,
+(CASE WHEN t.has_imported_overlap IS NULL THEN '0' ELSE t.has_imported_overlap END) AS importedOverLap,
+ad.responder_id AS intervieweeId,
+t.project_id AS projectId,
+p.name AS projectName,
+COALESCE(topics.topic_name, '') AS topicName
+FROM time_slot t
+INNER JOIN project p ON p.id = t.project_id
+INNER JOIN answer_details ad ON ad.time_slot_id = t.id
+LEFT JOIN topics ON t.project_id = topics.project_id AND topics.language_id = 1
+WHERE t.id IN (SELECT time_slot_id FROM moderator_time_slot WHERE moderator_id = ?)
+AND t.status_id IN (2, 7, 8, 9)
+AND t.project_id NOT IN (%s)
+AND p.client_id = ?`, strings.Join(placeholders, ","))
+rows, err := r.db.QueryContext(ctx, q, args...)
+if err != nil {
+return nil, fmt.Errorf("get moderator timeslots with filter mra: %w", err)
+}
+defer rows.Close()
+var records []map[string]any
+for rows.Next() {
+var tsID, projectID, intervieweeID int64
+var completed, duration int
+var importedOverLap, topicName, projectName, startTime, endTime string
+if err := rows.Scan(&tsID, &startTime, &endTime, &completed, &duration,
+&importedOverLap, &intervieweeID, &projectID, &projectName, &topicName); err != nil {
+return nil, fmt.Errorf("scan moderator timeslot with filter mra: %w", err)
+}
+records = append(records, map[string]any{
+"timeSlotId": tsID, "startTime": startTime, "endTime": endTime,
+"completed": completed, "duration": duration,
+"importedOverLap": importedOverLap,
+"intervieweeId": intervieweeID, "projectId": projectID,
+"projectName": projectName, "topicName": topicName,
+})
+}
+if records == nil {
+records = []map[string]any{}
+}
+return records, rows.Err()
+}
+
+// GetAllInterviewsMRA returns all interviews for a moderator matching legacy getAllInterviews query.
+// Supports search, project exclusion, and payment status filtering.
+func (r *TimeSlotRepo) GetAllInterviewsMRA(ctx context.Context, moderatorID int64, search string, excludeProjectIDs []int64, paymentStatusCode string) ([]map[string]any, error) {
+baseSelect := `SELECT project.external_survey_id AS externalSurveyId,
+COALESCE(salesforce_account.name, '') AS clientName,
+responder.external_responder_id AS participantId,
+moderator_info.id AS moderatorId,
+time_slot.duration,
+(CASE WHEN time_slot.has_imported_overlap IS NULL THEN '0' ELSE time_slot.has_imported_overlap END) AS importedOverLap,
+time_slot.start_time AS startTime,
+time_slot.end_time AS endTime,
+time_slot.id AS timeSlotId,
+COALESCE(time_slot.conference_hash, '') AS conferenceHash,
+moderator_info.first_name AS firstName,
+moderator_info.last_name AS lastName,
+project.name AS projectName,
+project.id AS projectId,
+COALESCE(topics.topic_name, '') AS topicName,
+COALESCE(conference_invitation.conference_link, '') AS conferenceLink,
+COALESCE(project.salesforce_job_number, '') AS salesforceJobNumber,
+COALESCE(defaultHonorarium.amount, 0) AS defaultHonorariumAmount,
+COALESCE(defaultHonorarium.currency, '') AS defaultHonorariumCurrency,
+COALESCE(customHonorarium.new_value, 0) AS customHonorariumAmount,
+COALESCE(payments.totalAmount, 0) AS totalAmount,
+COALESCE(payments.paymentDate, '') AS paymentDate,
+COALESCE(payments.source, '') AS source,
+COALESCE(payments.currency, '') AS currency,
+COALESCE(responder.first_name, '') AS participantFirstName,
+COALESCE(responder.last_name, '') AS participantLastName,
+(CASE
+WHEN EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id=time_slot.id AND tsph.payment_status='COMPLETED') THEN 'CREDITED'
+WHEN NOT EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id=time_slot.id AND tsph.payment_status='COMPLETED') AND time_slot.end_time < CURDATE() - INTERVAL 7 DAY THEN 'PAST_DUE'
+ELSE 'NOT_CREDITED' END) AS paymentStatus`
+
+baseFrom := `
+FROM responder
+INNER JOIN answer_details ON responder.id = answer_details.responder_id
+INNER JOIN time_slot ON time_slot.id = answer_details.time_slot_id
+INNER JOIN (SELECT user.id AS id, user.first_name AS first_name, user.last_name AS last_name,
+moderator_time_slot.time_slot_id FROM moderator_time_slot
+INNER JOIN user ON user.id = moderator_time_slot.moderator_id
+WHERE moderator_time_slot.is_host) moderator_info ON moderator_info.time_slot_id = time_slot.id
+INNER JOIN project ON time_slot.project_id = project.id
+LEFT JOIN topics ON project.id = topics.project_id AND topics.language_id = 1
+INNER JOIN conference_invitation_responder_time_slot ON conference_invitation_responder_time_slot.time_slot_id = time_slot.id
+INNER JOIN conference_invitation ON conference_invitation.id = conference_invitation_responder_time_slot.conference_invitation_id
+INNER JOIN client ON client.id = project.client_id
+LEFT JOIN external_client ON project.project_external_client = external_client.id
+LEFT JOIN salesforce_account ON salesforce_account.salesforce_account_id = external_client.external_client_account_id
+LEFT JOIN (SELECT SUM(tsph.amount) AS totalAmount, MAX(tsph.payment_date) AS paymentDate,
+MAX(tsph.source) AS source, MAX(tsph.currency) AS currency, time_slot_id
+FROM time_slot_payment_history tsph WHERE tsph.payment_status='COMPLETED'
+GROUP BY tsph.time_slot_id) payments ON payments.time_slot_id=time_slot.id
+LEFT JOIN (SELECT MAX(ha.honorarium) AS amount, MAX(ha.currency) AS currency, ts.id AS timeSlotId
+FROM time_slot ts JOIN time_slot_event tse ON tse.time_slot_id = ts.id
+JOIN responder r ON r.id = tse.responder_id JOIN honorarium_amount ha ON ha.sessKey = r.sess_key
+GROUP BY ts.id) defaultHonorarium ON defaultHonorarium.timeSlotId = time_slot.id
+LEFT JOIN time_slot_custom_honorarium customHonorarium ON customHonorarium.time_slot_id = time_slot.id`
+
+where := " WHERE moderator_info.id = ? AND time_slot.status_id IN (2, 7, 8, 9)"
+args := []any{moderatorID}
+
+if search != "" {
+where += " AND (project.name LIKE ? OR project.salesforce_job_number LIKE ? OR moderator_info.first_name LIKE ? OR moderator_info.last_name LIKE ?)"
+likeVal := "%" + search + "%"
+args = append(args, likeVal, likeVal, likeVal, likeVal)
+}
+
+if len(excludeProjectIDs) > 0 {
+ph := make([]string, len(excludeProjectIDs))
+for i, pid := range excludeProjectIDs {
+ph[i] = "?"
+args = append(args, pid)
+}
+where += " AND project.id NOT IN (" + strings.Join(ph, ",") + ")"
+}
+
+switch paymentStatusCode {
+case "CREDITED":
+where += " AND EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id=time_slot.id AND tsph.payment_status='COMPLETED')"
+case "NOT_CREDITED":
+where += " AND NOT EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id=time_slot.id AND tsph.payment_status='COMPLETED')"
+case "PAST_DUE":
+where += " AND NOT EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id=time_slot.id AND tsph.payment_status='COMPLETED') AND time_slot.end_time < CURDATE() - INTERVAL 7 DAY"
+}
+
+q := baseSelect + baseFrom + where + " ORDER BY time_slot.start_time ASC"
+rows, err := r.db.QueryContext(ctx, q, args...)
+if err != nil {
+return nil, fmt.Errorf("get all interviews mra: %w", err)
+}
+defer rows.Close()
+var records []map[string]any
+for rows.Next() {
+var (
+externalSurveyID, clientName, importedOverLap, startTime, endTime                                          string
+conferenceHash, firstName, lastName, projectName, topicName, conferenceLink, salesforceJobNumber            string
+defaultHonorariumCurrency, paymentDate, paymentSource, paymentCurrency, participantFirstName, participantLastName string
+paymentStatus                                                                                               string
+participantID                                                                                               string
+moderatorIDResult, duration, timeSlotID, projectID                                                          int64
+defaultHonorariumAmount, customHonorariumAmount, totalAmount                                                float64
+)
+if err := rows.Scan(
+&externalSurveyID, &clientName, &participantID, &moderatorIDResult, &duration,
+&importedOverLap, &startTime, &endTime, &timeSlotID, &conferenceHash,
+&firstName, &lastName, &projectName, &projectID, &topicName, &conferenceLink,
+&salesforceJobNumber, &defaultHonorariumAmount, &defaultHonorariumCurrency,
+&customHonorariumAmount, &totalAmount, &paymentDate, &paymentSource, &paymentCurrency,
+&participantFirstName, &participantLastName, &paymentStatus,
+); err != nil {
+return nil, fmt.Errorf("scan interview mra: %w", err)
+}
+records = append(records, map[string]any{
+"externalSurveyId": externalSurveyID, "clientName": clientName,
+"participantId": participantID, "moderatorId": moderatorIDResult,
+"duration": duration, "importedOverLap": importedOverLap,
+"startTime": startTime, "endTime": endTime,
+"timeSlotId": timeSlotID, "conferenceHash": conferenceHash,
+"firstName": firstName, "lastName": lastName,
+"projectName": projectName, "projectId": projectID,
+"topicName": topicName, "conferenceLink": conferenceLink,
+"salesforceJobNumber": salesforceJobNumber,
+"defaultHonorariumAmount": defaultHonorariumAmount,
+"defaultHonorariumCurrency": defaultHonorariumCurrency,
+"customHonorariumAmount": customHonorariumAmount,
+"totalAmount": totalAmount, "paymentDate": paymentDate,
+"source": paymentSource, "currency": paymentCurrency,
+"participantFirstName": participantFirstName,
+"participantLastName": participantLastName,
+"paymentStatus": paymentStatus,
+})
+}
+if records == nil {
+records = []map[string]any{}
+}
+return records, rows.Err()
+}

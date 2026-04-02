@@ -4427,3 +4427,102 @@ func isWithinModeratorTimeRange(rangeStart, rangeEnd, timezone string, newStart,
 	}
 	return rangeStartInt <= startHHMM && rangeEndInt >= endHHMM
 }
+
+// GetModeratorTimeslotsMRA handles POST /moderator/get/{moderator_id}/client/{client_id}/time_slots (MRA).
+// Contract-identical with legacy: external calendar check, optional project filter, returns timeslots
+// with payment status, topic name, imported overlap, invalidation fields.
+func (h *Handler) GetModeratorTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
+modIDStr := chi.URLParam(r, "moderator_id")
+modID, _ := strconv.ParseInt(modIDStr, 10, 64)
+clientIDStr := chi.URLParam(r, "client_id")
+clientID, _ := strconv.ParseInt(clientIDStr, 10, 64)
+
+if h.qsTimeSlotRepo == nil || h.qsUserRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+return
+}
+
+ctx := r.Context()
+
+// Check external calendar status
+calStatus, _ := h.qsUserRepo.GetModExternalCalendarStatusMRA(ctx, modID)
+if calStatus == "In Progress" {
+writeJSON(w, http.StatusMethodNotAllowed, map[string]any{
+"errorMessage": "There is a running import process for this moderator, try again later",
+})
+return
+}
+
+// Parse optional body for projectsToFilter
+var body struct {
+ProjectsToFilter []int64 `json:"projectsToFilter"`
+}
+if r.Body != nil {
+_ = json.NewDecoder(r.Body).Decode(&body)
+}
+
+var records []map[string]any
+var err error
+if len(body.ProjectsToFilter) > 0 {
+records, err = h.qsTimeSlotRepo.GetModeratorTimeSlotsWithFilterMRA(ctx, modID, clientID, body.ProjectsToFilter)
+} else {
+records, err = h.qsTimeSlotRepo.GetModeratorTimeSlotsMRA(ctx, modID, clientID)
+}
+if err != nil {
+slog.Error("get moderator timeslots mra failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        err.Error(),
+"errorMessage": "An error has occured while getting moderator time slots",
+})
+return
+}
+
+writeJSON(w, http.StatusOK, records)
+}
+
+// GetModeratorInterviewsMRA handles POST /moderator/get-all-interviews/{moderator_id} (MRA).
+// Contract-identical with legacy: returns interviews with payment status, honorarium, conference link,
+// supports search (query ?q=), project exclusion, and payment status filtering.
+func (h *Handler) GetModeratorInterviewsMRA(w http.ResponseWriter, r *http.Request) {
+	modIDStr := chi.URLParam(r, "moderator_id")
+	modID, _ := strconv.ParseInt(modIDStr, 10, 64)
+
+	if h.qsTimeSlotRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		return
+	}
+
+	// Parse body
+	var body struct {
+		ProjectsIDs       string `json:"projectsIds"`
+		PaymentStatusCode string `json:"paymentStatusCode"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+	}
+
+	// Parse search query param
+	search := r.URL.Query().Get("q")
+
+	// Parse project IDs to exclude
+	var excludeIDs []int64
+	if body.ProjectsIDs != "" && body.ProjectsIDs != "()" {
+		cleaned := strings.Trim(body.ProjectsIDs, "()")
+		for _, s := range strings.Split(cleaned, ",") {
+			s = strings.TrimSpace(s)
+			if id, err := strconv.ParseInt(s, 10, 64); err == nil {
+				excludeIDs = append(excludeIDs, id)
+			}
+		}
+	}
+
+	ctx := r.Context()
+	records, err := h.qsTimeSlotRepo.GetAllInterviewsMRA(ctx, modID, search, excludeIDs, body.PaymentStatusCode)
+	if err != nil {
+		slog.Error("get moderator interviews mra failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, records)
+}
