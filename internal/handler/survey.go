@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 	"github.com/go-chi/chi/v5"
 )
@@ -20,19 +21,19 @@ type SurveyHandler struct{ *Deps }
 func (h *SurveyHandler) ListSurveys(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.qsSurveyRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	search := r.URL.Query().Get("search")
 	rows, err := h.qsSurveyRepo.List(ctx, search)
 	if err != nil {
 		slog.Error("list surveys", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list surveys"})
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to list surveys"})
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, surveyToMap(&row))
+		out = append(out, dto.SurveyFromRow(&row))
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -48,7 +49,7 @@ type createSurveyRequest struct {
 func (h *SurveyHandler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.qsSurveyRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	var req createSurveyRequest
@@ -71,7 +72,7 @@ func (h *SurveyHandler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
 	newID, err := h.qsSurveyRepo.Create(ctx, req.ProjectID, req.Title, req.Status, req.Questions, req.Rules)
 	if err != nil {
 		slog.Error("create survey", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create survey"})
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create survey"})
 		return
 	}
 	row, err := h.qsSurveyRepo.GetByID(ctx, newID)
@@ -79,18 +80,18 @@ func (h *SurveyHandler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusCreated, map[string]any{"id": fmt.Sprintf("%d", newID)})
 		return
 	}
-	writeJSON(w, http.StatusCreated, surveyToMap(row))
+	writeJSON(w, http.StatusCreated, dto.SurveyFromRow(row))
 }
 
 func (h *SurveyHandler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.qsSurveyRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 	var req createSurveyRequest
@@ -106,7 +107,7 @@ func (h *SurveyHandler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.qsSurveyRepo.Update(ctx, surveyID, req.Title, req.Status, req.Questions, req.Rules); err != nil {
 		slog.Error("update survey", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to update survey"})
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to update survey"})
 		return
 	}
 	row, err := h.qsSurveyRepo.GetByID(ctx, surveyID)
@@ -114,23 +115,23 @@ func (h *SurveyHandler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"id": fmt.Sprintf("%d", surveyID), "updatedAt": now()})
 		return
 	}
-	writeJSON(w, http.StatusOK, surveyToMap(row))
+	writeJSON(w, http.StatusOK, dto.SurveyFromRow(row))
 }
 
 func (h *SurveyHandler) DeleteSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.qsSurveyRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 	if err := h.qsSurveyRepo.Delete(ctx, surveyID); err != nil {
 		slog.Error("delete survey", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete survey"})
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to delete survey"})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": true})
@@ -139,25 +140,25 @@ func (h *SurveyHandler) DeleteSurvey(w http.ResponseWriter, r *http.Request) {
 func (h *SurveyHandler) GetPublicSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.qsSurveyRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	surveyID, err := validate.ParseIDParam(r, "surveyId")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 	row, err := h.qsSurveyRepo.GetByID(ctx, surveyID)
 	if err != nil {
 		slog.Error("get public survey", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get survey"})
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to get survey"})
 		return
 	}
 	if row == nil {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+		writeJSON(w, http.StatusNotFound, dto.ErrorBody{Error: "survey not found"})
 		return
 	}
-	writeJSON(w, http.StatusOK, surveyToMap(row))
+	writeJSON(w, http.StatusOK, dto.SurveyFromRow(row))
 }
 
 // ──────────────────────────────────────────────

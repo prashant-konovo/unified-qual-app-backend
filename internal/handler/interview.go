@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
@@ -20,7 +21,7 @@ type InterviewHandler struct{ *Deps }
 func (h *InterviewHandler) ListTimeslots(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.qsTimeSlotRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 
@@ -74,7 +75,7 @@ func (h *InterviewHandler) ListTimeslots(w http.ResponseWriter, r *http.Request)
 	slots, total, err := h.qsTimeSlotRepo.List(ctx, page, pageSize, projectID, statusID, moderatorID, fromTime, toTime)
 	if err != nil {
 		slog.ErrorContext(ctx, "list timeslots failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list timeslots"})
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to list timeslots"})
 		return
 	}
 
@@ -128,7 +129,7 @@ func (h *InterviewHandler) ListTimeslots(w http.ResponseWriter, r *http.Request)
 func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.qsTimeSlotRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 
@@ -146,12 +147,12 @@ func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request
 
 	st, err := time.Parse(time.RFC3339, body.StartTime)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid startTime format, use RFC3339"})
+		writeJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: "invalid startTime format, use RFC3339"})
 		return
 	}
 	et, err := time.Parse(time.RFC3339, body.EndTime)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid endTime format, use RFC3339"})
+		writeJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: "invalid endTime format, use RFC3339"})
 		return
 	}
 	if body.Duration <= 0 {
@@ -170,7 +171,7 @@ func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request
 	tsID, err := h.qsTimeSlotRepo.Create(ctx, ts)
 	if err != nil {
 		slog.ErrorContext(ctx, "create timeslot failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create timeslot"})
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create timeslot"})
 		return
 	}
 
@@ -181,30 +182,30 @@ func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]any{"id": tsID, "projectId": body.ProjectID, "statusId": 1, "source": "qs"})
+	writeJSON(w, http.StatusCreated, dto.MutationResult{ID: tsID, Source: "qs"})
 }
 
 func (h *InterviewHandler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.qsTimeSlotRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 
 	tsID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 
 	ts, err := h.qsTimeSlotRepo.GetByID(ctx, tsID)
 	if err != nil {
 		slog.ErrorContext(ctx, "get timeslot failed", "error", err, "id", tsID)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "database error"})
 		return
 	}
 	if ts == nil {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "timeslot not found"})
+		writeJSON(w, http.StatusNotFound, dto.ErrorBody{Error: "timeslot not found"})
 		return
 	}
 
@@ -272,13 +273,13 @@ func (h *InterviewHandler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 func (h *InterviewHandler) UpdateTimeslot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.qsTimeSlotRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 
 	tsID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 
@@ -321,33 +322,33 @@ func (h *InterviewHandler) UpdateTimeslot(w http.ResponseWriter, r *http.Request
 
 	if err := h.qsTimeSlotRepo.Update(ctx, tsID, fields); err != nil {
 		slog.ErrorContext(ctx, "update timeslot failed", "error", err, "id", tsID)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "update failed"})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"id": tsID, "updated": true, "source": "qs"})
+	writeJSON(w, http.StatusOK, dto.MutationResult{ID: tsID, Updated: true, Source: "qs"})
 }
 
 func (h *InterviewHandler) DeleteTimeslot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.qsTimeSlotRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 
 	tsID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 
 	if err := h.qsTimeSlotRepo.Delete(ctx, tsID); err != nil {
 		slog.ErrorContext(ctx, "delete timeslot failed", "error", err, "id", tsID)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "delete failed"})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": tsID})
+	writeJSON(w, http.StatusOK, dto.MutationResult{ID: tsID, Deleted: true, Source: "qs"})
 }
 
 // ──────────────────────────────────────────────
@@ -371,7 +372,7 @@ func (h *InterviewHandler) GenerateSlots(w http.ResponseWriter, r *http.Request)
 func (h *InterviewHandler) GetAvailableSlots(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.qsTimeSlotRepo == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 
@@ -388,7 +389,7 @@ func (h *InterviewHandler) GetAvailableSlots(w http.ResponseWriter, r *http.Requ
 	slots, _, err := h.qsTimeSlotRepo.List(ctx, 1, 50, projectID, &openStatus, nil, nil, nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "get available slots failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get available slots"})
+		writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to get available slots"})
 		return
 	}
 

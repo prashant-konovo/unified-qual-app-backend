@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
@@ -164,10 +165,10 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		id, err := h.irisProjectRepo.Create(r.Context(), p)
 		if err != nil {
 			slog.Error("iris project create failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create project"})
+			writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create project"})
 			return
 		}
-		writeJSON(w, http.StatusCreated, map[string]any{"id": id, "source": "iris", "serviceCategory": "LS"})
+		writeJSON(w, http.StatusCreated, dto.MutationResult{ID: id, Source: "iris", ServiceCategory: "LS"})
 		return
 	}
 
@@ -185,14 +186,14 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		id, err := h.qsProjectRepo.Create(r.Context(), p)
 		if err != nil {
 			slog.Error("qs project create failed", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create project"})
+			writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create project"})
 			return
 		}
-		writeJSON(w, http.StatusCreated, map[string]any{"id": id, "source": "qs", "serviceCategory": "MRA"})
+		writeJSON(w, http.StatusCreated, dto.MutationResult{ID: id, Source: "qs", ServiceCategory: "MRA"})
 		return
 	}
 
-	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "no database available"})
 }
 
 // GetProject returns a project by ID.
@@ -201,7 +202,7 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 
@@ -212,7 +213,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		p, err := h.qsProjectRepo.GetByID(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs project get failed", "id", projectID, "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "database error"})
 			return
 		}
 		if p != nil {
@@ -251,7 +252,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		p, err := h.irisProjectRepo.GetByID(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris project get failed", "id", projectID, "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "database error"})
 			return
 		}
 		if p != nil {
@@ -275,7 +276,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusNotFound, map[string]any{"error": "project not found"})
+	writeJSON(w, http.StatusNotFound, dto.ErrorBody{Error: "project not found"})
 }
 
 type updateProjectRequest struct {
@@ -292,7 +293,7 @@ type updateProjectRequest struct {
 func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 
@@ -322,10 +323,10 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := h.irisProjectRepo.Update(r.Context(), projectID, fields); err != nil {
 			slog.Error("iris project update failed", "id", projectID, "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "update failed"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"id": projectID, "updated": true, "source": "iris"})
+		writeJSON(w, http.StatusOK, dto.MutationResult{ID: projectID, Updated: true, Source: "iris"})
 		return
 	}
 
@@ -339,21 +340,21 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := h.qsProjectRepo.Update(r.Context(), projectID, fields); err != nil {
 			slog.Error("qs project update failed", "id", projectID, "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "update failed"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"id": projectID, "updated": true, "source": "qs"})
+		writeJSON(w, http.StatusOK, dto.MutationResult{ID: projectID, Updated: true, Source: "qs"})
 		return
 	}
 
-	writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	writeJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "no database available"})
 }
 
 func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	// Soft-delete: archive instead of hard delete
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		writeJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 
@@ -363,19 +364,19 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		// QS: set project_status_id = 5 (Canceled)
 		if err := h.qsProjectRepo.Update(r.Context(), projectID, map[string]any{"project_status_id": 5}); err != nil {
 			slog.Error("qs project archive failed", "id", projectID, "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "archive failed"})
+			writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "archive failed"})
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"archived": true, "id": projectID, "source": "qs"})
+		writeJSON(w, http.StatusOK, dto.MutationResult{ID: projectID, Archived: true, Source: "qs"})
 		return
 	}
 
 	if h.irisProjectRepo != nil {
 		if err := h.irisProjectRepo.Update(r.Context(), projectID, map[string]any{"is_archived": true}); err != nil {
 			slog.Error("iris project archive failed", "id", projectID, "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "archive failed"})
+			writeJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "archive failed"})
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"archived": true, "id": projectID, "source": "iris"})
+	writeJSON(w, http.StatusOK, dto.MutationResult{ID: projectID, Archived: true, Source: "iris"})
 }
