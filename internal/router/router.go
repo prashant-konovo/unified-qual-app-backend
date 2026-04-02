@@ -103,6 +103,8 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Get("/get-moderators-option/{timeslot_id}", h.GetModeratorsOptionMRA)
 				r.Get("/get-participant-id/{timeslot_id}", h.GetParticipantIdMRA)
 				r.Get("/project_manager/client/{client_id}", h.GetAllProjectManagersMRA)
+				r.Post("/project_manager/get/time_slots/client/{client_id}", h.GetPMTimeslotsMRA)
+				r.Post("/project_manager/get/availabilities/client/{client_id}", h.GetAvailabilitiesForPMMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)

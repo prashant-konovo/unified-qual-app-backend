@@ -828,3 +828,148 @@ return 0, fmt.Errorf("get moderator conflict for slot mra: %w", err)
 }
 return hasConflict, nil
 }
+
+// ──────────────────────────────────────────────
+// MRA #55 — PM Timeslots
+// ──────────────────────────────────────────────
+
+const pmTimeSlotBaseQueryMRA = `SELECT t.id AS timeSlotId, t.start_time AS startTime, t.end_time AS endTime,
+t.status_id AS completed, t.duration,
+t.is_invalidated_interview AS isInvalidatedInterview,
+t.is_invalidate_email_sent AS isInvalidateEmailSent,
+(CASE WHEN EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id = t.id AND tsph.payment_status = 'COMPLETED') THEN TRUE ELSE FALSE END) AS paymentStatus,
+(CASE WHEN t.has_imported_overlap IS NULL THEN '0' ELSE t.has_imported_overlap END) AS importedOverLap,
+ad.responder_id AS intervieweeId, t.project_id AS projectId, p.name AS projectName,
+COALESCE(topics.topic_name, '') AS topicName, mt.moderator_id AS moderatorId
+FROM time_slot t
+INNER JOIN project p ON p.id = t.project_id
+INNER JOIN moderator_time_slot mt ON mt.time_slot_id = t.id
+INNER JOIN answer_details ad ON ad.time_slot_id = t.id
+LEFT JOIN topics ON p.id = topics.project_id AND topics.language_id = 1
+WHERE p.client_id = ? AND t.status_id IN (2, 7, 8, 9)`
+
+func (repo *TimeSlotRepo) scanPMTimeSlotRows(rows *sql.Rows) ([]map[string]any, error) {
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var tsID, projectID, intervieweeID, moderatorID int64
+		var completed, duration int
+		var isInvalidatedInterview, isInvalidateEmailSent, paymentStatus bool
+		var importedOverLap, topicName, projectName, startTime, endTime string
+		if err := rows.Scan(&tsID, &startTime, &endTime, &completed, &duration,
+			&isInvalidatedInterview, &isInvalidateEmailSent, &paymentStatus,
+			&importedOverLap, &intervieweeID, &projectID, &projectName,
+			&topicName, &moderatorID); err != nil {
+			return nil, fmt.Errorf("scan pm timeslot mra: %w", err)
+		}
+		records = append(records, map[string]any{
+			"timeSlotId": tsID, "startTime": startTime, "endTime": endTime,
+			"completed": completed, "duration": duration,
+			"isInvalidatedInterview": isInvalidatedInterview,
+			"isInvalidateEmailSent":  isInvalidateEmailSent,
+			"paymentStatus": paymentStatus, "importedOverLap": importedOverLap,
+			"intervieweeId": intervieweeID, "projectId": projectID,
+			"projectName": projectName, "topicName": topicName,
+			"moderatorId": moderatorID,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
+}
+
+// GetPMTimeSlotsByClientIdMRA returns PM timeslots for a client (no filter).
+func (repo *TimeSlotRepo) GetPMTimeSlotsByClientIdMRA(ctx context.Context, clientID int64) ([]map[string]any, error) {
+	rows, err := repo.db.QueryContext(ctx, pmTimeSlotBaseQueryMRA, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get pm timeslots by client id mra: %w", err)
+	}
+	return repo.scanPMTimeSlotRows(rows)
+}
+
+// GetPMTimeSlotsByClientIdWithProjectFilterMRA returns PM timeslots excluding specified projects.
+func (repo *TimeSlotRepo) GetPMTimeSlotsByClientIdWithProjectFilterMRA(ctx context.Context, clientID int64, projectIDs []int64) ([]map[string]any, error) {
+	if len(projectIDs) == 0 {
+		return repo.GetPMTimeSlotsByClientIdMRA(ctx, clientID)
+	}
+	placeholders := make([]string, len(projectIDs))
+	args := []any{clientID}
+	for i, id := range projectIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	q := pmTimeSlotBaseQueryMRA + " AND p.id NOT IN (" + strings.Join(placeholders, ",") + ")"
+	rows, err := repo.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get pm timeslots with project filter mra: %w", err)
+	}
+	return repo.scanPMTimeSlotRows(rows)
+}
+
+// GetPMTimeSlotsByClientIdWithModeratorFilterMRA returns PM timeslots excluding specified moderators.
+func (repo *TimeSlotRepo) GetPMTimeSlotsByClientIdWithModeratorFilterMRA(ctx context.Context, clientID int64, moderatorIDs []int64) ([]map[string]any, error) {
+	if len(moderatorIDs) == 0 {
+		return repo.GetPMTimeSlotsByClientIdMRA(ctx, clientID)
+	}
+	placeholders := make([]string, len(moderatorIDs))
+	args := []any{clientID}
+	for i, id := range moderatorIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	q := pmTimeSlotBaseQueryMRA + " AND mt.moderator_id NOT IN (" + strings.Join(placeholders, ",") + ")"
+	rows, err := repo.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get pm timeslots with moderator filter mra: %w", err)
+	}
+	return repo.scanPMTimeSlotRows(rows)
+}
+
+// GetAllPendingInterviewsPerProjectMRA returns pending interviews for a project grouped by moderator.
+func (repo *TimeSlotRepo) GetAllPendingInterviewsPerProjectMRA(ctx context.Context, projectID, clientID int64) ([]map[string]any, error) {
+	q := `SELECT t.id AS timeSlotId, t.start_time AS startTime, t.end_time AS endTime,
+ad.responder_id AS participantId, t.project_id AS projectId, p.name AS projectName,
+p.salesforce_job_number AS salesforce, mt.moderator_id AS moderatorId,
+us.first_name AS firstName, us.last_name AS lastName
+FROM time_slot t
+INNER JOIN project p ON p.id = t.project_id
+INNER JOIN moderator_time_slot mt ON mt.time_slot_id = t.id
+INNER JOIN user us ON us.id = mt.moderator_id
+INNER JOIN answer_details ad ON ad.time_slot_id = t.id
+WHERE p.client_id = ? AND t.status_id = 2 AND p.id = ?
+AND mt.moderator_id IN (SELECT moderator_id FROM projects_users WHERE project_id = ?)`
+	rows, err := repo.db.QueryContext(ctx, q, clientID, projectID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get all pending interviews per project mra: %w", err)
+	}
+	defer rows.Close()
+
+	var records []map[string]any
+	for rows.Next() {
+		var tsID, participantID, pID, moderatorID int64
+		var projectName, salesforce, firstName, lastName, startTime, endTime string
+		if err := rows.Scan(&tsID, &startTime, &endTime,
+			&participantID, &pID, &projectName,
+			&salesforce, &moderatorID,
+			&firstName, &lastName); err != nil {
+			return nil, fmt.Errorf("scan pending interview per project mra: %w", err)
+		}
+		records = append(records, map[string]any{
+			"timeSlotId":    tsID,
+			"startTime":     startTime,
+			"endTime":       endTime,
+			"participantId": participantID,
+			"projectId":     pID,
+			"projectName":   projectName,
+			"salesforce":    salesforce,
+			"moderatorId":   moderatorID,
+			"firstName":     firstName,
+			"lastName":      lastName,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
+}

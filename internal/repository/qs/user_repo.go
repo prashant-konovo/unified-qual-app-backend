@@ -1458,3 +1458,88 @@ records = []map[string]any{}
 }
 return records, rows.Err()
 }
+
+// ──────────────────────────────────────────────
+// MRA #56 — PM Availabilities
+// ──────────────────────────────────────────────
+
+const pmAvailBaseQueryMRA = `SELECT moderator_availability.id, moderator_id AS moderatorId,
+client_id AS clientId, start_time AS startTime, end_time AS endTime,
+first_name AS firstName, last_name AS lastName
+FROM moderator_availability
+INNER JOIN user ON user.id = moderator_id
+WHERE client_id = ?`
+
+func (r *UserRepo) scanPMAvailRows(rows *sql.Rows) ([]map[string]any, error) {
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var id, modID, cID int64
+		var st, et, firstName, lastName string
+		if err := rows.Scan(&id, &modID, &cID, &st, &et, &firstName, &lastName); err != nil {
+			return nil, fmt.Errorf("scan pm avail mra: %w", err)
+		}
+		records = append(records, map[string]any{
+			"id": id, "moderatorId": modID, "clientId": cID,
+			"startTime": st, "endTime": et,
+			"firstName": firstName, "lastName": lastName,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
+}
+
+// GetAllModeratorsAvailabilityForPMMRA returns all moderator availabilities for a client.
+func (r *UserRepo) GetAllModeratorsAvailabilityForPMMRA(ctx context.Context, clientID int64) ([]map[string]any, error) {
+	rows, err := r.db.QueryContext(ctx, pmAvailBaseQueryMRA, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get all moderators availability for pm mra: %w", err)
+	}
+	return r.scanPMAvailRows(rows)
+}
+
+// GetAllModeratorsAvailabilityForPMWithProjectFilterMRA returns availabilities excluding specified projects.
+func (r *UserRepo) GetAllModeratorsAvailabilityForPMWithProjectFilterMRA(ctx context.Context, clientID int64, projectIDs []int64) ([]map[string]any, error) {
+	if len(projectIDs) == 0 {
+		return r.GetAllModeratorsAvailabilityForPMMRA(ctx, clientID)
+	}
+	placeholders := make([]string, len(projectIDs))
+	args := []any{clientID}
+	for i, id := range projectIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	q := `SELECT DISTINCT moderator_availability.id, moderator_id AS moderatorId,
+client_id AS clientId, start_time AS startTime, end_time AS endTime,
+first_name AS firstName, last_name AS lastName
+FROM moderator_availability
+INNER JOIN user ON user.id = moderator_id
+INNER JOIN projects_users pu ON pu.user_id = moderator_id
+WHERE client_id = ? AND pu.project_id NOT IN (` + strings.Join(placeholders, ",") + `)`
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get moderators availability with project filter mra: %w", err)
+	}
+	return r.scanPMAvailRows(rows)
+}
+
+// GetAllModeratorsAvailabilityForPMWithModeratorFilterMRA returns availabilities excluding specified moderators.
+func (r *UserRepo) GetAllModeratorsAvailabilityForPMWithModeratorFilterMRA(ctx context.Context, clientID int64, moderatorIDs []int64) ([]map[string]any, error) {
+	if len(moderatorIDs) == 0 {
+		return r.GetAllModeratorsAvailabilityForPMMRA(ctx, clientID)
+	}
+	placeholders := make([]string, len(moderatorIDs))
+	args := []any{clientID}
+	for i, id := range moderatorIDs {
+		placeholders[i] = "?"
+		args = append(args, id)
+	}
+	q := pmAvailBaseQueryMRA + " AND moderator_id NOT IN (" + strings.Join(placeholders, ",") + ")"
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get moderators availability with moderator filter mra: %w", err)
+	}
+	return r.scanPMAvailRows(rows)
+}
