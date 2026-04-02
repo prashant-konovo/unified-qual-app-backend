@@ -1543,3 +1543,67 @@ func (r *UserRepo) GetAllModeratorsAvailabilityForPMWithModeratorFilterMRA(ctx c
 	}
 	return r.scanPMAvailRows(rows)
 }
+
+// UpdateModExternalCalendarUrlMRA updates the external calendar URL and key for a moderator.
+func (r *UserRepo) UpdateModExternalCalendarUrlMRA(ctx context.Context, moderatorID int64, url, key string) error {
+const q = `UPDATE moderator_external_calendar SET external_calendar_url = ?, external_calendar_key = ? WHERE moderator_id = ?`
+_, err := r.db.ExecContext(ctx, q, url, key, moderatorID)
+if err != nil {
+return fmt.Errorf("update external calendar url mra: %w", err)
+}
+return nil
+}
+
+// UpdateModExternalCalendarStatusMRA updates the external calendar import status for a moderator.
+func (r *UserRepo) UpdateModExternalCalendarStatusMRA(ctx context.Context, moderatorID int64, status string) error {
+const q = `UPDATE moderator_external_calendar SET status = ? WHERE moderator_id = ?`
+_, err := r.db.ExecContext(ctx, q, status, moderatorID)
+if err != nil {
+return fmt.Errorf("update external calendar status mra: %w", err)
+}
+return nil
+}
+
+// DeleteImportedModeratorAvailabilityByModeratorMRA deletes imported avails for a moderator+client.
+func (r *UserRepo) DeleteImportedModeratorAvailabilityByModeratorMRA(ctx context.Context, moderatorID, clientID int64) error {
+const q = `DELETE FROM imported_moderator_availability WHERE moderator_id = ? AND client_id = ?`
+_, err := r.db.ExecContext(ctx, q, moderatorID, clientID)
+if err != nil {
+return fmt.Errorf("delete imported moderator availability mra: %w", err)
+}
+return nil
+}
+
+// GetImportedModeratorAvailabilityMRA returns imported moderator availability for a moderator+client.
+func (r *UserRepo) GetImportedModeratorAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error) {
+const q = `SELECT id, moderator_id AS moderatorId, client_id AS clientId,
+start_time AS startTime, end_time AS endTime
+FROM imported_moderator_availability
+WHERE moderator_id = ? AND client_id = ?
+ORDER BY start_time`
+rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
+if err != nil {
+return nil, fmt.Errorf("get imported moderator availability mra: %w", err)
+}
+defer rows.Close()
+
+var result []map[string]any
+for rows.Next() {
+var id, modID, cID int64
+var startTime, endTime string
+if err := rows.Scan(&id, &modID, &cID, &startTime, &endTime); err != nil {
+return nil, fmt.Errorf("scan imported moderator availability: %w", err)
+}
+result = append(result, map[string]any{
+"id":          id,
+"moderatorId": modID,
+"clientId":    cID,
+"startTime":   startTime,
+"endTime":     endTime,
+})
+}
+if result == nil {
+result = []map[string]any{}
+}
+return result, rows.Err()
+}

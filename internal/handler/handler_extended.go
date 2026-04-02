@@ -5165,3 +5165,357 @@ return
 }
 writeJSON(w, http.StatusOK, map[string]any{"data": records})
 }
+
+// ──────────────────────────────────────────────
+// MRA #61 — ThirdPartyIntegrateMRA
+// POST /v1/third-party-integrate (MRA route)
+// Legacy: test/mock endpoint that inserts a respondent with hardcoded values.
+// ──────────────────────────────────────────────
+
+func (h *Handler) ThirdPartyIntegrateMRA(w http.ResponseWriter, r *http.Request) {
+if h.qsRespondentRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        "repository not available",
+"errorMessage": "An error occured in third party integration",
+})
+return
+}
+
+// Parse body (legacy parses but ignores values)
+var body map[string]any
+_ = json.NewDecoder(r.Body).Decode(&body)
+
+// Legacy uses hardcoded test values
+insertID, err := h.qsRespondentRepo.CreateRespondentMRA(
+r.Context(),
+"Mohammed",    // firstName
+"Abadi",       // lastName
+"Mr",          // title
+"testId",      // externalResponderId
+"sesskeymock", // sessKey
+"",            // timeZone
+"",            // timeZoneAbbr
+"",            // languageCountry
+)
+if err != nil {
+slog.Error("third party integrate mra failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        err.Error(),
+"errorMessage": "An error occured in third party integration",
+})
+return
+}
+
+writeJSON(w, http.StatusOK, map[string]any{
+"responder":    insertID,
+"QContactr6":   fmt.Sprintf("walid.samaha.01+%d@gmail.com", insertID),
+"QContactr7":   "81702668",
+"identifier":   "testId",
+"QContactr2":   "Abadi",
+"QContactr1":   "Mohammed",
+"honorarium":   "testHonarrium",
+"CurrencyText": "USD",
+"sessKey":      "sesskeymock",
+})
+}
+
+// ──────────────────────────────────────────────
+// MRA #62 — LogFrontEndEventMRA
+// POST /v1/log-front-end-event (MRA route)
+// Legacy: logs event to CloudWatch and returns 200 with no body.
+// ──────────────────────────────────────────────
+
+func (h *Handler) LogFrontEndEventMRA(w http.ResponseWriter, r *http.Request) {
+var body struct {
+EventName           string `json:"eventName"`
+Error               any    `json:"error"`
+StatusCode          any    `json:"statusCode"`
+SurveyID            any    `json:"surveyId"`
+DecipherSurveyID    any    `json:"decipherSurveyId"`
+ProjectID           any    `json:"projectId"`
+ShgHash             any    `json:"shgHash"`
+QsPath              any    `json:"qsPath"`
+RespondentIdentifer any    `json:"respondentIdentifer"`
+}
+if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+slog.Info("front-end event",
+"eventName", body.EventName,
+"error", body.Error,
+"statusCode", body.StatusCode,
+"surveyId", body.SurveyID,
+"decipherSurveyId", body.DecipherSurveyID,
+"projectId", body.ProjectID,
+"shgHash", body.ShgHash,
+"qsPath", body.QsPath,
+"respondentIdentifer", body.RespondentIdentifer,
+)
+
+// Legacy returns 200 with no body
+w.Header().Set("Content-Type", "application/json")
+w.Header().Set("X-Brand", "unified")
+w.WriteHeader(http.StatusOK)
+}
+
+// ──────────────────────────────────────────────
+// MRA #63 — QualEligibilityMRA
+// POST /v1/qual/eligibility (MRA route)
+// Legacy: bulk eligibility status update with upsert.
+// ──────────────────────────────────────────────
+
+func (h *Handler) QualEligibilityMRA(w http.ResponseWriter, r *http.Request) {
+if h.qsTimeSlotRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        "repository not available",
+"errorMessage": "repository not available",
+})
+return
+}
+
+var body struct {
+ParticipantIDs []any  `json:"participant_ids"`
+UpdatedBy      string `json:"updated_by"`
+Reason         string `json:"reason"`
+Status         string `json:"status"`
+}
+if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        err.Error(),
+"errorMessage": err.Error(),
+})
+return
+}
+
+// Validation
+var validationErrors []string
+if len(body.ParticipantIDs) == 0 {
+validationErrors = append(validationErrors, "participant_ids must be a non-empty array")
+}
+if body.UpdatedBy == "" {
+validationErrors = append(validationErrors, "updated_by is required")
+}
+if body.Reason == "" {
+validationErrors = append(validationErrors, "reason is required")
+}
+statusUpper := strings.ToUpper(body.Status)
+if statusUpper != "ELIGIBLE" && statusUpper != "INELIGIBLE" {
+validationErrors = append(validationErrors, "status must be ELIGIBLE or INELIGIBLE")
+}
+if len(validationErrors) > 0 {
+writeJSON(w, http.StatusBadRequest, map[string]any{
+"error": strings.Join(validationErrors, ", "),
+})
+return
+}
+
+isEligible := statusUpper == "ELIGIBLE"
+ctx := r.Context()
+
+var processedIDs []any
+var failedIDs []any
+
+for _, pid := range body.ParticipantIDs {
+// Convert participant_id to string (may arrive as number or string)
+pidStr := fmt.Sprintf("%v", pid)
+
+if err := h.qsTimeSlotRepo.UpsertEligibilityStatusMRA(ctx, pidStr, isEligible, body.Reason, body.UpdatedBy); err != nil {
+slog.Error("upsert eligibility status failed", "participantId", pidStr, "error", err)
+failedIDs = append(failedIDs, pid)
+continue
+}
+
+// Reset ineligible mail flag when marking ELIGIBLE
+if isEligible {
+if err := h.qsTimeSlotRepo.ResetIneligibleMailSentMRA(ctx, pidStr); err != nil {
+slog.Error("reset ineligible mail sent failed", "participantId", pidStr, "error", err)
+}
+}
+
+// PARTIAL: Legacy publishes EventBridge events for INELIGIBLE participants
+if !isEligible {
+slog.Info("QualEligibilityMRA: EventBridge publish skipped (PARTIAL)", "participantId", pidStr, "status", statusUpper)
+}
+
+processedIDs = append(processedIDs, pid)
+}
+
+if processedIDs == nil {
+processedIDs = []any{}
+}
+if failedIDs == nil {
+failedIDs = []any{}
+}
+
+writeJSON(w, http.StatusOK, map[string]any{
+"success":       len(failedIDs) == 0,
+"processed_ids": processedIDs,
+"failed_ids":    failedIDs,
+})
+}
+
+// ──────────────────────────────────────────────
+// MRA #64 — GetModeratorAvailabilityByClientMRA
+// GET /v1/moderator/get/{moderator_id}/get-mod-av/{client_id}
+// Legacy: returns merged manual+imported availability with overlap resolution.
+// ──────────────────────────────────────────────
+
+func (h *Handler) GetModeratorAvailabilityByClientMRA(w http.ResponseWriter, r *http.Request) {
+if h.qsUserRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        "repository not available",
+"errorMessage": "An error occured while getting moderator availability",
+})
+return
+}
+
+moderatorIDStr := chi.URLParam(r, "moderator_id")
+moderatorID, err := strconv.ParseInt(moderatorIDStr, 10, 64)
+if err != nil {
+writeJSON(w, http.StatusBadRequest, map[string]any{
+"error":        "invalid moderator_id",
+"errorMessage": "An error occured while getting moderator availability",
+})
+return
+}
+
+clientIDStr := chi.URLParam(r, "client_id")
+clientID, err := strconv.ParseInt(clientIDStr, 10, 64)
+if err != nil {
+writeJSON(w, http.StatusBadRequest, map[string]any{
+"error":        "invalid client_id",
+"errorMessage": "An error occured while getting moderator availability",
+})
+return
+}
+
+ctx := r.Context()
+
+// Check external calendar import status
+calStatus, _ := h.qsUserRepo.GetModExternalCalendarStatusMRA(ctx, moderatorID)
+if calStatus == "In Progress" {
+writeJSON(w, http.StatusMethodNotAllowed, map[string]any{
+"error": "There is a running import process for this moderator, try again later",
+})
+return
+}
+
+result := h.getAllModeratorAvailabilityWithImported(ctx, moderatorID, clientID)
+writeJSON(w, http.StatusOK, result)
+}
+
+// ──────────────────────────────────────────────
+// MRA #65 — StartModeratorImportMRA
+// POST /v1/moderator/get/{moderator_id}/imported/{client_id}
+// Legacy: Google Sheets import — DB parts only (PARTIAL).
+// ──────────────────────────────────────────────
+
+func (h *Handler) StartModeratorImportMRA(w http.ResponseWriter, r *http.Request) {
+if h.qsUserRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+return
+}
+
+moderatorIDStr := chi.URLParam(r, "moderator_id")
+moderatorID, err := strconv.ParseInt(moderatorIDStr, 10, 64)
+if err != nil {
+writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator_id"})
+return
+}
+
+clientIDStr := chi.URLParam(r, "client_id")
+clientID, err := strconv.ParseInt(clientIDStr, 10, 64)
+if err != nil {
+writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid client_id"})
+return
+}
+
+var body struct {
+ExternalCalendarInput    string `json:"externalCalendarInput"`
+ExternalCalendarKeyInput string `json:"externalCalendarKeyInput"`
+ForceUpdate              bool   `json:"forceUpdate"`
+UserID                   any    `json:"userId"`
+}
+if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+ctx := r.Context()
+
+// Step 1: Check external calendar status
+calStatus, _ := h.qsUserRepo.GetModExternalCalendarStatusMRA(ctx, moderatorID)
+if calStatus == "In Progress" && !body.ForceUpdate {
+writeJSON(w, http.StatusMethodNotAllowed, map[string]any{
+"error": "There is a running import process for this moderator, try again later",
+})
+return
+}
+
+// Step 2: Update external calendar URL and key
+if err := h.qsUserRepo.UpdateModExternalCalendarUrlMRA(ctx, moderatorID, body.ExternalCalendarInput, body.ExternalCalendarKeyInput); err != nil {
+slog.Error("update external calendar url failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+// Step 3: Set status to "In Progress"
+if err := h.qsUserRepo.UpdateModExternalCalendarStatusMRA(ctx, moderatorID, "In Progress"); err != nil {
+slog.Error("update external calendar status failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+// Step 4: Delete existing imported avails
+if err := h.qsUserRepo.DeleteImportedModeratorAvailabilityByModeratorMRA(ctx, moderatorID, clientID); err != nil {
+slog.Error("delete imported moderator availability failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+// PARTIAL: Google Sheets + Lambda calls are external and not replicated here
+slog.Info("StartModeratorImportMRA: import started (PARTIAL — Google Sheets integration not implemented)",
+"moderatorId", moderatorID, "clientId", clientID)
+
+// Legacy returns JSON.stringify("Importing in progress")
+writeJSON(w, http.StatusOK, "Importing in progress")
+}
+
+// ──────────────────────────────────────────────
+// MRA #66 — GetImportedAvailabilityFromCurrentSyncMRA
+// GET /v1/moderator/get/{moderator_id}/imported-from-current-sync/{client_id}
+// Legacy: Google Sheets parsing — DB fallback only (PARTIAL).
+// ──────────────────────────────────────────────
+
+func (h *Handler) GetImportedAvailabilityFromCurrentSyncMRA(w http.ResponseWriter, r *http.Request) {
+if h.qsUserRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+return
+}
+
+moderatorIDStr := chi.URLParam(r, "moderator_id")
+moderatorID, err := strconv.ParseInt(moderatorIDStr, 10, 64)
+if err != nil {
+writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid moderator_id"})
+return
+}
+
+clientIDStr := chi.URLParam(r, "client_id")
+clientID, err := strconv.ParseInt(clientIDStr, 10, 64)
+if err != nil {
+writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid client_id"})
+return
+}
+
+// PARTIAL: Legacy parses Google Sheets data. This returns DB-stored imported avails.
+result, err := h.qsUserRepo.GetImportedModeratorAvailabilityMRA(r.Context(), moderatorID, clientID)
+if err != nil {
+slog.Error("get imported availability from current sync failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+writeJSON(w, http.StatusOK, result)
+}

@@ -973,3 +973,33 @@ AND mt.moderator_id IN (SELECT moderator_id FROM projects_users WHERE project_id
 	}
 	return records, rows.Err()
 }
+
+// UpsertEligibilityStatusMRA inserts or updates participant eligibility status.
+// Contract-identical with legacy qualEligibility upsert.
+func (repo *TimeSlotRepo) UpsertEligibilityStatusMRA(ctx context.Context, participantID string, isEligible bool, reason, updatedBy string) error {
+const q = `INSERT INTO participant_eligibility_status (participant_id, is_eligible, reason, updated_by, eligibility_updated_at)
+VALUES (?, ?, ?, ?, NOW())
+ON DUPLICATE KEY UPDATE is_eligible = ?, reason = ?, updated_by = ?, eligibility_updated_at = NOW()`
+_, err := repo.db.ExecContext(ctx, q, participantID, isEligible, reason, updatedBy, isEligible, reason, updatedBy)
+if err != nil {
+return fmt.Errorf("upsert eligibility status mra: %w", err)
+}
+return nil
+}
+
+// ResetIneligibleMailSentMRA resets the is_ineligible_mail_sent flag for a participant.
+// Contract-identical with legacy resetIneligibleMailSent.
+func (repo *TimeSlotRepo) ResetIneligibleMailSentMRA(ctx context.Context, externalResponderID string) error {
+const q = `UPDATE time_slot t
+INNER JOIN answer_details ad ON ad.time_slot_id = t.id
+INNER JOIN responder r ON r.id = ad.responder_id
+SET t.is_ineligible_mail_sent = false
+WHERE r.external_responder_id = ?
+AND t.status_id IN (2, 7, 8, 9)
+AND t.is_invalidated_interview = 0`
+_, err := repo.db.ExecContext(ctx, q, externalResponderID)
+if err != nil {
+return fmt.Errorf("reset ineligible mail sent mra: %w", err)
+}
+return nil
+}

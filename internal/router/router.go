@@ -109,6 +109,13 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Get("/salesforce/clients", h.GetSalesforceClientsMRA)
 				r.Get("/salesforce/projects/{salesforce_client_id}", h.GetSalesforceProjectsMRA)
 				r.Post("/salesforce/getSalesforceClientsWithFilter", h.GetSalesforceClientsWithFilterMRA)
+				// MRA #61-66
+				r.Post("/third-party-integrate", h.ThirdPartyIntegrateMRA)
+				r.Post("/log-front-end-event", h.LogFrontEndEventMRA)
+				r.Post("/qual/eligibility", h.QualEligibilityMRA)
+				r.Get("/moderator/get/{moderator_id}/get-mod-av/{client_id}", h.GetModeratorAvailabilityByClientMRA)
+				r.Post("/moderator/get/{moderator_id}/imported/{client_id}", h.StartModeratorImportMRA)
+				r.Get("/moderator/get/{moderator_id}/imported-from-current-sync/{client_id}", h.GetImportedAvailabilityFromCurrentSyncMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)

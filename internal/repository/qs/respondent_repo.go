@@ -266,3 +266,15 @@ records = []map[string]any{}
 }
 return records, rows.Err()
 }
+
+// CreateRespondentMRA inserts a respondent and returns the insert ID.
+// Contract-identical with legacy thirdPartyIntegrate INSERT.
+func (repo *RespondentRepo) CreateRespondentMRA(ctx context.Context, firstName, lastName, title, extID, sessKey, tz, tzAbbr, lang string) (int64, error) {
+	const q = `INSERT INTO responder (first_name, last_name, title, external_responder_id, sess_key, time_zone, time_zone_abbr, language_country)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+	res, err := repo.db.ExecContext(ctx, q, firstName, lastName, title, extID, sessKey, tz, tzAbbr, lang)
+	if err != nil {
+		return 0, fmt.Errorf("create respondent mra: %w", err)
+	}
+	return res.LastInsertId()
+}
