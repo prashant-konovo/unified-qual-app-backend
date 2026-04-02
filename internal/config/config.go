@@ -63,6 +63,9 @@ type Config struct {
 	// S3 buckets
 	S3 S3Config
 
+	// AWS Lambda / Step Functions
+	AWS AWSConfig
+
 	// Inquiry email recipient
 	InquiryEmailRecipient string
 
@@ -170,6 +173,13 @@ type S3Config struct {
 	RecordingBucket string
 	ExportBucket    string
 	InquiryBucket   string
+}
+
+type AWSConfig struct {
+	Region      string
+	Account     string
+	Environment string // stackPrefix: "prd", "data-qa", etc.
+	ICApiURL    string // e.g. https://api.incrowdnow.com
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -301,6 +311,13 @@ func Load() *Config {
 			RecordingBucket: envOr("S3_RECORDING_BUCKET", ""),
 			ExportBucket:    envOr("S3_EXPORT_BUCKET", ""),
 			InquiryBucket:   envOr("S3_INQUIRY_BUCKET", ""),
+		},
+
+		AWS: AWSConfig{
+			Region:      envOr("AWS_REGION", envOr("COGNITO_REGION", "us-east-1")),
+			Account:     envOr("AWS_ACCOUNT_ID", ""),
+			Environment: envOr("ENVIRONMENT", "local"),
+			ICApiURL:    envOr("IC_API_URL", ""),
 		},
 
 		InquiryEmailRecipient: envOr("INQUIRY_EMAIL_RECIPIENT", "dev-ni@incrowdnow.com"),

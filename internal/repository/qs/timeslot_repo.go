@@ -1321,3 +1321,143 @@ return fmt.Errorf("unassign moderator time range mra: %w", err)
 }
 return nil
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// MRA #77 support: pending payments for Lambda credit-rewards processing
+// ──────────────────────────────────────────────────────────────────────────────
+
+// PendingPaymentRecord holds a pending payment row for processing.
+type PendingPaymentRecord struct {
+ID         int64 `json:"id"`
+TimeSlotID int64 `json:"timeSlotId"`
+}
+
+// GetPendingPaymentsMRA fetches pending payment history records that have no
+// corresponding COMPLETED record for the same time slot (mimics legacy SELECT … FOR UPDATE).
+func (r *TimeSlotRepo) GetPendingPaymentsMRA(ctx context.Context, tx *sql.Tx, timeSlotIDs []int64) ([]PendingPaymentRecord, error) {
+if len(timeSlotIDs) == 0 {
+return nil, nil
+}
+placeholders := make([]string, len(timeSlotIDs))
+args := make([]any, len(timeSlotIDs))
+for i, id := range timeSlotIDs {
+placeholders[i] = "?"
+args[i] = id
+}
+query := fmt.Sprintf(`
+SELECT tsph.id, tsph.time_slot_id
+FROM time_slot_payment_history tsph
+WHERE tsph.time_slot_id IN (%s)
+AND tsph.payment_status = 'PENDING'
+AND NOT EXISTS (
+SELECT 1 FROM time_slot_payment_history completed
+WHERE completed.time_slot_id = tsph.time_slot_id
+AND completed.payment_status = 'COMPLETED'
+)
+ORDER BY tsph.time_slot_id
+FOR UPDATE`, strings.Join(placeholders, ","))
+
+rows, err := tx.QueryContext(ctx, query, args...)
+if err != nil {
+return nil, fmt.Errorf("get pending payments mra: %w", err)
+}
+defer rows.Close()
+var records []PendingPaymentRecord
+for rows.Next() {
+var rec PendingPaymentRecord
+if err := rows.Scan(&rec.ID, &rec.TimeSlotID); err != nil {
+return nil, fmt.Errorf("scan pending payment mra: %w", err)
+}
+records = append(records, rec)
+}
+return records, rows.Err()
+}
+
+// UpdateCompletedPaymentHistoryMRA marks selected pending records as COMPLETED.
+func (r *TimeSlotRepo) UpdateCompletedPaymentHistoryMRA(ctx context.Context, tx *sql.Tx, timeSlotIDs []int64, paymentHistoryIDs []int64) error {
+if len(timeSlotIDs) == 0 || len(paymentHistoryIDs) == 0 {
+return nil
+}
+tsPlaceholders := make([]string, len(timeSlotIDs))
+args := make([]any, 0, len(timeSlotIDs)+len(paymentHistoryIDs))
+for i, id := range timeSlotIDs {
+tsPlaceholders[i] = "?"
+args = append(args, id)
+}
+phPlaceholders := make([]string, len(paymentHistoryIDs))
+for i, id := range paymentHistoryIDs {
+phPlaceholders[i] = "?"
+args = append(args, id)
+}
+query := fmt.Sprintf(`
+UPDATE time_slot_payment_history
+SET payment_status = 'COMPLETED'
+WHERE time_slot_id IN (%s)
+AND id IN (%s)`,
+strings.Join(tsPlaceholders, ","),
+strings.Join(phPlaceholders, ","))
+
+_, err := tx.ExecContext(ctx, query, args...)
+if err != nil {
+return fmt.Errorf("update completed payment history mra: %w", err)
+}
+return nil
+}
+
+// UpdateCanceledPaymentHistoryMRA cancels remaining PENDING records for the same timeslots
+// that are NOT in the paymentHistoryIDs list.
+func (r *TimeSlotRepo) UpdateCanceledPaymentHistoryMRA(ctx context.Context, tx *sql.Tx, timeSlotIDs []int64, paymentHistoryIDs []int64) error {
+if len(timeSlotIDs) == 0 || len(paymentHistoryIDs) == 0 {
+return nil
+}
+tsPlaceholders := make([]string, len(timeSlotIDs))
+args := make([]any, 0, len(timeSlotIDs)+len(paymentHistoryIDs))
+for i, id := range timeSlotIDs {
+tsPlaceholders[i] = "?"
+args = append(args, id)
+}
+phPlaceholders := make([]string, len(paymentHistoryIDs))
+for i, id := range paymentHistoryIDs {
+phPlaceholders[i] = "?"
+args = append(args, id)
+}
+query := fmt.Sprintf(`
+UPDATE time_slot_payment_history
+SET payment_status = 'CANCELED'
+WHERE time_slot_id IN (%s)
+AND id NOT IN (%s)
+AND payment_status = 'PENDING'`,
+strings.Join(tsPlaceholders, ","),
+strings.Join(phPlaceholders, ","))
+
+_, err := tx.ExecContext(ctx, query, args...)
+if err != nil {
+return fmt.Errorf("update canceled payment history mra: %w", err)
+}
+return nil
+}
+
+// UpdateFailedPaymentHistoryMRA marks all PENDING records for given timeslots as FAILED (used on error rollback).
+func (r *TimeSlotRepo) UpdateFailedPaymentHistoryMRA(ctx context.Context, timeSlotIDs []int64) error {
+if len(timeSlotIDs) == 0 {
+return nil
+}
+placeholders := make([]string, len(timeSlotIDs))
+args := make([]any, len(timeSlotIDs))
+for i, id := range timeSlotIDs {
+placeholders[i] = "?"
+args[i] = id
+}
+query := fmt.Sprintf(`
+UPDATE time_slot_payment_history
+SET payment_status = 'FAILED'
+WHERE payment_status = 'PENDING'
+AND time_slot_id IN (%s)`,
+strings.Join(placeholders, ","))
+
+_, err := r.db.ExecContext(ctx, query, args...)
+if err != nil {
+return fmt.Errorf("update failed payment history mra: %w", err)
+}
+return nil
+}

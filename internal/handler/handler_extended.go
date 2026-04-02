@@ -5646,10 +5646,20 @@ func (h *Handler) UnlinkImportedModeratorMRA(w http.ResponseWriter, r *http.Requ
 // ──────────────────────────────────────────────
 
 func (h *Handler) UpdateGoogleSheetFirstDateMRA(w http.ResponseWriter, r *http.Request) {
-	slog.Info("UpdateGoogleSheetFirstDateMRA: PARTIAL — Google Sheets integration not implemented")
-	writeJSON(w, http.StatusOK, map[string]any{
-		"fileURL": "",
-	})
+	if h.services.GoogleSheets != nil && h.services.GoogleSheets.Configured() {
+		if err := h.services.GoogleSheets.UpdateFirstDateCalendar(r.Context()); err != nil {
+			slog.Warn("google sheets update first date calendar failed", "error", err)
+			writeJSON(w, http.StatusInternalServerError, map[string]any{
+				"error":        err.Error(),
+				"errorMessage": "An error has occured while downloading google sheet",
+			})
+			return
+		}
+	} else {
+		slog.Info("UpdateGoogleSheetFirstDateMRA: Google Sheets not configured, skipping calendar update")
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"fileURL": ""})
 }
 
 // ──────────────────────────────────────────────
@@ -6106,14 +6116,19 @@ if amount == nil || amount == "" {
 continue
 }
 payments = append(payments, map[string]any{
-"timeSlotId":    info["timeSlotId"],
-"amount":        amount,
-"currency":      info["defaultHonorariumCurrency"],
-"source":        "QS",
-"paymentDate":   time.Now().UTC().Format("2006-01-02 15:04:05"),
-"paymentUserId": userID,
-"paymentTypeId": interviewTypeID,
-"paymentStatus": "PENDING",
+"timeSlotId":             info["timeSlotId"],
+"amount":                 amount,
+"currency":               info["defaultHonorariumCurrency"],
+"source":                 "QS",
+"paymentDate":            time.Now().UTC().Format("2006-01-02 15:04:05"),
+"paymentUserId":          userID,
+"paymentTypeId":          interviewTypeID,
+"paymentStatus":          "PENDING",
+"externalCreditOrderId":  info["externalCreditOrderId"],
+"externalUserId":         info["externalUserId"],
+"externalCountryId":      info["externalCountryId"],
+"externalUserSurveyId":   info["externalUserSurveyId"],
+"externalProjectId":      info["externalProjectId"],
 })
 }
 
@@ -6127,11 +6142,150 @@ writeJSON(w, http.StatusInternalServerError, map[string]any{
 })
 return
 }
-// PARTIAL: processPendingPaymentsForTimeslotIds (Lambda call) not implemented
-slog.Info("AddTimeSlotPaymentsMRA: processPendingPaymentsForTimeslotIds PARTIAL — Lambda Credit-Rewards not called")
+		// Process pending payments: call Credit-Rewards Lambda
+		if h.services.Lambda != nil && h.services.Lambda.Configured() {
+			h.processPendingPaymentsForTimeslotIdsMRA(r.Context(), payments)
+		} else {
+			slog.Info("AddTimeSlotPaymentsMRA: Lambda client not configured, skipping Credit-Rewards call")
+		}
 }
 
 writeJSON(w, http.StatusCreated, map[string]any{"message": "Success"})
+}
+
+// processPendingPaymentsForTimeslotIdsMRA implements the legacy processPendingPaymentsForTimeslotIds flow:
+// 1. Begin transaction
+// 2. Get pending payment records (SELECT … FOR UPDATE)
+// 3. Deduplicate per timeSlotId (first record wins)
+// 4. Mark selected records as COMPLETED, remainder as CANCELED
+// 5. Invoke Credit-Rewards-CDKV2 Lambda
+// 6. On failure: rollback + mark FAILED
+func (h *Handler) processPendingPaymentsForTimeslotIdsMRA(ctx context.Context, payments []map[string]any) {
+	timeSlotIDs := make([]int64, 0, len(payments))
+	for _, p := range payments {
+		if tsID, ok := p["timeSlotId"].(int64); ok {
+			timeSlotIDs = append(timeSlotIDs, tsID)
+		}
+	}
+	if len(timeSlotIDs) == 0 {
+		return
+	}
+
+	tx, err := h.db.QS.BeginTx(ctx, nil)
+	if err != nil {
+		slog.Error("processPendingPayments: begin tx", "error", err)
+		return
+	}
+
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			slog.Error("processPendingPayments: panic recovered", "panic", p)
+		}
+	}()
+
+	pendingRecords, err := h.qsTimeSlotRepo.GetPendingPaymentsMRA(ctx, tx, timeSlotIDs)
+	if err != nil {
+		slog.Error("processPendingPayments: get pending", "error", err)
+		_ = tx.Rollback()
+		return
+	}
+
+	if len(pendingRecords) == 0 {
+		slog.Info("processPendingPayments: no pending payments to process")
+		_ = tx.Commit()
+		return
+	}
+
+	// Deduplicate: first record per timeSlotId
+	seen := map[int64]bool{}
+	var uniqueRecords []qs.PendingPaymentRecord
+	for _, rec := range pendingRecords {
+		if !seen[rec.TimeSlotID] {
+			seen[rec.TimeSlotID] = true
+			uniqueRecords = append(uniqueRecords, rec)
+		}
+	}
+
+	// Build Lambda payload from unique records matched to payments
+	paymentsByTS := map[int64]map[string]any{}
+	for _, p := range payments {
+		if tsID, ok := p["timeSlotId"].(int64); ok {
+			paymentsByTS[tsID] = p
+		}
+	}
+
+	var lambdaData []map[string]any
+	var toProcessTS []int64
+	var toProcessIDs []int64
+	for _, rec := range uniqueRecords {
+		info := paymentsByTS[rec.TimeSlotID]
+		if info == nil {
+			continue
+		}
+		lambdaData = append(lambdaData, map[string]any{
+			"creditOrderId": info["externalCreditOrderId"],
+			"userId":        info["externalUserId"],
+			"countryId":     info["externalCountryId"],
+			"userSurveyId":  info["externalUserSurveyId"],
+			"projectId":     info["externalProjectId"],
+			"amount":        info["amount"],
+			"allowDuplicate": true,
+			"transferNote":  "Payment for QS Interview",
+			"source":        "QS",
+		})
+		toProcessTS = append(toProcessTS, rec.TimeSlotID)
+		toProcessIDs = append(toProcessIDs, rec.ID)
+	}
+
+	// Mark COMPLETED
+	if err := h.qsTimeSlotRepo.UpdateCompletedPaymentHistoryMRA(ctx, tx, toProcessTS, toProcessIDs); err != nil {
+		slog.Error("processPendingPayments: update completed", "error", err)
+		_ = tx.Rollback()
+		_ = h.qsTimeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+		return
+	}
+
+	// Mark remaining PENDING as CANCELED
+	if err := h.qsTimeSlotRepo.UpdateCanceledPaymentHistoryMRA(ctx, tx, toProcessTS, toProcessIDs); err != nil {
+		slog.Error("processPendingPayments: update canceled", "error", err)
+		_ = tx.Rollback()
+		_ = h.qsTimeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+		return
+	}
+
+	// Invoke Lambda
+	payloadJSON, err := json.Marshal(lambdaData)
+	if err != nil {
+		slog.Error("processPendingPayments: marshal lambda payload", "error", err)
+		_ = tx.Rollback()
+		_ = h.qsTimeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+		return
+	}
+
+	fullName := h.services.Lambda.FullLambdaName("Credit-Rewards-CDKV2")
+	respPayload, statusCode, err := h.services.Lambda.Invoke(ctx, fullName, payloadJSON)
+	if err != nil {
+		slog.Error("processPendingPayments: lambda invoke failed", "error", err, "function", fullName)
+		_ = tx.Rollback()
+		_ = h.qsTimeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+		return
+	}
+
+	if statusCode != 200 {
+		slog.Error("processPendingPayments: lambda returned non-200", "statusCode", statusCode, "response", string(respPayload))
+		_ = tx.Rollback()
+		_ = h.qsTimeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		slog.Error("processPendingPayments: commit tx", "error", err)
+		_ = h.qsTimeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+		return
+	}
+
+	slog.Info("processPendingPayments: completed successfully", "timeslots", toProcessTS)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -6281,10 +6435,68 @@ writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()
 return
 }
 
-// PARTIAL: Step Function call to update IRIS hono not implemented
-slog.Info("AddTimeSlotCustomHonorariumMRA: Step Function external-calls-StateMachine PARTIAL — not called")
+// Call Step Function to update IRIS honorarium (legacy: external-calls-StateMachine)
+if h.services.StepFn != nil && h.services.StepFn.Configured() {
+go h.callStepFunctionForCustomHonoMRA(r.Context(), body.TimeSlotID, body.OldValue, body.NewValue, body.ReasonCode, userID)
+} else {
+slog.Info("AddTimeSlotCustomHonorariumMRA: Step Function client not configured, skipping IRIS update")
+}
 
 writeJSON(w, http.StatusOK, map[string]any{"message": "Successfully Added honorarium amount"})
+}
+
+// callStepFunctionForCustomHonoMRA invokes the external-calls-StateMachine Step Function
+// to sync custom honorarium updates to IRIS. Runs in a goroutine (fire-and-forget with logging).
+func (h *Handler) callStepFunctionForCustomHonoMRA(ctx context.Context, timeSlotID int64, oldValue, newValue float64, reasonCode string, userID int64) {
+// Look up externalUserSurveyId for this timeslot
+externalSurveyID, err := h.qsTimeSlotRepo.GetExternalSurveyIdByTimeSlotIdMRA(ctx, timeSlotID)
+if err != nil {
+slog.Error("callStepFunctionForCustomHono: get external survey id", "error", err, "timeSlotId", timeSlotID)
+return
+}
+if externalSurveyID == "" {
+slog.Warn("callStepFunctionForCustomHono: no external survey id, skipping", "timeSlotId", timeSlotID)
+return
+}
+
+// Build env prefix for token secret name (legacy: prd→production, data-qa→qual-qa)
+envPrefix := h.cfg.AWS.Environment
+switch envPrefix {
+case "prod":
+envPrefix = "production"
+case "data-qa":
+envPrefix = "qual-qa"
+}
+
+apiPayload := map[string]any{
+"apiPayload": map[string]any{
+"source": "QS",
+"url":    h.cfg.AWS.ICApiURL + "/v1/qual_hono_update",
+"method": "POST",
+"data": map[string]any{
+"userSurveyId":   externalSurveyID,
+"oldHono":        oldValue,
+"updatedHono":    newValue,
+"reason":         reasonCode,
+"externalUserId": userID,
+},
+"headers": map[string]any{
+"Content-Type": "application/json",
+},
+"authType":       "EXTERNAL_API_TOKEN",
+"tokenSecretName": "external_api_token_" + envPrefix,
+"tokenKey":        "qual-hono-update",
+"authHeaderKey":   "Authorization",
+"authHeaderType":  "BEARER",
+},
+}
+
+if err := h.services.StepFn.StartExecution(ctx, "external-calls-StateMachine", apiPayload); err != nil {
+slog.Error("callStepFunctionForCustomHono: step function failed", "error", err, "timeSlotId", timeSlotID)
+return
+}
+
+slog.Info("callStepFunctionForCustomHono: step function started successfully", "timeSlotId", timeSlotID)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
