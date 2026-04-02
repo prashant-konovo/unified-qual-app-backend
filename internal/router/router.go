@@ -91,6 +91,7 @@ func New(h *handler.Handler, jwtAuth *middleware.JWTAuth) *chi.Mux {
 				r.Get("/get-conf-link-time-slot-id/{timeslot_id}", h.GetConfLinkByTimeSlotMRA)
 				r.Get("/user/get_all_moderators/{client_id}", h.GetAllModeratorsMRA)
 				r.Post("/moderator/post-availability", h.PostModeratorAvailabilityMRA)
+				r.Put("/moderator/{availability_id}/update-availability", h.UpdateModeratorAvailabilityMRA)
 				r.Get("/project/{id}", h.GetProject)
 				r.Put("/project/{id}", h.UpdateProject)
 				r.Delete("/project/{id}", h.DeleteProject)

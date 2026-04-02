@@ -3866,3 +3866,99 @@ func parseTimeFlexible(s string) time.Time {
 	}
 	return time.Time{}
 }
+
+// UpdateModeratorAvailabilityMRA handles PUT /moderator/{availability_id}/update-availability (MRA).
+// Contract-identical with legacy: validates against timeslots with moderator buffer, updates availability,
+// returns all moderator availabilities with user info.
+func (h *Handler) UpdateModeratorAvailabilityMRA(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "availability_id")
+	avID, _ := strconv.ParseInt(idStr, 10, 64)
+
+	if h.qsUserRepo == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "user repository not available"})
+		return
+	}
+
+	ctx := r.Context()
+
+	// Step 1: Find existing availability
+	oldAv, err := h.qsUserRepo.FindModeratorAvailabilityByIdMRA(ctx, avID)
+	if err != nil {
+		slog.Error("find availability failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	if oldAv == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "Availability not found"})
+		return
+	}
+
+	// Decode request body
+	var req struct {
+		StartTime string `json:"startTime"`
+		EndTime   string `json:"endTime"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	// Step 2: Get moderator info with buffer
+	modInfo, err := h.qsUserRepo.GetModeratorsInfoByAvailabilityIdMRA(ctx, avID)
+	if err != nil {
+		slog.Error("get moderator info failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	moderatorBuffer := 15
+	if modInfo != nil {
+		if buf, ok := modInfo["moderatorBuffer"].(int); ok {
+			moderatorBuffer = buf
+		}
+	}
+
+	// Step 3: Check validity against existing timeslots (using OLD availability data, as legacy does)
+	modID := oldAv["moderatorId"].(int64)
+	clientID := oldAv["clientId"].(int64)
+	oldST := fmt.Sprint(oldAv["startTime"])
+	oldET := fmt.Sprint(oldAv["endTime"])
+
+	conflictCount, err := h.qsUserRepo.IsValidAvailabilityMRA(ctx, modID, oldST, oldET, moderatorBuffer)
+	if err != nil {
+		slog.Error("check availability validity failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	if conflictCount > 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "This availability conflicts with an existing timeslot or some other condition",
+		})
+		return
+	}
+
+	// Step 4: Update the availability
+	startTime, _ := time.Parse(time.RFC3339, req.StartTime)
+	if startTime.IsZero() {
+		startTime, _ = time.Parse("2006-01-02T15:04:05.000Z", req.StartTime)
+	}
+	endTime, _ := time.Parse(time.RFC3339, req.EndTime)
+	if endTime.IsZero() {
+		endTime, _ = time.Parse("2006-01-02T15:04:05.000Z", req.EndTime)
+	}
+
+	if err := h.qsUserRepo.UpdateModeratorAvailability(ctx, avID, startTime, endTime); err != nil {
+		slog.Error("update availability failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	// Step 5: Return all moderator availabilities (matching legacy getAllModeratorAvailabilityService)
+	result, err := h.qsUserRepo.GetAllModeratorAvailabilityWithUserMRA(ctx, modID, clientID)
+	if err != nil {
+		slog.Error("get all availability failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}

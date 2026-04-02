@@ -982,3 +982,55 @@ func (r *UserRepo) scanAvailabilityRows(ctx context.Context, query string, args 
 	}
 	return records, rows.Err()
 }
+
+// FindModeratorAvailabilityByIdMRA finds a single moderator availability by ID.
+func (r *UserRepo) FindModeratorAvailabilityByIdMRA(ctx context.Context, id int64) (map[string]any, error) {
+	q := `SELECT id, moderator_id AS moderatorId, client_id AS clientId, start_time AS startTime, end_time AS endTime
+		FROM moderator_availability WHERE id = ?`
+	var avID, modID, clientID int64
+	var st, et string
+	err := r.db.QueryRowContext(ctx, q, id).Scan(&avID, &modID, &clientID, &st, &et)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find moderator availability by id: %w", err)
+	}
+	return map[string]any{
+		"id": avID, "moderatorId": modID, "clientId": clientID,
+		"startTime": st, "endTime": et, "moderator_id": modID, "client_id": clientID,
+	}, nil
+}
+
+// GetModeratorsInfoByAvailabilityIdMRA returns moderator info (with buffer) by availability ID.
+func (r *UserRepo) GetModeratorsInfoByAvailabilityIdMRA(ctx context.Context, availabilityID int64) (map[string]any, error) {
+	q := `SELECT moderator_id AS id, first_name AS firstName, last_name AS lastName, email,
+		COALESCE(moderator_buffer, 15) AS moderatorBuffer
+		FROM moderator_availability
+		INNER JOIN user ON user.id = moderator_availability.moderator_id
+		WHERE moderator_availability.id = ?`
+	var id int64
+	var firstName, lastName, email string
+	var buffer int
+	err := r.db.QueryRowContext(ctx, q, availabilityID).Scan(&id, &firstName, &lastName, &email, &buffer)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get moderator info by availability id: %w", err)
+	}
+	return map[string]any{
+		"id": id, "firstName": firstName, "lastName": lastName,
+		"email": email, "moderatorBuffer": buffer,
+	}, nil
+}
+
+// GetAllModeratorAvailabilityWithUserMRA returns all moderator availabilities with user info (firstName, lastName).
+func (r *UserRepo) GetAllModeratorAvailabilityWithUserMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error) {
+	q := `SELECT ma.id, moderator_id AS moderatorId, first_name AS firstName, last_name AS lastName,
+		client_id AS clientId, start_time AS startTime, end_time AS endTime
+		FROM moderator_availability ma
+		INNER JOIN user ON user.id = ma.moderator_id
+		WHERE moderator_id = ? AND client_id = ?`
+	return r.scanAvailabilityRows(ctx, q, moderatorID, clientID)
+}
