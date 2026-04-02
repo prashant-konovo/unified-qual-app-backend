@@ -4933,3 +4933,46 @@ result = []map[string]any{}
 
 writeJSON(w, http.StatusOK, result)
 }
+
+// GetParticipantIdMRA handles GET /get-participant-id/{timeslot_id} (MRA).
+// Contract-identical: returns [{externalResponderId}]
+func (h *Handler) GetParticipantIdMRA(w http.ResponseWriter, r *http.Request) {
+tsIDStr := chi.URLParam(r, "timeslot_id")
+tsID, _ := strconv.ParseInt(tsIDStr, 10, 64)
+
+if h.qsRespondentRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+return
+}
+
+records, err := h.qsRespondentRepo.GetParticipantIdMRA(r.Context(), tsID)
+if err != nil {
+slog.Error("get participant id mra failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{
+"error":        err.Error(),
+"errorMessage": "An error occured while getting participant id for timeslot id",
+})
+return
+}
+
+writeJSON(w, http.StatusOK, records)
+}
+
+// GetAllProjectManagersMRA handles GET /project_manager/client/{client_id} (MRA).
+// Contract-identical: returns [{firstName, lastName, id}]
+// Note: Legacy SQL has client_id=1 hardcoded, ignoring the path parameter.
+func (h *Handler) GetAllProjectManagersMRA(w http.ResponseWriter, r *http.Request) {
+if h.qsUserRepo == nil {
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+return
+}
+
+records, err := h.qsUserRepo.GetAllProjectManagersListMRA(r.Context())
+if err != nil {
+slog.Error("get all project managers mra failed", "error", err)
+writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+return
+}
+
+writeJSON(w, http.StatusOK, records)
+}

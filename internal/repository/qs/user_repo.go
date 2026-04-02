@@ -1429,3 +1429,32 @@ records = []map[string]any{}
 }
 return records, rows.Err()
 }
+
+// GetAllProjectManagersListMRA returns project managers matching legacy SQL (client_id=1 hardcoded in legacy).
+func (r *UserRepo) GetAllProjectManagersListMRA(ctx context.Context) ([]map[string]any, error) {
+q := `SELECT DISTINCT user.first_name AS firstName, user.last_name AS lastName, user.id AS id
+FROM user
+INNER JOIN user_client ON user.id = user_client.user_id
+INNER JOIN user_role ON user.id = user_role.user_id
+WHERE user_client.client_id = 1 AND user_role.role_id IN (2, 3) AND user.deleted = 0
+GROUP BY user.id
+ORDER BY firstName, lastName ASC`
+rows, err := r.db.QueryContext(ctx, q)
+if err != nil {
+return nil, fmt.Errorf("get all project managers list mra: %w", err)
+}
+defer rows.Close()
+var records []map[string]any
+for rows.Next() {
+var id int64
+var firstName, lastName string
+if err := rows.Scan(&firstName, &lastName, &id); err != nil {
+return nil, err
+}
+records = append(records, map[string]any{"firstName": firstName, "lastName": lastName, "id": id})
+}
+if records == nil {
+records = []map[string]any{}
+}
+return records, rows.Err()
+}

@@ -240,3 +240,29 @@ func (repo *RespondentRepo) GetRescheduleTokenMRA(ctx context.Context, projectID
 	}
 	return token.String, nil
 }
+
+// GetParticipantIdMRA returns external responder IDs for a timeslot.
+func (r *RespondentRepo) GetParticipantIdMRA(ctx context.Context, timeslotID int64) ([]map[string]any, error) {
+q := `SELECT external_responder_id AS externalResponderId
+FROM responder
+INNER JOIN conference_invitation_responder_time_slot
+ON conference_invitation_responder_time_slot.responder_id = responder.id
+WHERE time_slot_id = ?`
+rows, err := r.db.QueryContext(ctx, q, timeslotID)
+if err != nil {
+return nil, fmt.Errorf("get participant id mra: %w", err)
+}
+defer rows.Close()
+var records []map[string]any
+for rows.Next() {
+var extID string
+if err := rows.Scan(&extID); err != nil {
+return nil, err
+}
+records = append(records, map[string]any{"externalResponderId": extID})
+}
+if records == nil {
+records = []map[string]any{}
+}
+return records, rows.Err()
+}
