@@ -1375,3 +1375,114 @@ records = []map[string]any{}
 }
 return records, rows.Err()
 }
+
+// GetAllAccountsMRA returns account types (legacy /salesforce/getAllAccounts).
+func (r *ProjectRepo) GetAllAccountsMRA(ctx context.Context) ([]map[string]any, error) {
+q := `SELECT id, account_name FROM user_account_type`
+rows, err := r.db.QueryContext(ctx, q)
+if err != nil {
+return nil, fmt.Errorf("get all accounts mra: %w", err)
+}
+defer rows.Close()
+var records []map[string]any
+for rows.Next() {
+var id int64
+var name string
+if err := rows.Scan(&id, &name); err != nil {
+return nil, err
+}
+records = append(records, map[string]any{"id": id, "account_name": name})
+}
+if records == nil {
+records = []map[string]any{}
+}
+return records, rows.Err()
+}
+
+// GetSalesforceClientsMRA returns salesforce accounts that have projects (legacy /salesforce/clients).
+func (r *ProjectRepo) GetSalesforceClientsMRA(ctx context.Context) ([]map[string]any, error) {
+q := `SELECT salesforce_account_id AS accountId, name
+FROM salesforce_account
+WHERE is_deleted = 0
+AND salesforce_account_id IN (SELECT account_c FROM salesforce_project)
+AND salesforce_account_id != 'UnKnown_UnKnown'
+ORDER BY name`
+rows, err := r.db.QueryContext(ctx, q)
+if err != nil {
+return nil, fmt.Errorf("get salesforce clients mra: %w", err)
+}
+defer rows.Close()
+var records []map[string]any
+for rows.Next() {
+var accountID, name string
+if err := rows.Scan(&accountID, &name); err != nil {
+return nil, err
+}
+records = append(records, map[string]any{"accountId": accountID, "name": name})
+}
+if records == nil {
+records = []map[string]any{}
+}
+return records, rows.Err()
+}
+
+// GetSalesforceProjectsMRA returns salesforce projects for a client (legacy /salesforce/projects/{id}).
+func (r *ProjectRepo) GetSalesforceProjectsMRA(ctx context.Context, salesforceClientID string) ([]map[string]any, error) {
+q := `SELECT salesforce_project_id AS salesForceProjectId,
+(CASE WHEN name_c IS NULL THEN job_number_text_c
+ ELSE CONCAT(job_number_text_c, '-', name_c) END) AS salesForceProjectName
+FROM salesforce_project
+WHERE account_c = ?`
+rows, err := r.db.QueryContext(ctx, q, salesforceClientID)
+if err != nil {
+return nil, fmt.Errorf("get salesforce projects mra: %w", err)
+}
+defer rows.Close()
+var records []map[string]any
+for rows.Next() {
+var projectID, projectName string
+if err := rows.Scan(&projectID, &projectName); err != nil {
+return nil, err
+}
+records = append(records, map[string]any{"salesForceProjectId": projectID, "salesForceProjectName": projectName})
+}
+if records == nil {
+records = []map[string]any{}
+}
+return records, rows.Err()
+}
+
+// GetSalesforceClientsWithFilterMRA returns salesforce accounts filtered by geo (legacy /salesforce/getSalesforceClientsWithFilter).
+// projectAccountId: 1=All, 2=USA(eu_account_c=0), 3=EU(eu_account_c=1)
+func (r *ProjectRepo) GetSalesforceClientsWithFilterMRA(ctx context.Context, projectAccountID int) ([]map[string]any, error) {
+var q string
+var args []any
+if projectAccountID == 1 {
+q = `SELECT salesforce_account_id, name FROM salesforce_account
+WHERE is_deleted = 0
+AND salesforce_account_id IN (SELECT account_c FROM salesforce_project)`
+} else {
+euVal := projectAccountID - 2 // 2→0 (USA), 3→1 (EU)
+q = `SELECT salesforce_account_id, name FROM salesforce_account
+WHERE is_deleted = 0 AND eu_account_c = ?
+AND salesforce_account_id IN (SELECT account_c FROM salesforce_project)`
+args = append(args, euVal)
+}
+rows, err := r.db.QueryContext(ctx, q, args...)
+if err != nil {
+return nil, fmt.Errorf("get salesforce clients with filter mra: %w", err)
+}
+defer rows.Close()
+var records []map[string]any
+for rows.Next() {
+var accountID, name string
+if err := rows.Scan(&accountID, &name); err != nil {
+return nil, err
+}
+records = append(records, map[string]any{"salesforce_account_id": accountID, "name": name})
+}
+if records == nil {
+records = []map[string]any{}
+}
+return records, rows.Err()
+}
