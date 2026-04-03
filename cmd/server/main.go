@@ -8,6 +8,7 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
+	"github.com/InCrowd/unified-qual-api/internal/handler/core"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/logger"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
@@ -65,7 +66,7 @@ func main() {
 	}
 
 	// Wire handlers + router
-	deps := handler.NewDeps(cfg, db, integration.NewServiceClients(cfg),
+	deps := core.NewDeps(cfg, db, integration.NewServiceClients(cfg),
 		irisProjectRepo, qsProjectRepo,
 		irisUserRepo, qsUserRepo,
 		qsTimeSlotRepo, qsRespondentRepo,
