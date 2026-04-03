@@ -376,7 +376,7 @@ func (h *AuthHandler) AuthSSOConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	authorizeURL := fmt.Sprintf(
-		"https://%s/oauth2/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=email+openid+profile",
+		"https://%s/oauth2/authorize?response_type=code&client_id=%s&redirect_uri=%s&scope=email+openid",
 		cfg.Domain,
 		cfg.SSOClientID,
 		url.QueryEscape(redirectURI),
