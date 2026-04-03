@@ -1,543 +1,60 @@
 package router
 
 import (
-"github.com/InCrowd/unified-qual-api/internal/handler"
-"github.com/InCrowd/unified-qual-api/internal/logger"
-"github.com/InCrowd/unified-qual-api/internal/middleware"
-"github.com/go-chi/chi/v5"
-chimw "github.com/go-chi/chi/v5/middleware"
-"github.com/go-chi/cors"
+	"github.com/InCrowd/unified-qual-api/internal/handler"
+	"github.com/InCrowd/unified-qual-api/internal/logger"
+	"github.com/InCrowd/unified-qual-api/internal/middleware"
+	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 )
 
 // Role presets — reusable middleware closures
 var (
-adminOnly       = middleware.RequireRoles("admin")
-adminManager    = middleware.RequireRoles("admin", "manager")
-adminManagerMod = middleware.RequireRoles("admin", "manager", "moderator")
+	adminOnly       = middleware.RequireRoles("admin")
+	adminManager    = middleware.RequireRoles("admin", "manager")
+	adminManagerMod = middleware.RequireRoles("admin", "manager", "moderator")
 )
 
 func New(hs *handler.Handlers, jwtAuth *middleware.JWTAuth) *chi.Mux {
-r := chi.NewRouter()
+	r := chi.NewRouter()
 
-// Middleware
-r.Use(chimw.RequestID)
-r.Use(chimw.RealIP)
-r.Use(logger.Middleware) // structured JSON logging with request ID
-r.Use(chimw.Recoverer)
-r.Use(cors.Handler(cors.Options{
-AllowedOrigins:   []string{"*"},
-AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "IC-Auth", "CognitoToken"},
-ExposedHeaders:   []string{"X-Request-ID", "X-Brand"},
-AllowCredentials: true,
-MaxAge:           300,
-}))
+	// Middleware
+	r.Use(chimw.RequestID)
+	r.Use(chimw.RealIP)
+	r.Use(logger.Middleware) // structured JSON logging with request ID
+	r.Use(chimw.Recoverer)
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "IC-Auth", "CognitoToken"},
+		ExposedHeaders:   []string{"X-Request-ID", "X-Brand"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 
-// Health check (public)
-r.Get("/health", hs.Handler.Health)
+	// Health check (public)
+	r.Get("/health", hs.Handler.Health)
 
-// API v1 routes — matches the frontend axios baseURL suffix /v1
-r.Route("/v1", func(r chi.Router) {
-registerPublicRoutes(r, hs)
+	// API v1 routes — matches the frontend axios baseURL suffix /v1
+	r.Route("/v1", func(r chi.Router) {
+		registerPublicRoutes(r, hs)
 
-r.Group(func(r chi.Router) {
-r.Use(jwtAuth.Middleware)
-registerAuthRoutes(r, hs)
-registerProjectRoutes(r, hs)
-registerSurveyRoutes(r, hs)
-registerTimeslotRoutes(r, hs)
-registerModeratorRoutes(r, hs)
-registerParticipantRoutes(r, hs)
-registerBookingRoutes(r, hs)
-registerSubscriptionRoutes(r, hs)
-registerConferenceRoutes(r, hs)
-registerAdminRoutes(r, hs)
-registerLegacyRoutes(r, hs)
-})
-})
+		r.Group(func(r chi.Router) {
+			r.Use(jwtAuth.Middleware)
+			registerAuthRoutes(r, hs)
+			registerProjectRoutes(r, hs)
+			registerSurveyRoutes(r, hs)
+			registerTimeslotRoutes(r, hs)
+			registerModeratorRoutes(r, hs)
+			registerParticipantRoutes(r, hs)
+			registerBookingRoutes(r, hs)
+			registerSubscriptionRoutes(r, hs)
+			registerConferenceRoutes(r, hs)
+			registerAdminRoutes(r, hs)
+			registerLegacyRoutes(r, hs)
+		})
+	})
 
-return r
-}
-
-// ══════════════════════════════════════════════════════════════
-// Public routes — no JWT required
-// ══════════════════════════════════════════════════════════════
-
-func registerPublicRoutes(r chi.Router, hs *handler.Handlers) {
-// Auth endpoints
-r.Post("/auth/login", hs.Auth.AuthLogin)
-r.Post("/auth/magic-link", hs.Auth.AuthMagicLink)
-r.Post("/auth/refresh", hs.Auth.AuthRefresh)
-r.Post("/auth/accept-terms", hs.Auth.AuthAcceptTerms)
-r.Post("/auth/logout", hs.Auth.AuthLogout)
-r.Get("/auth/sso/config", hs.Auth.AuthSSOConfig)
-r.Post("/auth/sso/callback", hs.Auth.AuthSSOCallback)
-
-// Participant-facing endpoints
-r.Get("/survey/{surveyId}/public", hs.Survey.GetPublicSurvey)
-r.Post("/survey/submit", hs.Survey.SubmitParticipantSurvey)
-r.Get("/survey/{userId}", hs.Survey.GetParticipantSurveyResponse)
-r.Get("/slots", hs.Interview.GetAvailableSlots)
-
-// Conference login
-r.Post("/conf/{confId}/login", hs.Handler.ConferenceLogin)
-r.Get("/conf/{confId}/participants", hs.Handler.GetConferenceParticipants)
-
-// Webhooks / Callbacks (service-to-service)
-// Recording upload callback from Conference Service (S3 trigger → Lambda → here)
-r.Post("/chime/recording/meeting/{meetingId}", hs.Handler.RecordingUploadCallback)
-
-// Interview media for conference participants
-r.Get("/interview_media/{confHash}/{mediaId}/pages/{page}/media.pdf", hs.Handler.GetMediaPageForConference)
-}
-
-// ══════════════════════════════════════════════════════════════
-// Auth routes — JWT required, no role restriction
-// ══════════════════════════════════════════════════════════════
-
-func registerAuthRoutes(r chi.Router, hs *handler.Handlers) {
-r.Put("/auth/password", hs.Auth.AuthPassword)
-r.Get("/auth/me", hs.Auth.AuthMe)
-}
-
-// ══════════════════════════════════════════════════════════════
-// Project routes — includes MRA variants and sub-resources
-// ══════════════════════════════════════════════════════════════
-
-func registerProjectRoutes(r chi.Router, hs *handler.Handlers) {
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/projects", hs.Project.ListProjects)
-r.Post("/project", hs.Project.CreateProject)
-r.Post("/project/create-project", hs.MRA.CreateProjectMRA)
-r.Get("/project/get-project-details/{id}", hs.MRA.GetProjectMRA)
-r.Post("/project/get-projects/client/{client_id}", hs.MRA.ListProjectsMRA)
-r.Put("/project/update-project-details/{project_id}", hs.MRA.UpdateProjectMRA)
-r.Put("/project/update-external-survey-id/{project_id}", hs.MRA.UpdateExternalSurveyIDMRA)
-r.Post("/project/{project_id}/moderators_reset", hs.MRA.ResetProjectModeratorsMRA)
-r.Get("/project/{project_id}/get_email_template", hs.MRA.GetEmailTemplateMRA)
-r.Post("/project/{project_id}/handle-export", hs.MRA.HandleProjectExportMRA)
-r.Put("/project/{project_id}/update-sample-size", hs.MRA.UpdateSampleSizeMRA)
-r.Get("/project/{project_id}/get-unavailable-moderators", hs.MRA.GetUnavailableModeratorsMRA)
-r.Post("/project/{project_id}/time_range/moderator/{moderator_id}", hs.MRA.UpsertModeratorTimeRangeMRA)
-r.Get("/project/get-moderators-count/{project_id}/sample-size/{sample_size}", hs.MRA.GetModeratorsCountMRA)
-r.Post("/projects/{client_id}/interviews", hs.MRA.GetAllInterviewsMRA)
-r.Post("/interview/schedule", hs.MRA.ScheduleInterviewMRA)
-r.Post("/interview/respondent_reschedule", hs.MRA.RespondentRescheduleMRA)
-r.Post("/interview/invalidate", hs.MRA.InvalidateInterviewMRA)
-r.Post("/interview/send_invalidate_reschedule_mail", hs.MRA.SendInvalidateRescheduleMailMRA)
-r.Post("/add-conference-link/project/{project_id}/participant_group/{participant_group_id}", hs.MRA.AddConferenceLinkMRA)
-r.Put("/update-conference-link/project/{project_id}/participant-group/{participant_group_id}", hs.MRA.UpdateConferenceLinkMRA)
-r.Get("/get-conference-link/{participant_group_id}", hs.MRA.GetConferenceLinkMRA)
-r.Get("/get-conf-link-time-slot-id/{timeslot_id}", hs.MRA.GetConfLinkByTimeSlotMRA)
-r.Get("/user/get_all_moderators/{client_id}", hs.MRA.GetAllModeratorsMRA)
-r.Post("/moderator/post-availability", hs.MRA.PostModeratorAvailabilityMRA)
-r.Put("/moderator/{availability_id}/update-availability", hs.MRA.UpdateModeratorAvailabilityMRA)
-r.Delete("/moderator/{availability_id}/delete-availability", hs.MRA.DeleteModeratorAvailabilityMRA)
-r.Get("/get_moderators_availability/{qs_path}/survey/{survey_id}", hs.MRA.GetModeratorsAvailabilityMRA)
-r.Post("/moderator/get/{moderator_id}/client/{client_id}/time_slots", hs.MRA.GetModeratorTimeslotsMRA)
-r.Post("/moderator/get-all-interviews/{moderator_id}", hs.MRA.GetModeratorInterviewsMRA)
-r.Get("/moderator/get-projects/{moderator_id}/client/{client_id}", hs.MRA.GetProjectsForModeratorMRA)
-r.Get("/moderator/client/{project_id}/list", hs.MRA.GetModeratorsListForProjectMRA)
-r.Put("/moderator/get/{moderator_id}", hs.MRA.UpdateModeratorMRA)
-r.Get("/get-moderators-for-timeSlot/{timeslot_id}", hs.MRA.GetModeratorsForTimeSlotMRA)
-r.Get("/get-moderators-option/{timeslot_id}", hs.MRA.GetModeratorsOptionMRA)
-r.Get("/get-participant-id/{timeslot_id}", hs.MRA.GetParticipantIdMRA)
-r.Get("/project_manager/client/{client_id}", hs.MRA.GetAllProjectManagersMRA)
-r.Post("/project_manager/get/time_slots/client/{client_id}", hs.MRA.GetPMTimeslotsMRA)
-r.Post("/project_manager/get/availabilities/client/{client_id}", hs.MRA.GetAvailabilitiesForPMMRA)
-r.Get("/salesforce/getAllAccounts", hs.MRA.GetAllAccountsMRA)
-r.Get("/salesforce/clients", hs.MRA.GetSalesforceClientsMRA)
-r.Get("/salesforce/projects/{salesforce_client_id}", hs.MRA.GetSalesforceProjectsMRA)
-r.Post("/salesforce/getSalesforceClientsWithFilter", hs.MRA.GetSalesforceClientsWithFilterMRA)
-// MRA #61-66
-r.Post("/third-party-integrate", hs.MRA.ThirdPartyIntegrateMRA)
-r.Post("/log-front-end-event", hs.MRA.LogFrontEndEventMRA)
-r.Post("/qual/eligibility", hs.MRA.QualEligibilityMRA)
-r.Get("/moderator/get/{moderator_id}/get-mod-av/{client_id}", hs.MRA.GetModeratorAvailabilityByClientMRA)
-r.Post("/moderator/get/{moderator_id}/imported/{client_id}", hs.MRA.StartModeratorImportMRA)
-r.Get("/moderator/get/{moderator_id}/imported-from-current-sync/{client_id}", hs.MRA.GetImportedAvailabilityFromCurrentSyncMRA)
-// MRA #67-72
-r.Get("/moderator/get/{moderator_id}/import-status", hs.MRA.GetImportStatusMRA)
-r.Post("/moderator/unlink-imp-mod/{moderator_id}", hs.MRA.UnlinkImportedModeratorMRA)
-r.Get("/moderator/update-google-sheet-first-date", hs.MRA.UpdateGoogleSheetFirstDateMRA)
-r.Get("/project/get_topics_by_project/{project_id}", hs.MRA.GetTopicsByProjectMRA)
-r.Post("/update-topic-translation/{project_id}", hs.MRA.UpdateTopicTranslationMRA)
-r.Delete("/translations/delete-topic-translation/{project_id}/{transaltion_to_delete}", hs.MRA.DeleteTopicTranslationMRA)
-// MRA #73-78
-r.Get("/translations/get-all-localisations", hs.MRA.GetAllLocalisationsMRA)
-r.Delete("/translations/delete-translation/{project_id}/{transaltion_to_delete}", hs.MRA.DeleteTranslationMRA)
-r.Post("/add-honorarium-amount", hs.MRA.AddHonorariumAmountMRA)
-r.Get("/hono-value-update-reason-list", hs.MRA.GetHonoValueUpdateReasonListMRA)
-r.Post("/time-slot-payments", hs.MRA.AddTimeSlotPaymentsMRA)
-r.Post("/time-slot-payments-external", hs.MRA.AddExternalTimeSlotPaymentsMRA)
-// MRA #79-82
-r.Post("/time-slot-custom-hono", hs.MRA.AddTimeSlotCustomHonorariumMRA)
-r.Get("/interview-payment-status-list", hs.MRA.GetInterviewPaymentStatusListMRA)
-r.Get("/project/{id}", hs.Project.GetProject)
-r.Put("/project/{id}", hs.Project.UpdateProject)
-r.Delete("/project/{id}", hs.Project.DeleteProject)
-// Phase 6: Project sub-resources
-r.Get("/project/{id}/surveys", hs.LS.GetProjectSurveys)
-r.Get("/project/{id}/time_slots", hs.LS.GetProjectTimeSlots)
-r.Get("/project/{id}/users", hs.LS.GetProjectUsers)
-r.Get("/project/{pid}/observers", hs.LS.GetProjectObservers)
-r.Get("/project/{pid}/qual_resched_body", hs.LS.GetProjectQualReschedBody)
-r.Get("/project/{pid}/availability", hs.LS.GetProjectAvailability)
-r.Get("/project/{pid}/scheduler_moderators", hs.LS.GetProjectSchedulerModerators)
-r.Get("/project/{pid}/dashboard/availability_and_time_slots", hs.LS.GetProjectDashboard)
-r.Get("/project/{pid}/interview_media", hs.Handler.GetProjectMedia)
-r.Get("/project/{pid}/interview_media/{mediaId}", hs.Handler.GetProjectMediaDetail)
-r.Get("/project/{pid}/interview_media/{mediaId}/media.pdf", hs.Handler.DownloadMediaPDF)
-r.Get("/project/{pid}/interview_media/{mediaId}/pages/{page}/img.png", hs.Handler.DownloadMediaPage)
-r.Delete("/interview_media/{pid}/{mediaId}", hs.Handler.DeleteProjectMedia)
-})
-}
-
-// ══════════════════════════════════════════════════════════════
-// Survey routes
-// ══════════════════════════════════════════════════════════════
-
-func registerSurveyRoutes(r chi.Router, hs *handler.Handlers) {
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/surveys", hs.Survey.ListSurveys)
-r.Post("/survey", hs.Survey.CreateSurvey)
-r.Put("/survey/{id}", hs.Survey.UpdateSurvey)
-r.Delete("/survey/{id}", hs.Survey.DeleteSurvey)
-// Phase 6: Survey extended
-r.Get("/survey/{id}/detail", hs.LS.GetSurveyDetail)
-r.Get("/survey/{id}/validate", hs.LS.ValidateSurvey)
-r.Get("/survey/{id}/crowds", hs.LS.GetSurveyCrowds)
-r.Put("/survey/{id}/close", hs.LS.CloseSurvey)
-r.Put("/survey/{id}/favorite", hs.LS.ToggleSurveyFavorite)
-})
-
-// Survey Responses (any authenticated user)
-r.Get("/survey-responses/{userId}", hs.Survey.GetSurveyResponses)
-r.Post("/survey-responses", hs.Survey.SubmitSurveyResponse)
-}
-
-// ══════════════════════════════════════════════════════════════
-// Timeslot routes — CRUD + interview slot generation
-// ══════════════════════════════════════════════════════════════
-
-func registerTimeslotRoutes(r chi.Router, hs *handler.Handlers) {
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/timeslots", hs.Interview.ListTimeslots)
-r.Post("/timeslots", hs.Interview.CreateTimeslot)
-r.Get("/timeslots/{id}", hs.Interview.GetTimeslot)
-r.Put("/timeslots/{id}", hs.Interview.UpdateTimeslot)
-r.Delete("/timeslots/{id}", hs.Interview.DeleteTimeslot)
-})
-
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Post("/slots/generate", hs.Interview.GenerateSlots)
-r.Get("/ai/suggested-slots", hs.Interview.GetAISuggestions)
-})
-}
-
-// ══════════════════════════════════════════════════════════════
-// Moderator routes — CRUD, availability, interviews
-// ══════════════════════════════════════════════════════════════
-
-func registerModeratorRoutes(r chi.Router, hs *handler.Handlers) {
-// Moderator management (admin + manager)
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/moderators", hs.Handler.ListModerators)
-r.Post("/moderators", hs.Handler.CreateModerator)
-r.Get("/moderators/{id}", hs.Handler.GetModerator)
-r.Put("/moderators/{id}", hs.Handler.UpdateModerator)
-r.Delete("/moderators/{id}", hs.Handler.DeleteModerator)
-r.Post("/moderators/bulk-upload", hs.Handler.BulkUploadModerators)
-})
-
-// Moderator availability — admin, manager, or moderator (own)
-r.Group(func(r chi.Router) {
-r.Use(adminManagerMod)
-r.Get("/moderators/{id}/availability", hs.Handler.GetModeratorAvailability)
-r.Post("/moderators/{id}/availability", hs.Handler.PostModeratorAvailability)
-r.Delete("/moderators/{id}/availability/{availabilityId}", hs.Handler.DeleteModeratorAvailability)
-r.Get("/moderators/{moderatorId}/timeslots", hs.Handler.GetModeratorTimeslots)
-r.Get("/timeslots/{id}/moderators/options", hs.Handler.GetTimeslotModeratorOptions)
-})
-
-// Interviews (admin, manager, moderator)
-r.Group(func(r chi.Router) {
-r.Use(adminManagerMod)
-r.Post("/interviews/schedule", hs.Handler.ScheduleInterview)
-r.Post("/interviews/{id}/cancel", hs.Handler.CancelInterview)
-r.Post("/interviews/{id}/reschedule", hs.Handler.RescheduleInterview)
-})
-}
-
-// ══════════════════════════════════════════════════════════════
-// Participant routes
-// ══════════════════════════════════════════════════════════════
-
-func registerParticipantRoutes(r chi.Router, hs *handler.Handlers) {
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/participants", hs.Handler.ListParticipants)
-r.Post("/participants", hs.Handler.CreateParticipant)
-r.Get("/participants/{id}", hs.Handler.GetParticipant)
-})
-}
-
-// ══════════════════════════════════════════════════════════════
-// Booking routes
-// ══════════════════════════════════════════════════════════════
-
-func registerBookingRoutes(r chi.Router, hs *handler.Handlers) {
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/bookings", hs.Handler.ListBookings)
-r.Post("/bookings", hs.Handler.CreateBooking)
-r.Get("/bookings/{userId}", hs.Handler.GetBookingsByUser)
-r.Put("/bookings/{id}", hs.Handler.UpdateBooking)
-r.Put("/bookings/{id}/reward", hs.Handler.UpdateBookingReward)
-})
-}
-
-// ══════════════════════════════════════════════════════════════
-// Subscription routes — CRUD + sub-resources
-// ══════════════════════════════════════════════════════════════
-
-func registerSubscriptionRoutes(r chi.Router, hs *handler.Handlers) {
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/subscriptions", hs.LS.ListSubscriptions)
-r.Post("/subscription", hs.LS.CreateSubscription)
-r.Get("/subscription/{id}", hs.LS.GetSubscription)
-r.Put("/subscription/{id}", hs.LS.UpdateSubscription)
-r.Delete("/subscription/{id}", hs.LS.DeleteSubscription)
-// Phase 6: Subscription sub-resources
-r.Get("/subscription/{id}/interviews", hs.LS.GetSubscriptionInterviews)
-r.Get("/subscription/{id}/crowds", hs.LS.GetSubscriptionCrowds)
-r.Get("/subscription/{id}/question_types", hs.LS.GetSubscriptionQuestionTypes)
-r.Get("/subscription/{subId}/inquiries", hs.LS.GetSubscriptionInquiries)
-r.Get("/subscription/{subId}/project/{pid}/inquiry", hs.LS.GetSubscriptionProjectInquiry)
-r.Get("/subscription/{subId}/project_surveys", hs.LS.GetSubscriptionProjectSurveys)
-})
-}
-
-// ══════════════════════════════════════════════════════════════
-// Conference routes — meetings
-// ══════════════════════════════════════════════════════════════
-
-func registerConferenceRoutes(r chi.Router, hs *handler.Handlers) {
-r.Group(func(r chi.Router) {
-r.Use(adminManagerMod)
-r.Post("/meetings/{meetingId}/action/{action}", hs.Handler.MeetingAction)
-r.Post("/meeting/{meetingId}/universal", hs.Handler.MeetingUniversalJoin)
-r.Post("/meeting", hs.Handler.CreateMeeting)
-// Phase 6: Meeting extended
-r.Get("/meeting/metadata", hs.Handler.GetMeetingMetadata)
-r.Put("/meeting/join/{joinId}", hs.Handler.MeetingJoin)
-r.Get("/meeting/get_attendees_by_meeting_id/{meetingId}", hs.Handler.GetAttendeesByMeetingID)
-r.Get("/meeting/recording_status/{meetingId}", hs.Handler.GetRecordingStatus)
-})
-}
-
-// ══════════════════════════════════════════════════════════════
-// Admin routes — admin-only
-// ══════════════════════════════════════════════════════════════
-
-func registerAdminRoutes(r chi.Router, hs *handler.Handlers) {
-r.Group(func(r chi.Router) {
-r.Use(adminOnly)
-r.Get("/admin/users", hs.Handler.ListAdminUsers)
-r.Post("/admin/users", hs.Handler.CreateAdminUser)
-r.Get("/qstoolAdmin/get-all-users", hs.MRA.ListAdminUsersMRA)
-})
-}
-
-// ══════════════════════════════════════════════════════════════
-// Legacy routes — Phase 6/7 remaining endpoints
-// ══════════════════════════════════════════════════════════════
-
-func registerLegacyRoutes(r chi.Router, hs *handler.Handlers) {
-// ── Waiting Queue (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/waiting-queue", hs.Handler.GetWaitingQueue)
-r.Post("/waiting-queue", hs.Handler.AddToWaitingQueue)
-r.Delete("/waiting-queue/{id}", hs.Handler.RemoveFromWaitingQueue)
-r.Post("/match-slots", hs.Handler.TriggerMatching)
-})
-
-// ── Transcription — CastingWords integration (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Post("/transcription/order", hs.Handler.CreateTranscriptionOrder)
-r.Get("/transcription/status/{orderId}", hs.Handler.GetTranscriptionStatus)
-r.Get("/transcription/transcript/{orderId}", hs.Handler.GetTranscript)
-})
-
-// ── SMS — Bandwidth integration (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Post("/sms/send", hs.Handler.SendSMS)
-})
-
-// ── Payments (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Post("/payments/timeslot", hs.LS.CreatePaymentReal)
-r.Post("/payments/custom-honorarium", hs.LS.CreateCustomHonorariumReal)
-r.Get("/payments/status-list", hs.LS.GetPaymentStatusListReal)
-})
-
-// ── Translations (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/translations/locales", hs.LS.GetLocalesReal)
-r.Put("/projects/{projectId}/topics/translations", hs.Handler.UpdateTopicTranslations)
-})
-
-// ── Notifications (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/notifications/email-template", hs.Handler.GetEmailTemplate)
-r.Post("/notifications/reminder", hs.Handler.SendReminder)
-})
-
-// ── Markets (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/markets", hs.LS.ListMarkets)
-r.Get("/markets/npi", hs.LS.ListMarketsNPI)
-r.Get("/market/{id}/crowdable_attributes", hs.LS.GetCrowdableAttributes)
-})
-
-// ── Timeslot Sub-resources (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/time_slot/{tsId}/moderators", hs.LS.GetTimeslotModerators)
-r.Get("/time_slot/{tsId}/moderators/options", hs.LS.GetTimeslotModeratorOptionsExt)
-r.Post("/time_slot/{tsId}/moderator", hs.LS.AssignTimeslotModerator)
-r.Delete("/time_slot/{tsId}/moderator/{modId}", hs.LS.UnassignTimeslotModerator)
-r.Get("/time_slot/{tsId}/observers", hs.LS.GetTimeslotObservers)
-r.Put("/time_slot/{tsId}/observers", hs.LS.UpdateTimeslotObservers)
-r.Post("/project/{pid}/time_slot/{tsId}/{action}", hs.MRA.CancelRescheduleAction)
-})
-
-// ── Moderator Availability by subscription (admin + manager + moderator) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManagerMod)
-r.Get("/moderator/{modId}/availability/{subId}", hs.LS.GetModeratorAvailabilityBySub)
-r.Post("/moderator/{modId}/availability/{subId}", hs.LS.PostModeratorAvailabilityBySub)
-r.Put("/moderator/availability/{maId}", hs.LS.UpdateModeratorAvailabilityExt)
-r.Delete("/moderator/availability/{maId}", hs.LS.DeleteModeratorAvailabilityExt)
-})
-
-// ── Self-Service (admin + manager + moderator) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManagerMod)
-r.Get("/selfservice/noshow", hs.LS.GetNoShowCheck)
-r.Put("/selfservice/project/{pid}/timeslot/{tid}", hs.LS.MarkNoShow)
-})
-
-// ── User (authenticated, no role restriction) ──
-r.Get("/user/get-email/{id}", hs.Handler.GetUserEmail)
-r.Get("/user/{id}", hs.Handler.GetUser)
-r.Put("/user/{id}", hs.Handler.UpdateUser)
-r.Post("/user/upsert-user-time-zone-selection", hs.Handler.UpsertUserTimeZone)
-r.Put("/user/password_matches", hs.Handler.CheckPasswordMatches)
-
-// ── Event Logs (any authenticated) ──
-r.Post("/EventLogs", hs.Handler.CreateEventLog)
-
-// ── Salesforce Projects (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Get("/salesforceprojects", hs.Handler.ListSalesforceProjects)
-})
-
-// ── User Roles (admin) ──
-r.Group(func(r chi.Router) {
-r.Use(adminOnly)
-r.Post("/user/add_roles", hs.LS.AddUserRoles)
-r.Delete("/user/delete_roles", hs.LS.DeleteUserRoles)
-})
-
-// ── Password Reset (behind JWT but no role restriction) ──
-r.Post("/reset-user-password/send-user-password-email", hs.LS.SendPasswordResetEmail)
-r.Post("/reset-user-password/check-qsTool-i2", hs.LS.CheckUserIsQsToolAndI2)
-r.Patch("/reset-user-password/patch-user/{user_id}", hs.MRA.PatchUser)
-r.Patch("/reset-user-password/patch-user-from-profile/{user_id}", hs.MRA.PatchUserFromProfile)
-r.Put("/reset-user-password/check-if-password-matches/{user_id}", hs.MRA.CheckPasswordMatchesMRA)
-
-// ── Unsubscribe / Comm Preferences (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Post("/unsubscribe/check-user-comm-preference/{userId}", hs.LS.CheckUserCommPreference)
-r.Post("/unsubscribe/unsubscribe-user/{userId}", hs.LS.UnsubscribeUser)
-})
-
-// ── Project extensions (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Post("/project/{projectId}/moderators_reset", hs.LS.ResetProjectModerators)
-r.Post("/project/{projectId}/handle-export", hs.LS.HandleProjectExport)
-r.Get("/project/{projectId}/available_moderators_count", hs.LS.GetAvailableModeratorsCount)
-r.Get("/project/{projectId}/unavailable_moderators", hs.LS.GetUnavailableModerators)
-r.Get("/project_manager/client", hs.LS.ListProjectManagers)
-})
-
-// ── Conference Links (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Post("/project/{projectId}/add-conference-link", hs.LS.AddConferenceLink)
-r.Put("/update-conference-link", hs.LS.UpdateConferenceLinkHandler)
-r.Get("/conference-link/timeslot/{timeslotId}", hs.LS.GetConferenceLinkByTimeSlot)
-})
-
-// ── Notifications send (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Post("/notifications/send", hs.Handler.SendNotificationEmail)
-})
-
-// ── Third-Party / Eligibility (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Post("/third-party-integrate", hs.LS.ThirdPartyIntegrate)
-r.Post("/qual/eligibility", hs.LS.CheckQualEligibility)
-})
-
-// ── Translation Delete (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Delete("/projects/{projectId}/topics/translations/{translationKey}", hs.LS.DeleteTopicTranslation)
-r.Delete("/projects/{projectId}/translations/{langCode}", hs.LS.DeleteTranslation)
-})
-
-// ── External Payments (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Post("/payments/external", hs.LS.CreateExternalPayment)
-r.Get("/payments/honorarium-reasons", hs.LS.GetHonorariumReasons)
-r.Get("/payments/interview-statuses", hs.LS.GetInterviewPaymentStatusList)
-})
-
-// ── LS Inquiry (admin + manager) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManager)
-r.Put("/subscription/{subscriptionId}/inquiry_preview", hs.LS.UpdateInquiryPreview)
-r.Post("/custom_crowd_inquiry", hs.LS.CreateCustomCrowdInquiry)
-})
-
-// ── Google Calendar / Import placeholders (admin + manager + moderator) ──
-r.Group(func(r chi.Router) {
-r.Use(adminManagerMod)
-r.Post("/moderator/{moderatorId}/import/start", hs.LS.StartModeratorImport)
-r.Get("/moderator/{moderatorId}/import/availability", hs.LS.GetImportedAvailability)
-r.Get("/moderator/{moderatorId}/import/status", hs.LS.GetImportStatus)
-r.Delete("/moderator/{moderatorId}/import/unlink", hs.LS.UnlinkImportedModerator)
-r.Put("/google-sheet/first-date", hs.LS.UpdateGoogleSheetFirstDate)
-})
+	return r
 }
