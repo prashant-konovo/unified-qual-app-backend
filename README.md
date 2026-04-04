@@ -113,11 +113,41 @@ ArgoCD syncs from gitops repo automatically.
 
 ## Testing
 
+### Unit Tests
+
 ```bash
 make test               # Run all tests with race detection + coverage
 go test -v ./...        # Verbose output
 go test ./internal/handler/shared/  # Run specific package tests
 ```
+
+Unit tests live alongside source files (Go convention). 29 tests across 3 packages: `handler/shared`, `middleware`, `jobs`.
+
+### Integration Tests
+
+Integration tests live in `tests/` and exercise the full HTTP stack (router → middleware → handler → mock repos). They use the `integration` build tag so `go test ./...` skips them by default.
+
+```bash
+go test -tags=integration -v ./tests/...        # Run all integration tests
+go test -tags=integration -run TestHealth ./tests/...  # Run specific test
+```
+
+**Structure:**
+```
+tests/
+  testserver/server.go  — TestServer builder (real Chi router, mock deps, test JWT signing)
+  health_test.go        — Health endpoint full-stack tests
+  auth_test.go          — Auth validation + SSO config + protected route tests
+  project_test.go       — JWT auth → RBAC → project list with mock repos + CORS
+```
+
+The `testserver.New()` helper creates a real `httptest.Server` with:
+- Real Chi router + all middleware (CORS, RequestID, JWT, RBAC)
+- Mock repositories (set expectations per-test with `ts.IrisProjectRepo.On(...)`)
+- Test RSA key pair for JWT signing (`ts.AdminToken()`, `ts.ManagerToken()`)
+- No real databases or external services
+
+### Mocks
 
 Mocks are auto-generated with [mockery](https://github.com/vektra/mockery) in `internal/testutil/mocks/`. To regenerate after interface changes:
 

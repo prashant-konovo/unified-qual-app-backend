@@ -21,6 +21,8 @@ type JWTAuth struct {
 	userPoolID string
 	clientIDs  map[string]bool // recognised Cognito app client IDs
 
+	jwksOverride string // if set, fetch JWKS from this URL instead of Cognito
+
 	mu   sync.RWMutex
 	keys map[string]*rsa.PublicKey // kid → RSA public key
 }
@@ -42,6 +44,28 @@ func NewJWTAuth(region, userPoolID string, clientIDs []string) *JWTAuth {
 		keys:       make(map[string]*rsa.PublicKey),
 	}
 	// Pre-fetch JWKS at startup (non-fatal).
+	if err := j.refreshKeys(); err != nil {
+		slog.Warn("failed to fetch JWKS at startup", "error", err)
+	}
+	return j
+}
+
+// NewJWTAuthWithJWKS creates a JWTAuth that fetches keys from a custom JWKS URL.
+// Used in integration tests to point at a local test JWKS server.
+func NewJWTAuthWithJWKS(region, userPoolID string, clientIDs []string, jwksURL string) *JWTAuth {
+	cidMap := make(map[string]bool, len(clientIDs))
+	for _, id := range clientIDs {
+		if id != "" {
+			cidMap[id] = true
+		}
+	}
+	j := &JWTAuth{
+		region:       region,
+		userPoolID:   userPoolID,
+		clientIDs:    cidMap,
+		keys:         make(map[string]*rsa.PublicKey),
+		jwksOverride: jwksURL,
+	}
 	if err := j.refreshKeys(); err != nil {
 		slog.Warn("failed to fetch JWKS at startup", "error", err)
 	}
@@ -175,6 +199,9 @@ func (j *JWTAuth) issuerURL() string {
 }
 
 func (j *JWTAuth) jwksURL() string {
+	if j.jwksOverride != "" {
+		return j.jwksOverride
+	}
 	return j.issuerURL() + "/.well-known/jwks.json"
 }
 
