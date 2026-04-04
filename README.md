@@ -1,25 +1,97 @@
 # Unified Qual API — Go + Chi Backend
 
-Dummy backend that returns stub responses for all Unified Qual frontend API calls.  
-Deployed to EKS (data-qa) via ArgoCD.
+Backend API for the Unified Qualitative Research platform.  
+Go 1.24 + Chi v5. Deployed to EKS (data-qa) via ArgoCD.
 
 ## Tech Stack
-- **Go 1.22** + **Chi v5** router
+- **Go 1.24** + **Chi v5** router
+- **robfig/cron/v3** — 9 scheduled jobs
+- MySQL (IRIS + QS-Tool) + DocumentDB
+- 11 external service integrations (Conference, Notification, GCal, Stripe, Tango, PayPal, Bandwidth, Decipher, CastingWords, EventLog, GoogleSheets)
 - Docker multi-stage build → ECR → EKS
 
-## Local Development
+## Local Development (data-qa)
+
+### Prerequisites
+- Go 1.24+
+- AWS CLI v2 with `cli-prashant-singh-konovo` profile (or equivalent IAM access)
+- [AWS SSM Session Manager Plugin](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html)
+- `kubectl` configured for `eks-cluster-apps-use2-konovo-dev`
+
+### 1. Start SSM Tunnels (3 terminals)
+
+The data-qa databases are in a private VPC (`vpc-7ae31207`, us-east-1). SSM port-forwarding through a dedicated EC2 instance (`i-097a5b6d0bf443137`) provides local access.
+
 ```bash
-make run     # Run locally on :8080
-make build   # Build binary
-make docker-build  # Docker build
+# Terminal 1: IRIS Primary → localhost:13306
+aws ssm start-session --target i-097a5b6d0bf443137 --region us-east-1 \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters '{"host":["172.31.7.31"],"portNumber":["3306"],"localPortNumber":["13306"]}'
+
+# Terminal 2: IRIS Read-Only → localhost:13307
+aws ssm start-session --target i-097a5b6d0bf443137 --region us-east-1 \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters '{"host":["172.31.39.44"],"portNumber":["3306"],"localPortNumber":["13307"]}'
+
+# Terminal 3: QS MySQL → localhost:13308
+aws ssm start-session --target i-097a5b6d0bf443137 --region us-east-1 \
+  --document-name AWS-StartPortForwardingSessionToRemoteHost \
+  --parameters '{"host":["172.31.39.18"],"portNumber":["3306"],"localPortNumber":["13308"]}'
 ```
 
-## API Endpoints
-All routes under `/v1/` prefix. Health check at `/health`.
+> **Note:** Keep these terminals alive. If a tunnel drops, re-run the command.
 
-## Deployment
+### 2. Source Environment & Run
+
 ```bash
+source .env.local   # Loads data-qa credentials + tunneled DB ports
+make run             # Starts on :8080
+```
+
+### 3. Verify
+
+```bash
+curl http://localhost:8080/health
+# Expected: {"checks":{"incrowdDB":"ok","incrowdRODB":"ok","qstoolDB":"ok"},"environment":"local","status":"healthy"}
+```
+
+### Environment File (`.env.local`)
+
+Pre-configured with data-qa credentials. Key overrides for local:
+
+| Variable | Local Value | Purpose |
+|----------|-------------|---------|
+| `ENVIRONMENT` | `local` | Distinguishes from data-qa in logs |
+| `JOBS_ENABLED` | `false` | Prevents duplicate job execution with K8s pod |
+| `DB_HOST` | `localhost` | Tunneled via SSM (port 13306) |
+| `DB_PORT` | `13306` | SSM tunnel → IRIS primary |
+| `DB_PORT_READ_ONLY` | `13307` | SSM tunnel → IRIS read-only |
+| `QS_DB_HOST` | `localhost` | Tunneled via SSM (port 13308) |
+| `QS_DB_PORT` | `13308` | SSM tunnel → QS MySQL |
+| `COGNITO_SSO_REDIRECT_URI` | `http://localhost:3000/login/sso-callback` | SSO redirects to local frontend |
+
+> **Safety:** `JOBS_ENABLED=false` ensures no cron jobs run locally. The K8s pod continues running normally.
+
+### SSM Tunnel EC2 Instance
+
+| Field | Value |
+|-------|-------|
+| Instance ID | `i-097a5b6d0bf443137` |
+| Name | `unified-qual-ssm-tunnel` |
+| Type | `t3.micro` (Amazon Linux 2023) |
+| VPC | `vpc-7ae31207` (us-east-1, same as databases) |
+| Security Group | `sg-03a01fb2e53f47724` (egress: 3306/27017 VPC + 443 internet) |
+| IAM Profile | `EC2-SSM-InstanceProfile` |
+
+## Build & Deploy
+
+```bash
+make build          # Build binary
+make docker-build   # Docker build
 make ecr-login
 make docker-push TAG=$(git rev-parse --short HEAD)
 ```
 ArgoCD syncs from gitops repo automatically.
+
+## API Endpoints
+All routes under `/v1/` prefix. Health check at `/health`. 228 routes total across 14 sub-routers.

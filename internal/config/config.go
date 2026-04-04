@@ -211,7 +211,7 @@ func Load() *Config {
 
 		IRISReadOnlyDB: DatabaseConfig{
 			Host:            envOr("DB_HOST_READ_ONLY", envOr("DB_HOST", "localhost")),
-			Port:            envIntOr("DB_PORT", 3306),
+			Port:            envIntOr("DB_PORT_READ_ONLY", envIntOr("DB_PORT", 3306)),
 			Name:            envOr("DB_SCHEMA", "incrowdprod"),
 			User:            envOr("DB_USER_NAME", "root"),
 			Password:        envOr("DB_PASSWORD", ""),
