@@ -12,7 +12,7 @@ import (
 // okHandler is a simple handler that writes 200 OK when reached.
 var okHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("ok"))
+	_, _ = w.Write([]byte("ok"))
 })
 
 func TestRequireRoles_NoUser(t *testing.T) {
