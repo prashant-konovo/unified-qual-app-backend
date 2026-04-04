@@ -28,7 +28,10 @@ jobs:
         with:
           version: latest
       - name: Unit Tests
-        run: go test -race -coverprofile=coverage.out ./...
+        run: |
+          go test -race -coverprofile=coverage.out ./...
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "Total coverage: ${COVERAGE}%"
 
   security:
     runs-on: ubuntu-latest

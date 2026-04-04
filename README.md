@@ -111,5 +111,37 @@ make docker-push TAG=$(git rev-parse --short HEAD)
 ```
 ArgoCD syncs from gitops repo automatically.
 
+## Testing
+
+```bash
+make test               # Run all tests with race detection + coverage
+go test -v ./...        # Verbose output
+go test ./internal/handler/shared/  # Run specific package tests
+```
+
+Mocks are auto-generated with [mockery](https://github.com/vektra/mockery) in `internal/testutil/mocks/`. To regenerate after interface changes:
+
+```bash
+go install github.com/vektra/mockery/v2@latest
+mockery --dir=internal/repository/iris --name=ProjectRepository --output=internal/testutil/mocks --outpkg=mocks --with-expecter --structname=MockIrisProjectRepository --filename=mock_iris_projectrepository.go
+```
+
+## Security Scanning (Snyk)
+
+Snyk runs automatically in CI (`security` job, parallel with `lint-test`):
+- **Dependency scan:** `snyk test --all-projects --severity-threshold=high`
+- **SAST:** `snyk code test`
+- **Monitor:** `snyk monitor` (uploads snapshot to Snyk dashboard on push)
+
+Currently **non-blocking** (`continue-on-error: true`). Remove to enforce after baseline is clean.
+
+`SNYK_TOKEN` is stored as a GitHub Actions secret. To run locally:
+
+```bash
+export SNYK_TOKEN=<your-token>
+npx snyk test --all-projects
+npx snyk code test
+```
+
 ## API Endpoints
 All routes under `/v1/` prefix. Health check at `/health`. 228 routes total across 14 sub-routers.
