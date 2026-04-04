@@ -21,6 +21,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/router"
+	"github.com/InCrowd/unified-qual-api/internal/service"
 	mocks "github.com/InCrowd/unified-qual-api/internal/testutil/mocks"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -129,6 +130,8 @@ func New() *TestServer {
 		QsInterviewsRepo: ts.QsInterviewsRepo,
 	}
 	ts.Deps = deps
+	deps.AuthService = service.NewAuthService(cfg, nil, ts.QsUserRepo)
+	deps.ProjectService = service.NewProjectService(ts.IrisProjectRepo, ts.QsProjectRepo)
 
 	// Build real handlers and router
 	hs := handler.NewHandlers(deps)

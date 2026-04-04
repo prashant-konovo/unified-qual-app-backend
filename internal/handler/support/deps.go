@@ -5,6 +5,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
+	"github.com/InCrowd/unified-qual-api/internal/service"
 )
 
 // Deps holds shared dependencies injected into all domain handlers.
@@ -25,6 +26,8 @@ type Deps struct {
 	QsConferenceRepo qs.ConferenceRepository
 	QsAnswerRepo     qs.AnswerRepository
 	QsInterviewsRepo qs.InterviewsRepository
+	AuthService      *service.AuthService
+	ProjectService   *service.ProjectService
 }
 
 // NewDeps creates the shared dependency container.

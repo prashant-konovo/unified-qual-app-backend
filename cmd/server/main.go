@@ -12,6 +12,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/jobs"
 	"github.com/InCrowd/unified-qual-api/internal/logger"
+	"github.com/InCrowd/unified-qual-api/internal/service"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
@@ -67,13 +68,16 @@ func main() {
 	}
 
 	// Wire handlers + router
-	deps := support.NewDeps(cfg, db, integration.NewServiceClients(cfg),
+	svcClients := integration.NewServiceClients(cfg)
+	deps := support.NewDeps(cfg, db, svcClients,
 		irisProjectRepo, qsProjectRepo,
 		irisUserRepo, qsUserRepo,
 		qsTimeSlotRepo, qsRespondentRepo,
 		qsSurveyRepo, irisSurveyRepo,
 		qsConferenceRepo, qsAnswerRepo,
 	)
+	deps.AuthService = service.NewAuthService(cfg, svcClients.ICAuth, qsUserRepo)
+	deps.ProjectService = service.NewProjectService(irisProjectRepo, qsProjectRepo)
 	hs := handler.NewHandlers(deps)
 	r := router.New(hs, jwtAuth)
 
@@ -85,7 +89,7 @@ func main() {
 		}
 		jobDeps := &jobs.JobDeps{
 			Cfg: cfg, DB: db,
-			Services:        integration.NewServiceClients(cfg),
+			Services:        svcClients,
 			IrisSurveyRepo:  irisSurveyRepo,
 			IrisProjectRepo: irisProjectRepo,
 			IrisUserRepo:    irisUserRepo,

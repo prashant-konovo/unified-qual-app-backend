@@ -11,6 +11,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/handler/shared"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
+	"github.com/InCrowd/unified-qual-api/internal/service"
 	"github.com/InCrowd/unified-qual-api/internal/testutil"
 	"github.com/InCrowd/unified-qual-api/internal/testutil/mocks"
 	"github.com/stretchr/testify/assert"
@@ -66,6 +67,7 @@ func TestListProjects_BothSources(t *testing.T) {
 
 	deps.IrisProjectRepo = irisRepo
 	deps.QsProjectRepo = qsRepo
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -111,6 +113,7 @@ func TestListProjects_IRISOnly(t *testing.T) {
 
 	deps.IrisProjectRepo = irisRepo
 	deps.QsProjectRepo = qsRepo
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -144,6 +147,7 @@ func TestListProjects_QSOnly(t *testing.T) {
 
 	deps.IrisProjectRepo = irisRepo
 	deps.QsProjectRepo = qsRepo
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -180,6 +184,7 @@ func TestListProjects_EmptyResult(t *testing.T) {
 
 	deps.IrisProjectRepo = irisRepo
 	deps.QsProjectRepo = qsRepo
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -214,6 +219,7 @@ func TestListProjects_IRISError(t *testing.T) {
 
 	deps.IrisProjectRepo = irisRepo
 	deps.QsProjectRepo = qsRepo
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -238,7 +244,7 @@ func TestListProjects_IRISError(t *testing.T) {
 
 func TestListProjects_NilRepos(t *testing.T) {
 	deps := testutil.TestDeps()
-	// Both repos are nil by default from TestDeps()
+	deps.ProjectService = service.NewProjectService(nil, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
