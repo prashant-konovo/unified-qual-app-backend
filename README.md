@@ -39,7 +39,25 @@ aws ssm start-session --target i-097a5b6d0bf443137 --region us-east-1 \
   --parameters '{"host":["172.31.39.18"],"portNumber":["3306"],"localPortNumber":["13308"]}'
 ```
 
-> **Note:** Keep these terminals alive. If a tunnel drops, re-run the command.
+> **SSM idle timeout** is set to **60 minutes** (default was 20 min).  
+> This was configured in SSM Session Manager Preferences (`SSM-SessionManagerRunShell` document v2, `idleSessionTimeout: "60"`).  
+> If a tunnel still drops, re-run the command.
+
+#### Keepalive (prevents idle timeout)
+
+Run a background loop that pings all tunnel ports every 5 minutes to reset the idle timer:
+
+```bash
+while true; do
+  nc -z -w2 localhost 13306
+  nc -z -w2 localhost 13307
+  nc -z -w2 localhost 13308
+  echo "keepalive ping sent"
+  sleep 300
+done
+```
+
+> **Tip:** Run this in a spare terminal alongside the 3 tunnel terminals. The TCP connect (`nc -z`) generates enough traffic to prevent SSM from marking the session as idle.
 
 ### 2. Source Environment & Run
 
