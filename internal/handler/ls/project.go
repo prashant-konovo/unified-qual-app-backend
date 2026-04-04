@@ -8,7 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/core"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
@@ -27,16 +28,16 @@ import (
 func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := core.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		surveys, err := h.IrisSurveyRepo.ListSurveysForProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris project surveys failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(surveys))
@@ -47,7 +48,7 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 				"createdOn": s.CreatedOn.Format(time.RFC3339), "source": "iris",
 			})
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"surveys": result, "limit": len(result), "offset": 0, "totalCount": len(result),
 		})
 		return
@@ -58,7 +59,7 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 		surveys, err := h.QsAnswerRepo.ListNativeSurveysByProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs project surveys failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(surveys))
@@ -68,12 +69,12 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 				"createdOn": s.CreatedOn.Format(time.RFC3339), "source": "qs",
 			})
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"surveys": result, "limit": len(result), "offset": 0, "totalCount": len(result),
 		})
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"surveys": []any{}, "limit": 0, "offset": 0, "totalCount": 0,
 	})
 }
@@ -84,7 +85,7 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -92,7 +93,7 @@ func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
 		slots, _, err := h.QsTimeSlotRepo.List(r.Context(), 1, 500, &projectID, nil, nil, nil, nil)
 		if err != nil {
 			slog.Error("project timeslots failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(slots))
@@ -103,12 +104,12 @@ func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
 				"statusId": s.StatusID, "statusName": s.StatusName,
 			})
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"timeSlots": result,
 		})
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, map[string]any{"timeSlots": []any{}})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"timeSlots": []any{}})
 }
 
 // GetProjectUsers returns users assigned to a project.
@@ -117,19 +118,19 @@ func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := core.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		users, err := h.IrisSurveyRepo.ListUserProjects(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris project users failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"users": users, "offset": 0, "limit": len(users), "totalCount": len(users),
 		})
 		return
@@ -139,15 +140,15 @@ func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
 		users, err := h.QsAnswerRepo.ListProjectsUsers(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs project users failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"users": users, "offset": 0, "limit": len(users), "totalCount": len(users),
 		})
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"users": []any{}, "offset": 0, "limit": 0, "totalCount": 0,
 	})
 }
@@ -158,7 +159,7 @@ func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -166,20 +167,20 @@ func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
 		observers, err := h.IrisSurveyRepo.ListObserversForProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get observers failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(observers))
 		for _, o := range observers {
 			result = append(result, map[string]any{
 				"id": o.ID, "projectId": o.ProjectID, "email": o.Email,
-				"timeSlotId": core.NullInt64(o.TimeSlotID),
+				"timeSlotId": dto.NullInt64(o.TimeSlotID),
 			})
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, map[string]any{"observers": []any{}})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"observers": []any{}})
 }
 
 // GetProjectQualReschedBody returns the reschedule email template body.
@@ -187,7 +188,7 @@ func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -196,7 +197,7 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			slog.Error("get qual resched body failed", "error", err)
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{"html": body})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"html": body})
 		return
 	}
 
@@ -204,11 +205,11 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 	if h.QsAnswerRepo != nil {
 		t, _ := h.QsAnswerRepo.GetCommunicationTemplate(r.Context(), "reschedule")
 		if t != nil {
-			core.WriteJSON(w, http.StatusOK, map[string]any{"html": t.Body})
+			support.WriteJSON(w, http.StatusOK, map[string]any{"html": t.Body})
 			return
 		}
 	}
-	core.WriteJSON(w, http.StatusOK, map[string]any{"html": ""})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"html": ""})
 }
 
 // GetProjectAvailability returns moderator availability for a project.
@@ -217,11 +218,11 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.IrisSurveyRepo != nil && core.ResolveSource(r) == "iris" {
+	if h.IrisSurveyRepo != nil && support.ResolveSource(r) == "iris" {
 		avails, err := h.IrisSurveyRepo.GetProjectAvailability(r.Context(), projectID)
 		if err != nil {
 			slog.Error("project availability failed", "error", err)
@@ -234,7 +235,7 @@ func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request)
 				"endTime":   a.EndTime.Format(time.RFC3339),
 			})
 		}
-		core.WriteJSON(w, http.StatusOK, result)
+		support.WriteJSON(w, http.StatusOK, result)
 		return
 	}
 
@@ -249,10 +250,10 @@ func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			slog.Error("get qs project avail failed", "error", err)
 		}
-		core.WriteJSON(w, http.StatusOK, avails)
+		support.WriteJSON(w, http.StatusOK, avails)
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, []any{})
+	support.WriteJSON(w, http.StatusOK, []any{})
 }
 
 // GetProjectSchedulerModerators returns moderators for the project scheduler.
@@ -261,16 +262,16 @@ func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request)
 func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.IrisSurveyRepo != nil && core.ResolveSource(r) == "iris" {
+	if h.IrisSurveyRepo != nil && support.ResolveSource(r) == "iris" {
 		mods, err := h.IrisSurveyRepo.GetSchedulerModerators(r.Context(), projectID)
 		if err != nil {
 			slog.Error("scheduler mods failed", "error", err)
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{"moderatorInfo": mods})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"moderatorInfo": mods})
 		return
 	}
 
@@ -292,10 +293,10 @@ func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.R
 		for _, v := range modMap {
 			result = append(result, v)
 		}
-		core.WriteJSON(w, http.StatusOK, result)
+		support.WriteJSON(w, http.StatusOK, result)
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, []map[string]any{})
+	support.WriteJSON(w, http.StatusOK, []map[string]any{})
 }
 
 // GetProjectDashboard returns combined availability and timeslot data for dashboard.
@@ -305,7 +306,7 @@ func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.R
 func (h *Handler) GetProjectDashboard(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -313,31 +314,31 @@ func (h *Handler) GetProjectDashboard(w http.ResponseWriter, r *http.Request) {
 		data, err := h.IrisSurveyRepo.GetProjectDashboardInfo(r.Context(), projectID)
 		if err != nil {
 			slog.Error("project dashboard failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		core.WriteJSON(w, http.StatusOK, data)
+		support.WriteJSON(w, http.StatusOK, data)
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, map[string]any{"scheduled": 0, "completed": 0, "moderatorInfo": map[string]any{}})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"scheduled": 0, "completed": 0, "moderatorInfo": map[string]any{}})
 }
 
 func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "projectId")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := core.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		count, err := h.IrisSurveyRepo.ResetProjectModerators(r.Context(), projectID)
 		if err != nil {
 			slog.Error("reset project mods failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
 			return
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": count, "source": "iris"})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": count, "source": "iris"})
 		return
 	}
 
@@ -348,14 +349,14 @@ func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request)
 			 WHERE ts.project_id = ? AND ts.status_id IN (1, 2)`, projectID)
 		if err != nil {
 			slog.Error("qs reset mods failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
 			return
 		}
 		n, _ := res.RowsAffected()
-		core.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": n, "source": "qs"})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": n, "source": "qs"})
 		return
 	}
-	core.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 // ──────────────────────────────────────────────
@@ -365,12 +366,12 @@ func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request)
 func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "projectId")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	format := r.URL.Query().Get("format")
-	source := core.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	var data []map[string]any
 
@@ -378,22 +379,22 @@ func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 		data, err = h.IrisSurveyRepo.ExportProjectData(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris export failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
 			return
 		}
 	} else if h.QsTimeSlotRepo != nil {
 		slots, _, err := h.QsTimeSlotRepo.List(r.Context(), 1, 10000, &projectID, nil, nil, nil, nil)
 		if err != nil {
 			slog.Error("qs export failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
 			return
 		}
 		for _, s := range slots {
 			data = append(data, map[string]any{
 				"timeSlotId": s.ID, "startTime": s.StartTime.Format(time.RFC3339),
 				"endTime": s.EndTime.Format(time.RFC3339), "statusId": s.StatusID,
-				"status": s.StatusName, "moderator": core.NullStr(s.ModeratorName),
-				"respondent": core.NullStr(s.ResponderName),
+				"status": s.StatusName, "moderator": dto.NullStr(s.ModeratorName),
+				"respondent": dto.NullStr(s.ResponderName),
 			})
 		}
 	}
@@ -414,7 +415,7 @@ func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	core.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "rows": data, "count": len(data)})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "rows": data, "count": len(data)})
 }
 
 // ──────────────────────────────────────────────
@@ -424,17 +425,17 @@ func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetAvailableModeratorsCount(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "projectId")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := core.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		count, err := h.IrisSurveyRepo.GetAvailableModeratorsCount(r.Context(), projectID)
 		if err != nil {
 			slog.Error("count mods failed", "error", err)
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "iris"})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "iris"})
 		return
 	}
 
@@ -444,31 +445,31 @@ func (h *Handler) GetAvailableModeratorsCount(w http.ResponseWriter, r *http.Req
 			`SELECT COUNT(DISTINCT mts.moderator_id) FROM moderator_time_slot mts
 			 INNER JOIN time_slot ts ON ts.id = mts.time_slot_id
 			 WHERE ts.project_id = ? AND ts.status_id = 1`, projectID).Scan(&count)
-		core.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "qs"})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "qs"})
 		return
 	}
 
-	core.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": 0})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": 0})
 }
 
 func (h *Handler) GetUnavailableModerators(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "projectId")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := core.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		mods, err := h.IrisSurveyRepo.GetUnavailableModerators(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get unavail mods failed", "error", err)
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{"moderators": mods, "source": "iris"})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"moderators": mods, "source": "iris"})
 		return
 	}
 
-	core.WriteJSON(w, http.StatusOK, map[string]any{"moderators": []any{}, "source": "qs"})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"moderators": []any{}, "source": "qs"})
 }
 
 // ──────────────────────────────────────────────
@@ -476,15 +477,15 @@ func (h *Handler) GetUnavailableModerators(w http.ResponseWriter, r *http.Reques
 // ──────────────────────────────────────────────
 
 func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
-	page, pageSize := core.ParsePagination(r)
-	source := core.ResolveSource(r)
+	page, pageSize := support.ParsePagination(r)
+	source := support.ResolveSource(r)
 
 	if (source == "" || source == "qs") && h.QsUserRepo != nil {
 		managerRoleID := 2
 		users, total, err := h.QsUserRepo.List(r.Context(), page, pageSize, &managerRoleID, "")
 		if err != nil {
 			slog.Error("list PMs failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
 			return
 		}
 		result := make([]map[string]any, 0, len(users))
@@ -495,7 +496,7 @@ func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
 				"source": "qs", "serviceCategory": "MRA",
 			})
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"success": true, "data": result, "meta": map[string]any{"totalCount": total},
 		})
 		return
@@ -515,11 +516,11 @@ func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"success": true, "data": result, "meta": map[string]any{"totalCount": total},
 		})
 		return
 	}
 
-	core.WriteJSON(w, http.StatusOK, []any{})
+	support.WriteJSON(w, http.StatusOK, []any{})
 }

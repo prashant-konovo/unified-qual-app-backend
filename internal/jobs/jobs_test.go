@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/integration"
+	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	mocks "github.com/InCrowd/unified-qual-api/internal/testutil/mocks"
 	"github.com/stretchr/testify/assert"
@@ -19,7 +20,7 @@ func testScheduler(jobsRepo *mocks.MockIrisJobsRepository) *Scheduler {
 			JobsRepo: jobsRepo,
 			Services: &integration.ServiceClients{},
 		},
-		cfg:    DefaultJobsConfig(),
+		cfg:    config.JobsConfig{SystemUserID: 1},
 		logger: slog.Default(),
 	}
 }
@@ -82,7 +83,7 @@ func TestIssueQualHonorarium_SkipsIneligible(t *testing.T) {
 func TestIssueQualHonorarium_NilRepo(t *testing.T) {
 	s := &Scheduler{
 		deps:   &JobDeps{Services: &integration.ServiceClients{}},
-		cfg:    DefaultJobsConfig(),
+		cfg:    config.JobsConfig{SystemUserID: 1},
 		logger: slog.Default(),
 	}
 	// Should not panic
@@ -184,7 +185,7 @@ func TestCloseSurveyJob_DisabledByFlag(t *testing.T) {
 func TestRemindDayBefore_NilRepo(t *testing.T) {
 	s := &Scheduler{
 		deps:   &JobDeps{Services: &integration.ServiceClients{}},
-		cfg:    DefaultJobsConfig(),
+		cfg:    config.JobsConfig{SystemUserID: 1},
 		logger: slog.Default(),
 	}
 	// Should not panic

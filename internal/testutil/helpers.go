@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
-	"github.com/InCrowd/unified-qual-api/internal/handler/core"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/stretchr/testify/assert"
@@ -34,10 +34,10 @@ func TestConfig() *config.Config {
 	}
 }
 
-// TestDeps creates a *core.Deps with test config and nil repos.
+// TestDeps creates a *support.Deps with test config and nil repos.
 // Callers should set the specific repos they need for their test.
-func TestDeps() *core.Deps {
-	return &core.Deps{
+func TestDeps() *support.Deps {
+	return &support.Deps{
 		Cfg:      TestConfig(),
 		DB:       &config.DBPair{},
 		Services: &integration.ServiceClients{},

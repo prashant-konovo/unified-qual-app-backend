@@ -1,4 +1,4 @@
-package core
+package support
 
 import (
 	"github.com/InCrowd/unified-qual-api/internal/config"

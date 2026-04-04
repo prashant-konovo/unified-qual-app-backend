@@ -122,3 +122,30 @@ func nullTimeStr(t sql.NullTime) *string {
 	s := t.Time.Format(time.RFC3339)
 	return &s
 }
+
+// CreateProjectRequest is the request body for creating a project.
+type CreateProjectRequest struct {
+	Name                string  `json:"name"                validate:"required"`
+	Description         string  `json:"description"`
+	SubscriptionID      int64   `json:"subscriptionId"`
+	SalesforceProjectID string  `json:"salesforceProjectId"`
+	SalesforceJobNumber string  `json:"salesforceJobNumber"`
+	SampleSize          int64   `json:"sampleSize"`
+	InterviewLength     int64   `json:"interviewLength"`
+	ClientID            int64   `json:"clientId"`
+	PostScreeninBuffer  float64 `json:"postScreeninBuffer"`
+	ModeratorBuffer     float64 `json:"moderatorBuffer"`
+	Source              string  `json:"source"` // "iris" or "qs"
+}
+
+// UpdateProjectRequest is the request body for updating a project.
+type UpdateProjectRequest struct {
+	Name                string `json:"name"`
+	Description         string `json:"description"`
+	StatusID            *int   `json:"statusId"`
+	SalesforceProjectID string `json:"salesforceProjectId"`
+	SampleSize          *int64 `json:"sampleSize"`
+	InterviewLength     *int64 `json:"interviewLength"`
+	IsArchived          *bool  `json:"isArchived"`
+	Source              string `json:"source"`
+}

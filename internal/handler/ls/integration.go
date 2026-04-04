@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/core"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
@@ -31,12 +31,12 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("decipher respondent data failed", "surveyId", surveyID, "error", err)
 		} else {
 			slog.Info("decipher data retrieved", "surveyId", surveyID, "records", len(data))
-			core.WriteJSON(w, http.StatusOK, map[string]any{
+			support.WriteJSON(w, http.StatusOK, map[string]any{
 				"accepted":    true,
 				"source":      "decipher",
 				"surveyId":    surveyID,
 				"recordCount": len(data),
-				"timestamp":   core.Now(),
+				"timestamp":   support.Now(),
 			})
 			return
 		}
@@ -48,7 +48,7 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("third-party integration received", "payload_keys", len(req))
-	core.WriteJSON(w, http.StatusOK, map[string]any{"accepted": true, "timestamp": core.Now()})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"accepted": true, "timestamp": support.Now()})
 }
 
 // ──────────────────────────────────────────────
@@ -69,20 +69,20 @@ func (h *Handler) CheckQualEligibility(w http.ResponseWriter, r *http.Request) {
 		result, err := h.QsAnswerRepo.GetParticipantEligibility(r.Context(), req.ResponderID, req.ProjectID)
 		if err != nil {
 			slog.Error("eligibility check failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
 			return
 		}
 		if result == nil {
-			core.WriteJSON(w, http.StatusOK, map[string]any{
+			support.WriteJSON(w, http.StatusOK, map[string]any{
 				"eligible": true, "responderId": req.ResponderID,
 				"projectId": req.ProjectID, "source": "qs",
 			})
 			return
 		}
 		result["source"] = "qs"
-		core.WriteJSON(w, http.StatusOK, result)
+		support.WriteJSON(w, http.StatusOK, result)
 		return
 	}
 
-	core.WriteJSON(w, http.StatusOK, map[string]any{"eligible": true, "responderId": req.ResponderID, "projectId": req.ProjectID})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"eligible": true, "responderId": req.ResponderID, "projectId": req.ProjectID})
 }

@@ -1,6 +1,7 @@
-package core
+package support
 
 import (
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"fmt"
 	"strconv"
 	"strings"
@@ -65,7 +66,7 @@ func BuildTimeSlotResponse(ts *qs.TimeSlot) map[string]any {
 		"projectId":              ts.ProjectID,
 		"isInvalidatedInterview": ts.IsInvalidatedInterview,
 		"isInvalidateEmailSent":  ts.IsInvalidateEmailSent,
-		"invalidationReasonCode": NullStr(ts.InvalidationReasonCode),
+		"invalidationReasonCode": dto.NullStr(ts.InvalidationReasonCode),
 		"startTime":              ts.StartTime,
 		"endTime":                ts.EndTime,
 		"statusId":               ts.StatusID,

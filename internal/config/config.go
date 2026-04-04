@@ -73,8 +73,24 @@ type Config struct {
 	CORSOrigins string
 
 	// Scheduled jobs
-	JobsEnabled     bool
-	QualConfBaseURL string
+	JobsEnabled bool
+	Jobs        JobsConfig
+}
+
+// JobsConfig holds per-job cron expressions and related settings.
+// All cron expressions use robfig/cron/v3 6-field format: second minute hour dom month dow
+type JobsConfig struct {
+	CronIssueQualHonorarium string
+	CronCompleteProjects    string
+	CronEndConferences      string
+	CronCloseSurvey         string
+	CronMonthlyTranscripts  string
+	CronRemindDayBefore     string
+	CronRemind30MinBefore   string
+	CronRemindConfirm       string
+	CronCalendarWatch       string
+	QualConfBaseURL         string
+	SystemUserID            int64
 }
 
 type DatabaseConfig struct {
@@ -326,8 +342,20 @@ func Load() *Config {
 
 		InquiryEmailRecipient: envOr("INQUIRY_EMAIL_RECIPIENT", "dev-ni@incrowdnow.com"),
 
-		JobsEnabled:     envOr("JOBS_ENABLED", "false") == "true",
-		QualConfBaseURL: envOr("QUAL_CONF_BASE_URL", ""),
+		JobsEnabled: envOr("JOBS_ENABLED", "false") == "true",
+		Jobs: JobsConfig{
+			CronIssueQualHonorarium: envOr("JOB_CRON_ISSUE_QUAL_HONORARIUM", "0 0 */6 * * *"),
+			CronCompleteProjects:    envOr("JOB_CRON_COMPLETE_PROJECTS", "0 0 */6 * * *"),
+			CronEndConferences:      envOr("JOB_CRON_END_CONFERENCES", "0 */5 * * * *"),
+			CronCloseSurvey:         envOr("JOB_CRON_CLOSE_SURVEY", "0 0 */6 * * *"),
+			CronMonthlyTranscripts:  envOr("JOB_CRON_MONTHLY_TRANSCRIPTS", "0 0 3 1 * *"),
+			CronRemindDayBefore:     envOr("JOB_CRON_REMIND_DAY_BEFORE", "0 0 11 * * *"),
+			CronRemind30MinBefore:   envOr("JOB_CRON_REMIND_30MIN_BEFORE", "0 * * * * *"),
+			CronRemindConfirm:       envOr("JOB_CRON_REMIND_CONFIRM_SCHEDULE", "0 0 11 * * *"),
+			CronCalendarWatch:       envOr("JOB_CRON_UPDATE_CALENDAR_WATCH", "0 0 0 */20 * *"),
+			QualConfBaseURL:         envOr("QUAL_CONF_BASE_URL", ""),
+			SystemUserID:            1,
+		},
 	}
 }
 

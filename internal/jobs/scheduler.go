@@ -24,12 +24,12 @@ type JobDeps struct {
 type Scheduler struct {
 	cron   *cron.Cron
 	deps   *JobDeps
-	cfg    JobsConfig
+	cfg    config.JobsConfig
 	logger *slog.Logger
 }
 
 // NewScheduler creates a new job scheduler.
-func NewScheduler(deps *JobDeps, jobsCfg JobsConfig, logger *slog.Logger) *Scheduler {
+func NewScheduler(deps *JobDeps, jobsCfg config.JobsConfig, logger *slog.Logger) *Scheduler {
 	return &Scheduler{
 		cron: cron.New(cron.WithSeconds(), cron.WithLogger(
 			cron.PrintfLogger(slog.NewLogLogger(logger.Handler(), slog.LevelDebug)),

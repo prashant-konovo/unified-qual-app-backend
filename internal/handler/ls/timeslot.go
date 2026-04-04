@@ -6,7 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/core"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/validate"
@@ -26,17 +27,17 @@ import (
 func (h *Handler) GetTimeslotModerators(w http.ResponseWriter, r *http.Request) {
 	tsID, err := validate.ParseIDParam(r, "tsId")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := core.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		mods, err := h.IrisSurveyRepo.GetModeratorsForTimeSlot(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get ts mods failed", "error", err)
 		}
-		core.WriteJSON(w, http.StatusOK, mods)
+		support.WriteJSON(w, http.StatusOK, mods)
 		return
 	}
 	if h.QsTimeSlotRepo != nil {
@@ -44,10 +45,10 @@ func (h *Handler) GetTimeslotModerators(w http.ResponseWriter, r *http.Request) 
 		if err != nil {
 			slog.Error("get qs ts mods failed", "error", err)
 		}
-		core.WriteJSON(w, http.StatusOK, mods)
+		support.WriteJSON(w, http.StatusOK, mods)
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, []any{})
+	support.WriteJSON(w, http.StatusOK, []any{})
 }
 
 // GetTimeslotModeratorOptionsExt returns possible moderators for a timeslot (extended).
@@ -56,17 +57,17 @@ func (h *Handler) GetTimeslotModerators(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) GetTimeslotModeratorOptionsExt(w http.ResponseWriter, r *http.Request) {
 	tsID, err := validate.ParseIDParam(r, "tsId")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := core.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		mods, err := h.IrisSurveyRepo.GetPossibleModeratorsForTimeSlot(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get possible mods failed", "error", err)
 		}
-		core.WriteJSON(w, http.StatusOK, mods)
+		support.WriteJSON(w, http.StatusOK, mods)
 		return
 	}
 	if h.QsUserRepo != nil {
@@ -88,10 +89,10 @@ func (h *Handler) GetTimeslotModeratorOptionsExt(w http.ResponseWriter, r *http.
 				"isAssigned": assigned[m.ID],
 			})
 		}
-		core.WriteJSON(w, http.StatusOK, result)
+		support.WriteJSON(w, http.StatusOK, result)
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, []any{})
+	support.WriteJSON(w, http.StatusOK, []any{})
 }
 
 // AssignTimeslotModerator assigns a moderator to a timeslot.
@@ -100,7 +101,7 @@ func (h *Handler) GetTimeslotModeratorOptionsExt(w http.ResponseWriter, r *http.
 func (h *Handler) AssignTimeslotModerator(w http.ResponseWriter, r *http.Request) {
 	tsID, err := validate.ParseIDParam(r, "tsId")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	var req struct {
@@ -111,13 +112,13 @@ func (h *Handler) AssignTimeslotModerator(w http.ResponseWriter, r *http.Request
 		validate.WriteError(w, errs)
 		return
 	}
-	source := core.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		_, err := h.IrisSurveyRepo.AssignModeratorToTimeSlot(r.Context(), tsID, req.ModeratorID, req.IsHost)
 		if err != nil {
 			slog.Error("assign mod failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "assign failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "assign failed"})
 			return
 		}
 		// Return updated moderators list (legacy returns array)
@@ -125,10 +126,10 @@ func (h *Handler) AssignTimeslotModerator(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			slog.Error("get mods after assign failed", "error", err)
 		}
-		core.WriteJSON(w, http.StatusOK, mods)
+		support.WriteJSON(w, http.StatusOK, mods)
 		return
 	}
-	core.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
+	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
 }
 
 // UnassignTimeslotModerator removes a moderator from a timeslot.
@@ -137,7 +138,7 @@ func (h *Handler) AssignTimeslotModerator(w http.ResponseWriter, r *http.Request
 func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Request) {
 	tsID, _ := validate.ParseIDParam(r, "tsId")
 	modID, _ := validate.ParseIDParam(r, "modId")
-	source := core.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		// Hook: ModeratorTimeSlot.beforeDeleteHooks — cleanup calendar + invitations
@@ -161,7 +162,7 @@ func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Reque
 
 		if err := h.IrisSurveyRepo.RemoveModeratorFromTimeSlot(r.Context(), tsID, modID); err != nil {
 			slog.Error("unassign mod failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "unassign failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "unassign failed"})
 			return
 		}
 		// Return remaining moderators (legacy returns array)
@@ -169,10 +170,10 @@ func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			slog.Error("get mods after unassign failed", "error", err)
 		}
-		core.WriteJSON(w, http.StatusOK, mods)
+		support.WriteJSON(w, http.StatusOK, mods)
 		return
 	}
-	core.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
+	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
 }
 
 // GetTimeslotObservers returns observers for a timeslot.
@@ -181,7 +182,7 @@ func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Reque
 func (h *Handler) GetTimeslotObservers(w http.ResponseWriter, r *http.Request) {
 	tsID, err := validate.ParseIDParam(r, "tsId")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -193,13 +194,13 @@ func (h *Handler) GetTimeslotObservers(w http.ResponseWriter, r *http.Request) {
 		result := make([]map[string]any, 0, len(observers))
 		for _, o := range observers {
 			result = append(result, map[string]any{
-				"id": o.ID, "email": o.Email, "timeSlotId": core.NullInt64(o.TimeSlotID),
+				"id": o.ID, "email": o.Email, "timeSlotId": dto.NullInt64(o.TimeSlotID),
 			})
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, map[string]any{"observers": []any{}})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"observers": []any{}})
 }
 
 // UpdateTimeslotObservers adds/removes observers for a timeslot.
@@ -208,7 +209,7 @@ func (h *Handler) GetTimeslotObservers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request) {
 	tsID, err := validate.ParseIDParam(r, "tsId")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	var req struct {
@@ -247,7 +248,7 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 		// Core DB operation: add/remove observers
 		if err := h.IrisSurveyRepo.PutObserversForTimeSlot(ctx, req.ProjectID, tsID, req.ToAdd, req.ToDelete); err != nil {
 			slog.Error("update observers failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
 
@@ -289,13 +290,13 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 		result := make([]map[string]any, 0, len(observers))
 		for _, o := range observers {
 			result = append(result, map[string]any{
-				"id": o.ID, "email": o.Email, "timeSlotId": core.NullInt64(o.TimeSlotID),
+				"id": o.ID, "email": o.Email, "timeSlotId": dto.NullInt64(o.TimeSlotID),
 			})
 		}
-		core.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
 		return
 	}
-	core.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
+	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
 }
 
 // ──────────────────────────────────────────────

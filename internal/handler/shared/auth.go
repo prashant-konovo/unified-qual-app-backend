@@ -13,27 +13,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/core"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
 
 // AuthHandler handles authentication and authorization endpoints.
-type AuthHandler struct{ *core.Deps }
+type AuthHandler struct{ *support.Deps }
 
 // ──────────────────────────────────────────────
 // Auth — proxies to central auth service (API Gateway → Lambda → Cognito)
 // ──────────────────────────────────────────────
 
-type loginRequest struct {
-	Email         string `json:"email"    validate:"required,email"`
-	Password      string `json:"password" validate:"required,min=1"`
-	TermsAccepted *bool  `json:"termsAccepted"`
-}
-
 func (h *AuthHandler) AuthLogin(w http.ResponseWriter, r *http.Request) {
-	var req loginRequest
+	var req dto.LoginRequest
 	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
 		validate.WriteError(w, errs)
 		return
@@ -51,7 +46,7 @@ func (h *AuthHandler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 						_ = h.QsUserRepo.AcceptTerms(r.Context(), loginResp.ID)
 					}
 				} else {
-					core.WriteJSON(w, 203, map[string]any{
+					support.WriteJSON(w, 203, map[string]any{
 						"termsAcceptedRes": map[string]any{
 							"termsAccepted": false,
 							"userId":        loginResp.ID,
@@ -75,12 +70,12 @@ func (h *AuthHandler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 				u, err := h.QsUserRepo.GetByEmail(r.Context(), req.Email)
 				if err == nil && u != nil {
 					userInfo["id"] = u.ID
-					userInfo["firstName"] = core.NullStr(u.FirstName)
-					userInfo["lastName"] = core.NullStr(u.LastName)
+					userInfo["firstName"] = dto.NullStr(u.FirstName)
+					userInfo["lastName"] = dto.NullStr(u.LastName)
 				}
 			}
 
-			core.WriteJSON(w, http.StatusOK, map[string]any{
+			support.WriteJSON(w, http.StatusOK, map[string]any{
 				"statusCode": 200,
 				"body": map[string]any{
 					"statusCode": 200,
@@ -103,7 +98,7 @@ func (h *AuthHandler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		if err != nil && statusCode > 0 {
 			slog.Warn("InCrowdAPI login failed", "status", statusCode, "error", err)
 			if statusCode == http.StatusUnauthorized || statusCode == http.StatusUnprocessableEntity {
-				core.WriteJSON(w, http.StatusUnauthorized, map[string]any{
+				support.WriteJSON(w, http.StatusUnauthorized, map[string]any{
 					"error":        "Invalid email or password",
 					"errorMessage": "Invalid email or password",
 				})
@@ -116,7 +111,7 @@ func (h *AuthHandler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 	// ── Fallback: direct Cognito auth ───────────────────────────────
 	body, status, err := h.cognitoAdminAuth(r.Context(), req.Email, req.Password)
 	if err != nil {
-		core.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "An error occurred while logging in",
 			"errorMessage": "An error occurred while logging in",
 		})
@@ -143,13 +138,13 @@ func (h *AuthHandler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		u, err := h.QsUserRepo.GetByEmail(r.Context(), req.Email)
 		if err == nil && u != nil {
 			userInfo["id"] = u.ID
-			userInfo["firstName"] = core.NullStr(u.FirstName)
-			userInfo["lastName"] = core.NullStr(u.LastName)
+			userInfo["firstName"] = dto.NullStr(u.FirstName)
+			userInfo["lastName"] = dto.NullStr(u.LastName)
 
 			if req.TermsAccepted != nil && *req.TermsAccepted {
 				_ = h.QsUserRepo.AcceptTerms(r.Context(), u.ID)
 			} else if u.TermsAccepted != 1 {
-				core.WriteJSON(w, 203, map[string]any{
+				support.WriteJSON(w, 203, map[string]any{
 					"termsAcceptedRes": map[string]any{
 						"termsAccepted": false,
 						"userId":        u.ID,
@@ -160,7 +155,7 @@ func (h *AuthHandler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	core.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"statusCode": 200,
 		"body": map[string]any{
 			"statusCode": 200,
@@ -178,19 +173,13 @@ func (h *AuthHandler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) AuthMagicLink(w http.ResponseWriter, r *http.Request) {
 	// Magic link auth is not yet supported by the central service — return stub.
-	core.WriteJSON(w, http.StatusNotImplemented, map[string]any{
+	support.WriteJSON(w, http.StatusNotImplemented, map[string]any{
 		"error": "magic link authentication not yet implemented",
 	})
 }
 
-type refreshRequest struct {
-	RefreshToken string `json:"refreshToken"`
-	ICUserID     int64  `json:"icUserId"`
-	ICAuthToken  string `json:"icAuthToken"`
-}
-
 func (h *AuthHandler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
-	var req refreshRequest
+	var req dto.RefreshRequest
 	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
 		validate.WriteError(w, errs)
 		return
@@ -200,7 +189,7 @@ func (h *AuthHandler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 	if h.Services.ICAuth != nil && h.Services.ICAuth.Configured() && req.ICUserID > 0 && req.ICAuthToken != "" {
 		newIDToken, err := h.Services.ICAuth.RefreshToken(r.Context(), req.ICUserID, req.ICAuthToken)
 		if err == nil && newIDToken != "" {
-			core.WriteJSON(w, http.StatusOK, map[string]any{
+			support.WriteJSON(w, http.StatusOK, map[string]any{
 				"IdToken":     newIDToken,
 				"AccessToken": req.ICAuthToken,
 			})
@@ -211,13 +200,13 @@ func (h *AuthHandler) AuthRefresh(w http.ResponseWriter, r *http.Request) {
 
 	// ── Fallback: direct Cognito refresh ────────────────────────────
 	if req.RefreshToken == "" {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "refreshToken or icUserId+icAuthToken is required"})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "refreshToken or icUserId+icAuthToken is required"})
 		return
 	}
 
 	body, status, err := h.cognitoRefresh(r.Context(), req.RefreshToken)
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("token refresh error: %v", err)})
+		support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": fmt.Sprintf("token refresh error: %v", err)})
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -245,7 +234,7 @@ func (h *AuthHandler) AuthPassword(w http.ResponseWriter, r *http.Request) {
 		newPwd = req.Password
 	}
 	if newPwd == "" {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "newPassword is required"})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "newPassword is required"})
 		return
 	}
 
@@ -260,7 +249,7 @@ func (h *AuthHandler) AuthPassword(w http.ResponseWriter, r *http.Request) {
 
 	// Proxy to InCrowdAPI
 	if h.Services.ICAuth == nil || !h.Services.ICAuth.Configured() {
-		core.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "password change service unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "password change service unavailable"})
 		return
 	}
 
@@ -275,7 +264,7 @@ func (h *AuthHandler) AuthPassword(w http.ResponseWriter, r *http.Request) {
 	err := h.Services.ICAuth.ChangePassword(r.Context(), targetUserID, icAuthToken, req.OldPassword, newPwd)
 	if err != nil {
 		slog.Warn("InCrowdAPI password change failed", "error", err)
-		core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "password change failed"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "password change failed"})
 		return
 	}
 
@@ -284,27 +273,27 @@ func (h *AuthHandler) AuthPassword(w http.ResponseWriter, r *http.Request) {
 	if targetUserID > 0 && h.QsUserRepo != nil {
 		u, err := h.QsUserRepo.GetByID(r.Context(), targetUserID)
 		if err == nil && u != nil {
-			core.WriteJSON(w, http.StatusOK, map[string]any{
+			support.WriteJSON(w, http.StatusOK, map[string]any{
 				"id":         u.ID,
-				"first_name": core.NullStr(u.FirstName),
-				"last_name":  core.NullStr(u.LastName),
-				"email":      core.NullStr(u.Email),
+				"first_name": dto.NullStr(u.FirstName),
+				"last_name":  dto.NullStr(u.LastName),
+				"email":      dto.NullStr(u.Email),
 			})
 			return
 		}
 	}
 
-	core.WriteJSON(w, http.StatusOK, map[string]any{"changed": true})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"changed": true})
 }
 
 // AuthMe returns the authenticated user's claims from the JWT.
 func (h *AuthHandler) AuthMe(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetUser(r)
 	if user == nil {
-		core.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "not authenticated"})
+		support.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "not authenticated"})
 		return
 	}
-	core.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"sub":      user.Sub,
 		"email":    user.Email,
 		"username": user.Username,
@@ -329,7 +318,7 @@ func (h *AuthHandler) AuthLogout(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	core.WriteJSON(w, http.StatusOK, map[string]any{"message": "logged out"})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"message": "logged out"})
 }
 
 // AuthAcceptTerms proxies terms acceptance to InCrowdAPI and updates local QS DB.
@@ -354,7 +343,7 @@ func (h *AuthHandler) AuthAcceptTerms(w http.ResponseWriter, r *http.Request) {
 		_ = h.QsUserRepo.AcceptTerms(r.Context(), req.UserID)
 	}
 
-	core.WriteJSON(w, http.StatusOK, map[string]any{"message": "terms accepted"})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"message": "terms accepted"})
 }
 
 // ──────────────────────────────────────────────
@@ -365,7 +354,7 @@ func (h *AuthHandler) AuthAcceptTerms(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) AuthSSOConfig(w http.ResponseWriter, r *http.Request) {
 	cfg := h.Cfg.Cognito
 	if cfg.Domain == "" || cfg.SSOClientID == "" {
-		core.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"error": "SSO is not configured for this environment",
 		})
 		return
@@ -384,7 +373,7 @@ func (h *AuthHandler) AuthSSOConfig(w http.ResponseWriter, r *http.Request) {
 		url.QueryEscape(redirectURI),
 	)
 
-	core.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"data": map[string]any{
 			"authorizeUrl": authorizeURL,
 			"redirectUri":  redirectURI,
@@ -405,18 +394,18 @@ func (h *AuthHandler) AuthSSOCallback(w http.ResponseWriter, r *http.Request) {
 
 	cfg := h.Cfg.Cognito
 	if cfg.Domain == "" || cfg.SSOClientID == "" {
-		core.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "SSO is not configured"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "SSO is not configured"})
 		return
 	}
 
 	tokens, err := h.cognitoExchangeCode(r.Context(), req.Code, req.RedirectURI)
 	if err != nil {
 		slog.Warn("SSO code exchange failed", "error", err)
-		core.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "SSO authentication failed"})
+		support.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "SSO authentication failed"})
 		return
 	}
 
-	core.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"statusCode": 200,
 		"body": map[string]any{
 			"statusCode": 200,

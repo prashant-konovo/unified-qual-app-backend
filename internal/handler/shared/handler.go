@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/core"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 )
 
 // Handler holds the remaining (non-auth) handler methods.
 // It embeds *Deps so all promoted fields (cfg, db, repos, etc.) are accessible.
-type Handler struct{ *core.Deps }
+type Handler struct{ *support.Deps }
 
 // ──────────────────────────────────────────────
 // Health
@@ -32,7 +32,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	core.WriteJSON(w, httpCode, map[string]any{
+	support.WriteJSON(w, httpCode, map[string]any{
 		"status":      status,
 		"version":     "1.2.0",
 		"environment": h.Cfg.Environment,

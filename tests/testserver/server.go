@@ -17,7 +17,7 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
-	"github.com/InCrowd/unified-qual-api/internal/handler/core"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/router"
@@ -30,7 +30,7 @@ const testKID = "test-kid-001"
 // TestServer wraps httptest.Server with mock accessors for integration tests.
 type TestServer struct {
 	Server *httptest.Server
-	Deps   *core.Deps
+	Deps   *support.Deps
 
 	// Mock repositories — set expectations before each request
 	IrisProjectRepo  *mocks.MockIrisProjectRepository
@@ -112,7 +112,7 @@ func New() *TestServer {
 		AuthAPIKey: "test-api-key",
 	}
 
-	deps := &core.Deps{
+	deps := &support.Deps{
 		Cfg:              cfg,
 		DB:               &config.DBPair{}, // nil DBs — health will show "not_configured"
 		Services:         &integration.ServiceClients{},

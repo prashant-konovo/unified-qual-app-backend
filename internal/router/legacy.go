@@ -1,3 +1,14 @@
+// Package router registers HTTP routes.
+//
+// legacy.go contains routes ported from the InCrowdAPI (LS/Scala) and QS-Tool
+// (MRA/Node) services.  These endpoints preserve backward compatibility while
+// the unified API is being built out.  They are candidates for consolidation
+// into RESTful resource routes in a future refactoring pass.
+//
+// TODO: Migrate waiting-queue, transcription, SMS, payment, translation,
+// notification, market, timeslot sub-resource, moderator-availability,
+// self-service, user-management, event-log, salesforce, and password-reset
+// endpoints to the standard resource routers (project.go, survey.go, etc.).
 package router
 
 import (

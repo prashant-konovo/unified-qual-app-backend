@@ -7,7 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/core"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/InCrowd/unified-qual-api/internal/validate"
@@ -24,7 +25,7 @@ import (
 func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsRespondentRepo == nil {
-		core.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
@@ -41,7 +42,7 @@ func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 	respondents, total, err := h.QsRespondentRepo.List(ctx, page, pageSize, search)
 	if err != nil {
 		slog.ErrorContext(ctx, "list participants failed", "error", err)
-		core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list participants"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list participants"})
 		return
 	}
 
@@ -74,7 +75,7 @@ func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 		result = append(result, item)
 	}
 
-	core.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    result,
 		"meta": map[string]any{
@@ -88,7 +89,7 @@ func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsRespondentRepo == nil {
-		core.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
@@ -109,15 +110,15 @@ func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 	resp := &qs.Respondent{
 		FirstName:           body.FirstName,
 		LastName:            body.LastName,
-		Title:               core.ToNullStr(body.Title),
-		ExternalResponderID: core.ToNullStr(body.ExternalResponderID),
-		TimeZone:            core.ToNullStr(body.TimeZone),
+		Title:               dto.ToNullStr(body.Title),
+		ExternalResponderID: dto.ToNullStr(body.ExternalResponderID),
+		TimeZone:            dto.ToNullStr(body.TimeZone),
 	}
 
 	respID, err := h.QsRespondentRepo.Create(ctx, resp)
 	if err != nil {
 		slog.ErrorContext(ctx, "create participant failed", "error", err)
-		core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create participant"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create participant"})
 		return
 	}
 
@@ -134,30 +135,30 @@ func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	core.WriteJSON(w, http.StatusCreated, map[string]any{"id": respID, "source": "qs"})
+	support.WriteJSON(w, http.StatusCreated, map[string]any{"id": respID, "source": "qs"})
 }
 
 func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsRespondentRepo == nil {
-		core.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	respID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	resp, err := h.QsRespondentRepo.GetByID(ctx, respID)
 	if err != nil {
 		slog.ErrorContext(ctx, "get participant failed", "error", err, "id", respID)
-		core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 	if resp == nil {
-		core.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "participant not found"})
+		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "participant not found"})
 		return
 	}
 
@@ -208,5 +209,5 @@ func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
 		result["contacts"] = contacts
 	}
 
-	core.WriteJSON(w, http.StatusOK, result)
+	support.WriteJSON(w, http.StatusOK, result)
 }

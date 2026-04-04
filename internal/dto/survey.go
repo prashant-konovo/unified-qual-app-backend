@@ -48,3 +48,12 @@ func SurveyFromRow(s *qs.SurveyRow) map[string]any {
 	}
 	return m
 }
+
+// CreateSurveyRequest is the request body for creating a survey.
+type CreateSurveyRequest struct {
+	Title     string          `json:"title"`
+	ProjectID *int64          `json:"projectId,omitempty"`
+	Status    string          `json:"status"`
+	Questions json.RawMessage `json:"questions"`
+	Rules     json.RawMessage `json:"rules"`
+}

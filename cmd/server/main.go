@@ -8,7 +8,7 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
-	"github.com/InCrowd/unified-qual-api/internal/handler/core"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/jobs"
 	"github.com/InCrowd/unified-qual-api/internal/logger"
@@ -67,7 +67,7 @@ func main() {
 	}
 
 	// Wire handlers + router
-	deps := core.NewDeps(cfg, db, integration.NewServiceClients(cfg),
+	deps := support.NewDeps(cfg, db, integration.NewServiceClients(cfg),
 		irisProjectRepo, qsProjectRepo,
 		irisUserRepo, qsUserRepo,
 		qsTimeSlotRepo, qsRespondentRepo,
@@ -91,7 +91,7 @@ func main() {
 			IrisUserRepo:    irisUserRepo,
 			JobsRepo:        jobsRepo,
 		}
-		scheduler := jobs.NewScheduler(jobDeps, jobs.DefaultJobsConfig(), slog.Default())
+		scheduler := jobs.NewScheduler(jobDeps, cfg.Jobs, slog.Default())
 		if err := scheduler.Start(); err != nil {
 			slog.Error("failed to start job scheduler", "error", err)
 		} else {

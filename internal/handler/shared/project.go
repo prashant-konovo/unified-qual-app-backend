@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/core"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
@@ -17,7 +17,7 @@ import (
 )
 
 // ProjectHandler handles project CRUD endpoints.
-type ProjectHandler struct{ *core.Deps }
+type ProjectHandler struct{ *support.Deps }
 
 // ──────────────────────────────────────────────
 // Projects — Real dual-DB queries (IRIS + QS)
@@ -87,25 +87,11 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	if result == nil {
 		result = []map[string]any{}
 	}
-	core.WriteJSON(w, http.StatusOK, dto.NewPaginated(result, pg.Page, pg.PageSize, len(result)))
-}
-
-type createProjectRequest struct {
-	Name                string  `json:"name"                validate:"required"`
-	Description         string  `json:"description"`
-	SubscriptionID      int64   `json:"subscriptionId"`
-	SalesforceProjectID string  `json:"salesforceProjectId"`
-	SalesforceJobNumber string  `json:"salesforceJobNumber"`
-	SampleSize          int64   `json:"sampleSize"`
-	InterviewLength     int64   `json:"interviewLength"`
-	ClientID            int64   `json:"clientId"`
-	PostScreeninBuffer  float64 `json:"postScreeninBuffer"`
-	ModeratorBuffer     float64 `json:"moderatorBuffer"`
-	Source              string  `json:"source"` // "iris" or "qs"
+	support.WriteJSON(w, http.StatusOK, dto.NewPaginated(result, pg.Page, pg.PageSize, len(result)))
 }
 
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
-	var req createProjectRequest
+	var req dto.CreateProjectRequest
 	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
 		validate.WriteError(w, errs)
 		return
@@ -119,43 +105,43 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	if req.Source == "iris" && h.IrisProjectRepo != nil {
 		p := &iris.Project{
 			Name:                req.Name,
-			Description:         core.ToNullStr(req.Description),
+			Description:         dto.ToNullStr(req.Description),
 			SubscriptionID:      req.SubscriptionID,
-			SalesforceProjectID: core.ToNullStr(req.SalesforceProjectID),
+			SalesforceProjectID: dto.ToNullStr(req.SalesforceProjectID),
 			ProjectStatusID:     2, // Defining
 		}
 		id, err := h.IrisProjectRepo.Create(r.Context(), p)
 		if err != nil {
 			slog.Error("iris project create failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create project"})
+			support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create project"})
 			return
 		}
-		core.WriteJSON(w, http.StatusCreated, dto.MutationResult{ID: id, Source: "iris", ServiceCategory: "LS"})
+		support.WriteJSON(w, http.StatusCreated, dto.MutationResult{ID: id, Source: "iris", ServiceCategory: "LS"})
 		return
 	}
 
 	if h.QsProjectRepo != nil {
 		p := &qs.Project{
 			Name:                req.Name,
-			SalesforceJobNumber: core.ToNullStr(req.SalesforceJobNumber),
-			SampleSize:          core.ToNullInt64(req.SampleSize),
-			InterviewLength:     core.ToNullInt64(req.InterviewLength),
-			ClientID:            core.ToNullInt64(req.ClientID),
-			PostScreeninBuffer:  core.ToNullStr(fmt.Sprintf("%.2f", req.PostScreeninBuffer)),
-			ModeratorBuffer:     core.ToNullStr(fmt.Sprintf("%.2f", req.ModeratorBuffer)),
+			SalesforceJobNumber: dto.ToNullStr(req.SalesforceJobNumber),
+			SampleSize:          dto.ToNullInt64(req.SampleSize),
+			InterviewLength:     dto.ToNullInt64(req.InterviewLength),
+			ClientID:            dto.ToNullInt64(req.ClientID),
+			PostScreeninBuffer:  dto.ToNullStr(fmt.Sprintf("%.2f", req.PostScreeninBuffer)),
+			ModeratorBuffer:     dto.ToNullStr(fmt.Sprintf("%.2f", req.ModeratorBuffer)),
 		}
 		_ = user // TODO: set CreatedBy from user lookup
 		id, err := h.QsProjectRepo.Create(r.Context(), p)
 		if err != nil {
 			slog.Error("qs project create failed", "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create project"})
+			support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create project"})
 			return
 		}
-		core.WriteJSON(w, http.StatusCreated, dto.MutationResult{ID: id, Source: "qs", ServiceCategory: "MRA"})
+		support.WriteJSON(w, http.StatusCreated, dto.MutationResult{ID: id, Source: "qs", ServiceCategory: "MRA"})
 		return
 	}
 
-	core.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "no database available"})
+	support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "no database available"})
 }
 
 // GetProject returns a project by ID.
@@ -164,7 +150,7 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 
@@ -175,7 +161,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		p, err := h.QsProjectRepo.GetByID(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs project get failed", "id", projectID, "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "database error"})
 			return
 		}
 		if p != nil {
@@ -185,7 +171,7 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 			for _, t := range topics {
 				topicNames = append(topicNames, t.TopicName)
 			}
-			core.WriteJSON(w, http.StatusOK, dto.ProjectDetailFromQS(p, scheduled, completed, topicNames))
+			support.WriteJSON(w, http.StatusOK, dto.ProjectDetailFromQS(p, scheduled, completed, topicNames))
 			return
 		}
 	}
@@ -195,37 +181,26 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		p, err := h.IrisProjectRepo.GetByID(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris project get failed", "id", projectID, "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "database error"})
 			return
 		}
 		if p != nil {
-			core.WriteJSON(w, http.StatusOK, dto.ProjectDetailFromIRIS(p, irisStatusName[p.ProjectStatusID]))
+			support.WriteJSON(w, http.StatusOK, dto.ProjectDetailFromIRIS(p, irisStatusName[p.ProjectStatusID]))
 			return
 		}
 	}
 
-	core.WriteJSON(w, http.StatusNotFound, dto.ErrorBody{Error: "project not found"})
-}
-
-type updateProjectRequest struct {
-	Name                string `json:"name"`
-	Description         string `json:"description"`
-	StatusID            *int   `json:"statusId"`
-	SalesforceProjectID string `json:"salesforceProjectId"`
-	SampleSize          *int64 `json:"sampleSize"`
-	InterviewLength     *int64 `json:"interviewLength"`
-	IsArchived          *bool  `json:"isArchived"`
-	Source              string `json:"source"`
+	support.WriteJSON(w, http.StatusNotFound, dto.ErrorBody{Error: "project not found"})
 }
 
 func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 
-	var req updateProjectRequest
+	var req dto.UpdateProjectRequest
 	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
 		validate.WriteError(w, errs)
 		return
@@ -251,10 +226,10 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := h.IrisProjectRepo.Update(r.Context(), projectID, fields); err != nil {
 			slog.Error("iris project update failed", "id", projectID, "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "update failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "update failed"})
 			return
 		}
-		core.WriteJSON(w, http.StatusOK, dto.MutationResult{ID: projectID, Updated: true, Source: "iris"})
+		support.WriteJSON(w, http.StatusOK, dto.MutationResult{ID: projectID, Updated: true, Source: "iris"})
 		return
 	}
 
@@ -268,21 +243,21 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := h.QsProjectRepo.Update(r.Context(), projectID, fields); err != nil {
 			slog.Error("qs project update failed", "id", projectID, "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "update failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "update failed"})
 			return
 		}
-		core.WriteJSON(w, http.StatusOK, dto.MutationResult{ID: projectID, Updated: true, Source: "qs"})
+		support.WriteJSON(w, http.StatusOK, dto.MutationResult{ID: projectID, Updated: true, Source: "qs"})
 		return
 	}
 
-	core.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "no database available"})
+	support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "no database available"})
 }
 
 func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	// Soft-delete: archive instead of hard delete
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		core.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 
@@ -292,19 +267,19 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		// QS: set project_status_id = 5 (Canceled)
 		if err := h.QsProjectRepo.Update(r.Context(), projectID, map[string]any{"project_status_id": 5}); err != nil {
 			slog.Error("qs project archive failed", "id", projectID, "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "archive failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "archive failed"})
 			return
 		}
-		core.WriteJSON(w, http.StatusOK, dto.MutationResult{ID: projectID, Archived: true, Source: "qs"})
+		support.WriteJSON(w, http.StatusOK, dto.MutationResult{ID: projectID, Archived: true, Source: "qs"})
 		return
 	}
 
 	if h.IrisProjectRepo != nil {
 		if err := h.IrisProjectRepo.Update(r.Context(), projectID, map[string]any{"is_archived": true}); err != nil {
 			slog.Error("iris project archive failed", "id", projectID, "error", err)
-			core.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "archive failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "archive failed"})
 			return
 		}
 	}
-	core.WriteJSON(w, http.StatusOK, dto.MutationResult{ID: projectID, Archived: true, Source: "iris"})
+	support.WriteJSON(w, http.StatusOK, dto.MutationResult{ID: projectID, Archived: true, Source: "iris"})
 }
