@@ -30,8 +30,34 @@ jobs:
       - name: Unit Tests
         run: go test -race -coverprofile=coverage.out ./...
 
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Install Snyk CLI
+        uses: snyk/actions/setup@master
+      - name: Snyk Open Source (dependency scan)
+        continue-on-error: true
+        run: snyk test --all-projects --severity-threshold=high
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Snyk Code (SAST)
+        continue-on-error: true
+        run: snyk code test
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Snyk Monitor (upload to dashboard)
+        if: github.event_name == 'push'
+        continue-on-error: true
+        run: snyk monitor --all-projects
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
   build-push:
-    needs: lint-test
+    needs: [lint-test, security]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
