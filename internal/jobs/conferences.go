@@ -16,18 +16,28 @@ func (s *Scheduler) endConferences() {
 		return
 	}
 
-	// TODO: List active Chime meetings via ConferenceClient.ListActiveMeetings()
-	// The conference client currently has proxy methods for individual meeting operations
-	// but may not have a ListActiveMeetings method.
-	// When ConferenceClient.ListActiveMeetings is available:
+	// ──────────────────────────────────────────────────────────────────
+	// NOT YET IMPLEMENTED — missing infrastructure
 	//
-	// 1. activeMeetings, err := s.deps.Services.Conference.ListActiveMeetings(ctx)
-	// 2. Extract conference hashes (friendly names) from active meetings
-	// 3. staleHashes, err := s.deps.JobsRepo.GetStaleConferenceHashes(ctx, hashes)
-	// 4. For each stale: s.deps.Services.Conference.EndMeeting(ctx, meetingID)
+	// Scala (InCrowdAPI) uses Twilio SDK to discover active conferences:
+	//   Conference.reader().setDateCreated(today).setStatus(IN_PROGRESS).read()
+	// then cross-references with time_slot.conference_hash to find stale ones,
+	// and ends them via Conference.updater(sid).setStatus(COMPLETED).update().
+	//
+	// Go backend uses AWS Chime (not Twilio). The ConferenceClient has
+	// EndMeeting(meetingID) but lacks ListActiveMeetings() — the Chime
+	// Lambda/API Gateway proxy does not expose a "list active meetings" endpoint.
+	//
+	// Recommended approach (no API Gateway changes required):
+	//   1. Query time_slot WHERE chime_meeting_id IS NOT NULL
+	//      AND end_time <= NOW() - INTERVAL 30 MINUTE AND status_id = 2
+	//   2. For each stale meeting: ConferenceClient.EndMeeting(ctx, chimeMeetingID)
+	//   3. Optionally update time_slot.status_id to reflect ended state
+	//
+	// Blocked on: Decision whether to query DB directly or add
+	// ListActiveMeetings to the Chime API Gateway.
+	// ──────────────────────────────────────────────────────────────────
 
 	_ = ctx
 	_ = log
-
-	// Placeholder — will be activated when ConferenceClient.ListActiveMeetings is available
 }
