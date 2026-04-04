@@ -113,32 +113,49 @@ ArgoCD syncs from gitops repo automatically.
 
 ## Testing
 
-### Unit Tests
+### Unit Tests (29 tests, 3 packages)
 
+Unit tests live alongside source files (Go convention): `handler/shared`, `middleware`, `jobs`.
+
+**Run all unit tests:**
 ```bash
-make test               # Run all tests with race detection + coverage
-go test -v ./...        # Verbose output
-go test ./internal/handler/shared/  # Run specific package tests
+# Step 1: Run all unit tests with race detection + coverage
+go test -race -coverprofile=coverage.out ./...
+
+# Step 2 (optional): View coverage report in browser
+go tool cover -html=coverage.out
+
+# Step 3 (optional): Run a specific package
+go test -v ./internal/handler/shared/
+go test -v ./internal/middleware/
+go test -v ./internal/jobs/
 ```
 
-Unit tests live alongside source files (Go convention). 29 tests across 3 packages: `handler/shared`, `middleware`, `jobs`.
+**Run a single test by name:**
+```bash
+go test -v -run TestHealth_AllDBsHealthy ./internal/handler/shared/
+```
 
-### Integration Tests
+### Integration Tests (16 tests, full HTTP stack)
 
 Integration tests live in `tests/` and exercise the full HTTP stack (router → middleware → handler → mock repos). They use the `integration` build tag so `go test ./...` skips them by default.
 
+**Run all integration tests:**
 ```bash
-go test -tags=integration -v ./tests/...        # Run all integration tests
-go test -tags=integration -run TestHealth ./tests/...  # Run specific test
+# Step 1: Run all integration tests
+go test -tags=integration -v ./tests/...
+
+# Step 2 (optional): Run specific test
+go test -tags=integration -run TestProjects_AdminToken ./tests/...
 ```
 
-**Structure:**
+**Test structure:**
 ```
 tests/
   testserver/server.go  — TestServer builder (real Chi router, mock deps, test JWT signing)
-  health_test.go        — Health endpoint full-stack tests
-  auth_test.go          — Auth validation + SSO config + protected route tests
-  project_test.go       — JWT auth → RBAC → project list with mock repos + CORS
+  health_test.go        — Health endpoint full-stack tests (3 tests)
+  auth_test.go          — Auth validation + SSO config + protected route tests (8 tests)
+  project_test.go       — JWT auth → RBAC → project list with mock repos + CORS (5 tests)
 ```
 
 The `testserver.New()` helper creates a real `httptest.Server` with:
@@ -147,13 +164,24 @@ The `testserver.New()` helper creates a real `httptest.Server` with:
 - Test RSA key pair for JWT signing (`ts.AdminToken()`, `ts.ManagerToken()`)
 - No real databases or external services
 
+### Run All Tests (Unit + Integration)
+
+```bash
+go test -race ./... && go test -tags=integration -race ./tests/...
+```
+
 ### Mocks
 
 Mocks are auto-generated with [mockery](https://github.com/vektra/mockery) in `internal/testutil/mocks/`. To regenerate after interface changes:
 
 ```bash
+# Step 1: Install mockery
 go install github.com/vektra/mockery/v2@latest
-mockery --dir=internal/repository/iris --name=ProjectRepository --output=internal/testutil/mocks --outpkg=mocks --with-expecter --structname=MockIrisProjectRepository --filename=mock_iris_projectrepository.go
+
+# Step 2: Regenerate a specific mock (example: IRIS ProjectRepository)
+mockery --dir=internal/repository/iris --name=ProjectRepository \
+  --output=internal/testutil/mocks --outpkg=mocks --with-expecter \
+  --structname=MockIrisProjectRepository --filename=mock_iris_projectrepository.go
 ```
 
 ## Security Scanning (Snyk)
