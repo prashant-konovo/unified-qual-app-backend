@@ -114,3 +114,41 @@ func (cw *CastingWordsClient) GetTranscript(ctx context.Context, orderID string)
 	}
 	return string(body), nil
 }
+
+// GetAudiofileTotal fetches the transcription total cost for a CastingWords audiofile.
+// Matches Scala: MonthlyTranscriptsJob.getTotalForAudiofile
+// GET /audiofile/{id}?api_key=...&test=... → response.audiofile.total
+func (cw *CastingWordsClient) GetAudiofileTotal(ctx context.Context, audiofileID int64) (*float64, error) {
+	if !cw.Configured() {
+		return nil, fmt.Errorf("castingwords not configured")
+	}
+	apiURL := fmt.Sprintf("%s/audiofile/%d?api_key=%s",
+		cw.baseURL, audiofileID, url.QueryEscape(cw.apiKey))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := cw.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("castingwords audiofile API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("castingwords audiofile returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Audiofile struct {
+			Total *float64 `json:"total"`
+		} `json:"audiofile"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("castingwords parse response: %w", err)
+	}
+	return result.Audiofile.Total, nil
+}

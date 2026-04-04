@@ -10,6 +10,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/handler"
 	"github.com/InCrowd/unified-qual-api/internal/handler/core"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
+	"github.com/InCrowd/unified-qual-api/internal/jobs"
 	"github.com/InCrowd/unified-qual-api/internal/logger"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
@@ -75,6 +76,28 @@ func main() {
 	)
 	hs := handler.NewHandlers(deps)
 	r := router.New(hs, jwtAuth)
+
+	// Start scheduled jobs (if enabled)
+	if cfg.JobsEnabled {
+		var jobsRepo iris.JobsRepository
+		if db.IRIS != nil {
+			jobsRepo = iris.NewJobsRepo(db.IRIS, db.IRISReadOnly)
+		}
+		jobDeps := &jobs.JobDeps{
+			Cfg: cfg, DB: db,
+			Services:        integration.NewServiceClients(cfg),
+			IrisSurveyRepo:  irisSurveyRepo,
+			IrisProjectRepo: irisProjectRepo,
+			IrisUserRepo:    irisUserRepo,
+			JobsRepo:        jobsRepo,
+		}
+		scheduler := jobs.NewScheduler(jobDeps, jobs.DefaultJobsConfig(), slog.Default())
+		if err := scheduler.Start(); err != nil {
+			slog.Error("failed to start job scheduler", "error", err)
+		} else {
+			defer scheduler.Stop()
+		}
+	}
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
 	slog.Info("server starting", "addr", addr, "env", cfg.Environment, "dummy", cfg.IsDummy())

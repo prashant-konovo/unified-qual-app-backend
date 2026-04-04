@@ -188,3 +188,117 @@ func (g *GoogleCalendarClient) ListEvents(ctx context.Context, calendarID string
 	_ = json.Unmarshal(body, &result)
 	return result.Items, nil
 }
+
+// UpdateEventWithNotification PATCHes a calendar event to trigger Google Calendar
+// notifications to attendees. Used by RemindToConfirmSchedule job.
+func (g *GoogleCalendarClient) UpdateEventWithNotification(ctx context.Context, calendarID, eventID string) error {
+	if !g.Configured() {
+		return fmt.Errorf("google calendar not configured")
+	}
+	if calendarID == "" {
+		calendarID = g.defaultCalendarID
+	}
+	apiURL := fmt.Sprintf(
+		"https://www.googleapis.com/calendar/v3/calendars/%s/events/%s?sendNotifications=true",
+		url.PathEscape(calendarID), url.PathEscape(eventID))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, apiURL,
+		bytes.NewReader([]byte("{}")))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("google calendar PATCH: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("google calendar PATCH returned %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+// RegisterWatch creates a push notification channel for calendar events.
+// Matches Scala: GoogleCalendar.registerWatch
+// POST /calendars/{id}/events/watch
+func (g *GoogleCalendarClient) RegisterWatch(ctx context.Context, calendarID, channelID, webhookURL string, expiration time.Time) (string, error) {
+	if !g.Configured() {
+		return "", fmt.Errorf("google calendar not configured")
+	}
+	if calendarID == "" {
+		calendarID = g.defaultCalendarID
+	}
+
+	apiURL := fmt.Sprintf("https://www.googleapis.com/calendar/v3/calendars/%s/events/watch",
+		url.PathEscape(calendarID))
+
+	payload := map[string]any{
+		"id":         channelID,
+		"type":       "web_hook",
+		"address":    webhookURL,
+		"expiration": expiration.UnixMilli(),
+	}
+	b, _ := json.Marshal(payload)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewReader(b))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("google calendar watch: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("google calendar watch returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		ResourceID string `json:"resourceId"`
+	}
+	_ = json.Unmarshal(body, &result)
+	return result.ResourceID, nil
+}
+
+// DeregisterWatch stops a push notification channel.
+// Matches Scala: GoogleCalendar.deregisterWatch
+// POST /channels/stop
+func (g *GoogleCalendarClient) DeregisterWatch(ctx context.Context, channelID, resourceID string) error {
+	if !g.Configured() {
+		return fmt.Errorf("google calendar not configured")
+	}
+
+	payload := map[string]string{
+		"id":         channelID,
+		"resourceId": resourceID,
+	}
+	b, _ := json.Marshal(payload)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://www.googleapis.com/calendar/v3/channels/stop", bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("google calendar deregister watch: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		slog.Warn("google calendar deregister watch failed",
+			"status", resp.StatusCode, "body", string(body))
+	}
+	return nil
+}

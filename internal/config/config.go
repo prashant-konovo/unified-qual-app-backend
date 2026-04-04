@@ -71,6 +71,10 @@ type Config struct {
 
 	// CORS
 	CORSOrigins string
+
+	// Scheduled jobs
+	JobsEnabled     bool
+	QualConfBaseURL string
 }
 
 type DatabaseConfig struct {
@@ -321,6 +325,9 @@ func Load() *Config {
 		},
 
 		InquiryEmailRecipient: envOr("INQUIRY_EMAIL_RECIPIENT", "dev-ni@incrowdnow.com"),
+
+		JobsEnabled:     envOr("JOBS_ENABLED", "false") == "true",
+		QualConfBaseURL: envOr("QUAL_CONF_BASE_URL", ""),
 	}
 }
 
