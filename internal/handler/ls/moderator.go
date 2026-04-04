@@ -247,6 +247,13 @@ func (h *Handler) MarkNoShow(w http.ResponseWriter, r *http.Request) {
 			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "mark failed"})
 			return
 		}
+		// Hook: TimeSlot.afterUpdateHooks — assignConferenceHashAndPin
+		if err := h.IrisSurveyRepo.AssignConferenceHash(r.Context(), timeSlotID); err != nil {
+			slog.Warn("hook: assign conference hash failed (non-fatal)", "timeSlotId", timeSlotID, "error", err)
+		}
+		if err := h.IrisSurveyRepo.AssignConferencePin(r.Context(), timeSlotID); err != nil {
+			slog.Warn("hook: assign conference pin failed (non-fatal)", "timeSlotId", timeSlotID, "error", err)
+		}
 	}
 
 	if h.QsTimeSlotRepo != nil {

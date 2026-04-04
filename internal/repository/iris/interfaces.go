@@ -125,6 +125,18 @@ type SurveyRepository interface {
 		standardCrowds []map[string]any, customCrowds []map[string]any,
 		crowdObjects []map[string]any, err error)
 	GetCrowdAttributeChoiceIDs(ctx context.Context, crowdAttributeID int64) ([]int64, error)
+
+	// Hook side-effect methods (matching InCrowdAPI Scala lifecycle hooks)
+	AssignConferenceHash(ctx context.Context, timeSlotID int64) error
+	AssignConferencePin(ctx context.Context, timeSlotID int64) error
+	GetTimeSlotEvents(ctx context.Context, timeSlotID int64, userID, observerID *int64, role int) ([]TimeSlotEvent, error)
+	DeleteTimeSlotEvent(ctx context.Context, id int64) error
+	DeleteConferenceInvitations(ctx context.Context, timeSlotID int64, userID, observerID *int64, role int) error
+	GetObserverByEmail(ctx context.Context, projectID, timeSlotID int64, email string) (*ICObserver, error)
+	CreateConferenceInvitation(ctx context.Context, timeSlotID, observerID int64) error
+	CreateTimeSlotEvent(ctx context.Context, timeSlotID int64, gcalEventID string, role int, userID, observerID *int64) error
+	GetTimeSlotTimes(ctx context.Context, timeSlotID int64) (start, end time.Time, err error)
+	CalculateSLCompletions(ctx context.Context, surveyID int64) error
 }
 
 // UserRepository defines the contract for UserRepo.

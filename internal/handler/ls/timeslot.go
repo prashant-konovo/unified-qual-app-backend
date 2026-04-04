@@ -1,11 +1,14 @@
 package ls
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/handler/core"
-
+	"github.com/InCrowd/unified-qual-api/internal/integration"
+	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
 
@@ -137,6 +140,25 @@ func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Reque
 	source := core.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
+		// Hook: ModeratorTimeSlot.beforeDeleteHooks — cleanup calendar + invitations
+		events, err := h.IrisSurveyRepo.GetTimeSlotEvents(r.Context(), tsID, &modID, nil, iris.RoleModerator)
+		if err != nil {
+			slog.Warn("hook: get time_slot_events failed (non-fatal)", "tsId", tsID, "error", err)
+		}
+		for _, evt := range events {
+			if h.Services.GoogleCal.Configured() {
+				if err := h.Services.GoogleCal.DeleteEvent(r.Context(), "", evt.GCalEventID); err != nil {
+					slog.Warn("hook: delete gcal event failed (non-fatal)", "eventId", evt.GCalEventID, "error", err)
+				}
+			}
+			if err := h.IrisSurveyRepo.DeleteTimeSlotEvent(r.Context(), evt.ID); err != nil {
+				slog.Warn("hook: delete time_slot_event failed (non-fatal)", "id", evt.ID, "error", err)
+			}
+		}
+		if err := h.IrisSurveyRepo.DeleteConferenceInvitations(r.Context(), tsID, &modID, nil, iris.RoleModerator); err != nil {
+			slog.Warn("hook: delete conference_invitations failed (non-fatal)", "tsId", tsID, "error", err)
+		}
+
 		if err := h.IrisSurveyRepo.RemoveModeratorFromTimeSlot(r.Context(), tsID, modID); err != nil {
 			slog.Error("unassign mod failed", "error", err)
 			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "unassign failed"})
@@ -200,13 +222,67 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 	}
 
 	if h.IrisSurveyRepo != nil {
-		if err := h.IrisSurveyRepo.PutObserversForTimeSlot(r.Context(), req.ProjectID, tsID, req.ToAdd, req.ToDelete); err != nil {
+		ctx := r.Context()
+
+		// Hook: Observer.beforeDeleteHooks — cleanup calendar + TimeSlotEvent for each deleted observer
+		for _, email := range req.ToDelete {
+			obs, err := h.IrisSurveyRepo.GetObserverByEmail(ctx, req.ProjectID, tsID, email)
+			if err != nil {
+				slog.Warn("hook: get observer by email failed (non-fatal)", "email", email, "error", err)
+				continue
+			}
+			if obs != nil {
+				events, _ := h.IrisSurveyRepo.GetTimeSlotEvents(ctx, tsID, nil, &obs.ID, iris.RoleObserver)
+				for _, evt := range events {
+					if h.Services.GoogleCal.Configured() {
+						if err := h.Services.GoogleCal.DeleteEvent(ctx, "", evt.GCalEventID); err != nil {
+							slog.Warn("hook: delete observer gcal event failed (non-fatal)", "eventId", evt.GCalEventID, "error", err)
+						}
+					}
+					_ = h.IrisSurveyRepo.DeleteTimeSlotEvent(ctx, evt.ID)
+				}
+			}
+		}
+
+		// Core DB operation: add/remove observers
+		if err := h.IrisSurveyRepo.PutObserversForTimeSlot(ctx, req.ProjectID, tsID, req.ToAdd, req.ToDelete); err != nil {
 			slog.Error("update observers failed", "error", err)
 			core.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
+
+		// Hook: Observer.afterCreateHooks — create ConferenceInvitation + calendar event for each added observer
+		for _, email := range req.ToAdd {
+			obs, err := h.IrisSurveyRepo.GetObserverByEmail(ctx, req.ProjectID, tsID, email)
+			if err != nil || obs == nil {
+				slog.Warn("hook: get new observer failed (non-fatal)", "email", email, "error", err)
+				continue
+			}
+			if err := h.IrisSurveyRepo.CreateConferenceInvitation(ctx, tsID, obs.ID); err != nil {
+				slog.Warn("hook: create conference_invitation failed (non-fatal)", "observerId", obs.ID, "error", err)
+			}
+			// Best-effort Google Calendar event creation
+			if h.Services.GoogleCal.Configured() {
+				start, end, err := h.IrisSurveyRepo.GetTimeSlotTimes(ctx, tsID)
+				if err == nil {
+					evt := &integration.CalendarEvent{
+						Summary:   fmt.Sprintf("Interview Observer - %s", email),
+						Start:     integration.EventTime{DateTime: start.Format(time.RFC3339), TimeZone: "America/New_York"},
+						End:       integration.EventTime{DateTime: end.Format(time.RFC3339), TimeZone: "America/New_York"},
+						Attendees: []integration.Attendee{{Email: email}},
+					}
+					created, err := h.Services.GoogleCal.CreateEvent(ctx, "", evt)
+					if err != nil {
+						slog.Warn("hook: create observer gcal event failed (non-fatal)", "email", email, "error", err)
+					} else if created != nil && created.ID != "" {
+						_ = h.IrisSurveyRepo.CreateTimeSlotEvent(ctx, tsID, created.ID, iris.RoleObserver, nil, &obs.ID)
+					}
+				}
+			}
+		}
+
 		// Return updated observers list (legacy returns {"observers": [...]})
-		observers, err := h.IrisSurveyRepo.ListObserversForTimeSlot(r.Context(), tsID)
+		observers, err := h.IrisSurveyRepo.ListObserversForTimeSlot(ctx, tsID)
 		if err != nil {
 			slog.Error("get observers after update failed", "error", err)
 		}

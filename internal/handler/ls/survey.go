@@ -102,6 +102,12 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 		}
 		warnings := h.IrisSurveyRepo.ValidateSurveyWarnings(r.Context(), surveyID)
 
+		// Hook: SL completions calculation + basis survey propagation
+		// Matches Scala: when brandType=2, slEligible=1, slCompletionsNeeded=0
+		if err := h.IrisSurveyRepo.CalculateSLCompletions(r.Context(), surveyID); err != nil {
+			slog.Warn("hook: SL completions calculation failed (non-fatal)", "surveyId", surveyID, "error", err)
+		}
+
 		if len(errors) == 0 {
 			core.WriteJSON(w, http.StatusOK, map[string]any{
 				"error": map[string]any{

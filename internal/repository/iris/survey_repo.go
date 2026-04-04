@@ -2,8 +2,13 @@ package iris
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"fmt"
+	"math"
+	"math/big"
 	"strings"
 	"time"
 )
@@ -2762,5 +2767,334 @@ func (r *SurveyRepo) GetCrowdAttributeChoiceIDs(ctx context.Context, crowdAttrib
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+// ──────────────────────────────────────────────
+// Hook side-effect types
+// ──────────────────────────────────────────────
+
+// TimeSlotEvent maps the time_slot_event table (Google Calendar tracking).
+type TimeSlotEvent struct {
+	ID          int64  `json:"id"`
+	TimeSlotID  int64  `json:"timeSlotId"`
+	GCalEventID string `json:"gcalEventId"`
+	Role        int    `json:"role"`
+	UserID      *int64 `json:"userId,omitempty"`
+	ObserverID  *int64 `json:"observerId,omitempty"`
+}
+
+// Conference role constants matching Scala ConferenceRole ordinals.
+const (
+	RoleParticipant = 1
+	RoleModerator   = 2
+	RoleObserver    = 3
+)
+
+// SurveySLData holds fields needed for Soft Launch calculation.
+type SurveySLData struct {
+	ID                   int64
+	ProjectID            int64
+	SLEligible           int64
+	SLCompletionsNeeded  int64
+	SLCompletionsPercent int64
+	CompletionsNeeded    int64
+	UseCrowdQuotas       bool
+	BrandType            int64
+}
+
+// SurveyCrowdSL holds fields for per-crowd SL calculation.
+type SurveyCrowdSL struct {
+	ID              int64
+	AnswerRequest   int64
+	SLAnswerPercent int64
+}
+
+// ──────────────────────────────────────────────
+// Hook 1: assignConferenceHashAndPin
+// ──────────────────────────────────────────────
+
+// AssignConferenceHash generates a SHA-256 conference hash for a timeslot if not already set.
+// Matches Scala: TimeSlot.manageConferenceHash
+func (r *SurveyRepo) AssignConferenceHash(ctx context.Context, timeSlotID int64) error {
+	var hash sql.NullString
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT conference_hash FROM time_slot WHERE id = ?", timeSlotID).Scan(&hash)
+	if err != nil {
+		return fmt.Errorf("check conference_hash: %w", err)
+	}
+	if hash.Valid && hash.String != "" {
+		return nil // already assigned
+	}
+
+	// SHA-256(currentTimeMillis + timeSlotID), Base64 URL-safe — matches Scala exactly
+	input := fmt.Sprintf("%d%d", time.Now().UnixMilli(), timeSlotID)
+	h := sha256.Sum256([]byte(input))
+	encoded := base64.URLEncoding.EncodeToString(h[:])
+
+	_, err = r.db.ExecContext(ctx,
+		"UPDATE time_slot SET conference_hash = ? WHERE id = ?", encoded, timeSlotID)
+	return err
+}
+
+// AssignConferencePin generates a random 5-digit PIN for a timeslot if not already set.
+// Matches Scala: ConferencePin.manageConferencePin
+func (r *SurveyRepo) AssignConferencePin(ctx context.Context, timeSlotID int64) error {
+	var exists int
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM conference_pin WHERE time_slot_id = ?", timeSlotID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("check conference_pin: %w", err)
+	}
+	if exists > 0 {
+		return nil // already has a PIN
+	}
+
+	n, err := rand.Int(rand.Reader, big.NewInt(100000))
+	if err != nil {
+		return fmt.Errorf("generate pin: %w", err)
+	}
+	pin := fmt.Sprintf("%05d", n.Int64())
+
+	_, err = r.db.ExecContext(ctx,
+		"INSERT INTO conference_pin (pin, time_slot_id) VALUES (?, ?)", pin, timeSlotID)
+	return err
+}
+
+// ──────────────────────────────────────────────
+// Hook 2: ModeratorTimeSlot.beforeDeleteHooks
+// ──────────────────────────────────────────────
+
+// GetTimeSlotEvents returns time_slot_event records filtered by timeslot, user/observer, and role.
+func (r *SurveyRepo) GetTimeSlotEvents(ctx context.Context, timeSlotID int64, userID, observerID *int64, role int) ([]TimeSlotEvent, error) {
+	var args []any
+	q := "SELECT id, time_slot_id, gcal_event_id, role, user_id, observer_id FROM time_slot_event WHERE time_slot_id = ? AND role = ?"
+	args = append(args, timeSlotID, role)
+
+	if userID != nil {
+		q += " AND user_id = ?"
+		args = append(args, *userID)
+	}
+	if observerID != nil {
+		q += " AND observer_id = ?"
+		args = append(args, *observerID)
+	}
+
+	rows, err := r.ro().QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get time_slot_events: %w", err)
+	}
+	defer rows.Close()
+
+	var events []TimeSlotEvent
+	for rows.Next() {
+		var e TimeSlotEvent
+		if err := rows.Scan(&e.ID, &e.TimeSlotID, &e.GCalEventID, &e.Role, &e.UserID, &e.ObserverID); err != nil {
+			return nil, fmt.Errorf("scan time_slot_event: %w", err)
+		}
+		events = append(events, e)
+	}
+	return events, nil
+}
+
+// DeleteTimeSlotEvent removes a single time_slot_event record.
+func (r *SurveyRepo) DeleteTimeSlotEvent(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM time_slot_event WHERE id = ?", id)
+	return err
+}
+
+// DeleteConferenceInvitations removes conference_invitation records matching the given filters.
+func (r *SurveyRepo) DeleteConferenceInvitations(ctx context.Context, timeSlotID int64, userID, observerID *int64, role int) error {
+	var args []any
+	q := "DELETE FROM conference_invitation WHERE time_slot_id = ? AND role = ?"
+	args = append(args, timeSlotID, role)
+
+	if userID != nil {
+		q += " AND user_id = ?"
+		args = append(args, *userID)
+	}
+	if observerID != nil {
+		q += " AND observer_id = ?"
+		args = append(args, *observerID)
+	}
+
+	_, err := r.db.ExecContext(ctx, q, args...)
+	return err
+}
+
+// ──────────────────────────────────────────────
+// Hooks 3+4: Observer afterCreate / beforeDelete
+// ──────────────────────────────────────────────
+
+// GetObserverByEmail returns an observer by project, timeslot, and email.
+func (r *SurveyRepo) GetObserverByEmail(ctx context.Context, projectID, timeSlotID int64, email string) (*ICObserver, error) {
+	var o ICObserver
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT id, project_id, email, time_slot_id FROM observer WHERE project_id = ? AND time_slot_id = ? AND email = ?",
+		projectID, timeSlotID, email).Scan(&o.ID, &o.ProjectID, &o.Email, &o.TimeSlotID)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get observer by email: %w", err)
+	}
+	return &o, nil
+}
+
+// CreateConferenceInvitation creates a conference_invitation for an observer (idempotent).
+// Matches Scala: ConferenceInvitation.manageObserverInvitation
+func (r *SurveyRepo) CreateConferenceInvitation(ctx context.Context, timeSlotID, observerID int64) error {
+	// Check if already exists
+	var exists int
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM conference_invitation WHERE time_slot_id = ? AND observer_id = ?",
+		timeSlotID, observerID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("check conference_invitation: %w", err)
+	}
+	if exists > 0 {
+		return nil // already exists
+	}
+
+	// Generate participant hash: SHA-256(currentTimeMillis + timeSlotID + observerID + "participant")
+	input := fmt.Sprintf("%d%d%dparticipant", time.Now().UnixMilli(), timeSlotID, observerID)
+	h := sha256.Sum256([]byte(input))
+	participantHash := base64.URLEncoding.EncodeToString(h[:])
+
+	_, err = r.db.ExecContext(ctx,
+		"INSERT INTO conference_invitation (time_slot_id, participant_hash, role, observer_id) VALUES (?, ?, ?, ?)",
+		timeSlotID, participantHash, RoleObserver, observerID)
+	return err
+}
+
+// CreateTimeSlotEvent inserts a time_slot_event record linking a Google Calendar event.
+func (r *SurveyRepo) CreateTimeSlotEvent(ctx context.Context, timeSlotID int64, gcalEventID string, role int, userID, observerID *int64) error {
+	_, err := r.db.ExecContext(ctx,
+		"INSERT INTO time_slot_event (time_slot_id, gcal_event_id, role, user_id, observer_id) VALUES (?, ?, ?, ?, ?)",
+		timeSlotID, gcalEventID, role, userID, observerID)
+	return err
+}
+
+// GetTimeSlotTimes returns start/end times for a timeslot (needed for calendar event creation).
+func (r *SurveyRepo) GetTimeSlotTimes(ctx context.Context, timeSlotID int64) (start, end time.Time, err error) {
+	err = r.ro().QueryRowContext(ctx,
+		"SELECT start_time, end_time FROM time_slot WHERE id = ?", timeSlotID).Scan(&start, &end)
+	if err != nil {
+		err = fmt.Errorf("get time_slot times: %w", err)
+	}
+	return
+}
+
+// ──────────────────────────────────────────────
+// Hook 5: ValidateSurvey SL + basis survey
+// ──────────────────────────────────────────────
+
+// GetSurveyForSLCalc returns survey + subscription fields needed for SL calculation.
+func (r *SurveyRepo) GetSurveyForSLCalc(ctx context.Context, surveyID int64) (*SurveySLData, error) {
+	var d SurveySLData
+	err := r.ro().QueryRowContext(ctx,
+		`SELECT s.id, s.project_id, COALESCE(s.sl_eligible, 0), COALESCE(s.sl_completions_needed, 0),
+		        COALESCE(s.sl_completions_percent, 15), COALESCE(s.completions_needed, 0),
+		        COALESCE(s.use_crowd_quotas, 0), COALESCE(sub.brand_type_id, 1)
+		 FROM survey s
+		 LEFT JOIN subscription sub ON s.subscription_id = sub.id
+		 WHERE s.id = ?`, surveyID).Scan(
+		&d.ID, &d.ProjectID, &d.SLEligible, &d.SLCompletionsNeeded,
+		&d.SLCompletionsPercent, &d.CompletionsNeeded, &d.UseCrowdQuotas, &d.BrandType)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get survey SL data: %w", err)
+	}
+	return &d, nil
+}
+
+// GetIncludedCrowdsForSL returns survey_crowd rows where excluded != 1.
+func (r *SurveyRepo) GetIncludedCrowdsForSL(ctx context.Context, surveyID int64) ([]SurveyCrowdSL, error) {
+	rows, err := r.ro().QueryContext(ctx,
+		`SELECT id, COALESCE(answer_request, 0), COALESCE(sl_answer_percent, 15)
+		 FROM survey_crowd WHERE survey_id = ? AND COALESCE(excluded, 0) != 1`, surveyID)
+	if err != nil {
+		return nil, fmt.Errorf("get included crowds for SL: %w", err)
+	}
+	defer rows.Close()
+
+	var crowds []SurveyCrowdSL
+	for rows.Next() {
+		var c SurveyCrowdSL
+		if err := rows.Scan(&c.ID, &c.AnswerRequest, &c.SLAnswerPercent); err != nil {
+			return nil, fmt.Errorf("scan survey_crowd SL: %w", err)
+		}
+		crowds = append(crowds, c)
+	}
+	return crowds, nil
+}
+
+// UpdateSurveyCrowdSLAnswerRequest sets sl_answer_request for a single survey_crowd.
+func (r *SurveyRepo) UpdateSurveyCrowdSLAnswerRequest(ctx context.Context, crowdID, value int64) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE survey_crowd SET sl_answer_request = ? WHERE id = ?", value, crowdID)
+	return err
+}
+
+// UpdateSurveySLCompletionsNeeded sets sl_completions_needed for a survey.
+func (r *SurveyRepo) UpdateSurveySLCompletionsNeeded(ctx context.Context, surveyID, value int64) error {
+	_, err := r.db.ExecContext(ctx,
+		"UPDATE survey SET sl_completions_needed = ? WHERE id = ?", value, surveyID)
+	return err
+}
+
+// PropagateBasisSurvey propagates project_id + modified_on to child surveys.
+// Matches Scala: Survey.afterUpdateHooks (basis survey check + propagation).
+func (r *SurveyRepo) PropagateBasisSurvey(ctx context.Context, surveyID, projectID int64) error {
+	var count int
+	err := r.ro().QueryRowContext(ctx,
+		"SELECT COUNT(id) FROM survey WHERE basis_survey_id = ?", surveyID).Scan(&count)
+	if err != nil || count == 0 {
+		return err // not a basis survey — nothing to propagate
+	}
+	_, err = r.db.ExecContext(ctx,
+		"UPDATE survey SET project_id = ?, modified_on = NOW() WHERE basis_survey_id = ?",
+		projectID, surveyID)
+	return err
+}
+
+// CalculateSLCompletions performs the SL (Soft Launch) completions calculation.
+// Matches Scala: SurveyController.validate write behavior.
+func (r *SurveyRepo) CalculateSLCompletions(ctx context.Context, surveyID int64) error {
+	sl, err := r.GetSurveyForSLCalc(ctx, surveyID)
+	if err != nil || sl == nil {
+		return err
+	}
+	// Only calculate when: brandType=2, slEligible=1, slCompletionsNeeded=0
+	if sl.BrandType != 2 || sl.SLEligible != 1 || sl.SLCompletionsNeeded != 0 {
+		return nil
+	}
+
+	if sl.UseCrowdQuotas {
+		crowds, err := r.GetIncludedCrowdsForSL(ctx, surveyID)
+		if err != nil {
+			return err
+		}
+		var total int64
+		for _, sc := range crowds {
+			value := int64(math.Ceil(float64(sc.AnswerRequest) * float64(sc.SLAnswerPercent) * 0.01))
+			if err := r.UpdateSurveyCrowdSLAnswerRequest(ctx, sc.ID, value); err != nil {
+				return err
+			}
+			total += value
+		}
+		if err := r.UpdateSurveySLCompletionsNeeded(ctx, surveyID, total); err != nil {
+			return err
+		}
+	} else {
+		value := int64(math.Ceil(float64(sl.CompletionsNeeded) * float64(sl.SLCompletionsPercent) * 0.01))
+		if err := r.UpdateSurveySLCompletionsNeeded(ctx, surveyID, value); err != nil {
+			return err
+		}
+	}
+
+	// Basis survey propagation (afterUpdateHooks)
+	return r.PropagateBasisSurvey(ctx, surveyID, sl.ProjectID)
 }
 
