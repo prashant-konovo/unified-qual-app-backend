@@ -103,7 +103,7 @@ func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Reque
 		support.WriteJSON(w, http.StatusOK, map[string]any{"interviews": interviews})
 		return
 	}
-	if h.QsTimeSlotRepo != nil {
+	if h.InterviewService.TimeSlotAvailable() {
 		tsRows, _, _ := h.InterviewService.ListByProject(r.Context(), subID, 1, 1000)
 		interviews := make([]map[string]any, 0)
 		for _, ts := range tsRows {
@@ -567,7 +567,7 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 	// Resolve calling user's IRIS DB id for favorite check
 	var callerUserID int64
 	user := middleware.GetUser(r)
-	if user != nil && user.Email != "" && h.IrisUserRepo != nil {
+	if user != nil && user.Email != "" && h.UserService.IrisAvailable() {
 		u, err := h.UserService.GetIrisUserByEmail(r.Context(), user.Email)
 		if err == nil && u != nil {
 			callerUserID = u.ID

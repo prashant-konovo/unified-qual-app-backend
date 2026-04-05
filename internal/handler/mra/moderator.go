@@ -495,7 +495,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	respondentIdentifier := r.URL.Query().Get("respondentIdentifer")
 	rescheduleToken := r.URL.Query().Get("rescheduleToken")
 
-	if h.QsSurveyRepo == nil || !h.ProjectService.QsProjectAvailable() || !h.ModeratorService.QsUserAvailable() || !h.ModeratorService.TimeSlotAvailable() || h.QsRespondentRepo == nil {
+	if !h.SurveyService.QsAvailable() || !h.ProjectService.QsProjectAvailable() || !h.ModeratorService.QsUserAvailable() || !h.ModeratorService.TimeSlotAvailable() || !h.ParticipantService.Available() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":           "database not configured",
 			"errorMessage":    "an error occurred while getting moderators availability",

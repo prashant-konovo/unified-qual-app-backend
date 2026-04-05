@@ -69,13 +69,7 @@ func main() {
 
 	// Wire handlers + router
 	svcClients := integration.NewServiceClients(cfg)
-	deps := support.NewDeps(cfg, db, svcClients,
-		irisProjectRepo, qsProjectRepo,
-		irisUserRepo, qsUserRepo,
-		qsTimeSlotRepo, qsRespondentRepo,
-		qsSurveyRepo, irisSurveyRepo,
-		qsConferenceRepo, qsAnswerRepo,
-	)
+	deps := support.NewDeps(cfg, db)
 	deps.AuthService = service.NewAuthService(cfg, svcClients.ICAuth, qsUserRepo)
 	deps.ProjectService = service.NewProjectService(irisProjectRepo, qsProjectRepo, svcClients.S3)
 	deps.ParticipantService = service.NewParticipantService(qsRespondentRepo, qsTimeSlotRepo)
@@ -87,7 +81,11 @@ func main() {
 	deps.NotificationService = service.NewNotificationService(irisSurveyRepo, qsAnswerRepo)
 	deps.MediaService = service.NewMediaService(irisSurveyRepo, svcClients.S3, cfg.S3.RecordingBucket)
 	deps.UserService = service.NewUserService(qsUserRepo, irisUserRepo, svcClients.EventLog, cfg.Cognito.Region, cfg.Cognito.AppClientID)
-	deps.InterviewService = service.NewInterviewService(qsTimeSlotRepo, deps.QsInterviewsRepo)
+	var qsInterviewsRepo qs.InterviewsRepository
+	if db.QS != nil {
+		qsInterviewsRepo = qs.NewInterviewsRepo(db.QS)
+	}
+	deps.InterviewService = service.NewInterviewService(qsTimeSlotRepo, qsInterviewsRepo)
 	deps.SurveyService = service.NewSurveyService(qsSurveyRepo, irisSurveyRepo, svcClients.Decipher, svcClients.EventLog)
 	deps.ModeratorService = service.NewModeratorService(qsUserRepo, qsTimeSlotRepo, svcClients.GoogleCal, svcClients.GoogleSheets)
 	deps.SubscriptionService = service.NewSubscriptionService(irisSurveyRepo, svcClients.S3, svcClients.Notification, cfg.InquiryEmailRecipient)

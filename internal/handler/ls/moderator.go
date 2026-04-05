@@ -256,7 +256,7 @@ func (h *Handler) MarkNoShow(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if h.QsTimeSlotRepo != nil {
+	if h.ModeratorService.TimeSlotAvailable() {
 		_ = h.ModeratorService.UpdateTimeSlot(r.Context(), timeSlotID, map[string]any{"status_id": 10}) // 10 = NoShow
 	}
 

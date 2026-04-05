@@ -18,7 +18,6 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
 	"github.com/InCrowd/unified-qual-api/internal/handler/support"
-	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/router"
 	"github.com/InCrowd/unified-qual-api/internal/service"
@@ -114,20 +113,8 @@ func New() *TestServer {
 	}
 
 	deps := &support.Deps{
-		Cfg:              cfg,
-		DB:               &config.DBPair{}, // nil DBs — health will show "not_configured"
-		Services:         &integration.ServiceClients{},
-		IrisProjectRepo:  ts.IrisProjectRepo,
-		QsProjectRepo:    ts.QsProjectRepo,
-		IrisSurveyRepo:   ts.IrisSurveyRepo,
-		QsSurveyRepo:     ts.QsSurveyRepo,
-		IrisUserRepo:     ts.IrisUserRepo,
-		QsUserRepo:       ts.QsUserRepo,
-		QsTimeSlotRepo:   ts.QsTimeSlotRepo,
-		QsRespondentRepo: ts.QsRespondentRepo,
-		QsConferenceRepo: ts.QsConferenceRepo,
-		QsAnswerRepo:     ts.QsAnswerRepo,
-		QsInterviewsRepo: ts.QsInterviewsRepo,
+		Cfg: cfg,
+		DB:  &config.DBPair{}, // nil DBs — health will show "not_configured"
 	}
 	ts.Deps = deps
 	deps.AuthService = service.NewAuthService(cfg, nil, ts.QsUserRepo)
