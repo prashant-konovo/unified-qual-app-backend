@@ -82,6 +82,10 @@ func main() {
 	deps.BookingService = service.NewBookingService(qsTimeSlotRepo)
 	deps.TranslationService = service.NewTranslationService(qsAnswerRepo, qsProjectRepo)
 	deps.AdminService = service.NewAdminService(qsUserRepo, irisUserRepo, qsTimeSlotRepo)
+	deps.ConferenceService = service.NewConferenceService(qsConferenceRepo)
+	deps.PaymentService = service.NewPaymentService(qsAnswerRepo, qsTimeSlotRepo, qsProjectRepo)
+	deps.NotificationService = service.NewNotificationService(irisSurveyRepo, qsAnswerRepo)
+	deps.MediaService = service.NewMediaService(irisSurveyRepo)
 	hs := handler.NewHandlers(deps)
 	r := router.New(hs, jwtAuth)
 

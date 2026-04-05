@@ -29,8 +29,8 @@ func (h *Handler) CreatePaymentReal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsAnswerRepo != nil {
-		id, err := h.QsAnswerRepo.CreatePaymentRecord(r.Context(), req.TimeSlotID, req.Amount, req.PaymentType, "pending")
+	if h.PaymentService.AnswerAvailable() {
+		id, err := h.PaymentService.CreatePaymentRecord(r.Context(), req.TimeSlotID, req.Amount, req.PaymentType, "pending")
 		if err != nil {
 			slog.Error("create payment failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
@@ -54,8 +54,8 @@ func (h *Handler) CreateCustomHonorariumReal(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if h.QsAnswerRepo != nil {
-		id, err := h.QsAnswerRepo.CreateCustomHonorarium(r.Context(), req.TimeSlotID, req.Amount, req.Reason)
+	if h.PaymentService.AnswerAvailable() {
+		id, err := h.PaymentService.CreateCustomHonorarium(r.Context(), req.TimeSlotID, req.Amount, req.Reason)
 		if err != nil {
 			slog.Error("create custom honorarium failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
@@ -99,8 +99,8 @@ func (h *Handler) CreateExternalPayment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if h.QsAnswerRepo != nil {
-		payID, err := h.QsAnswerRepo.CreateExternalPayment(r.Context(), req.TimeSlotID, req.Amount, req.PaymentType, "pending", req.ExternalRef)
+	if h.PaymentService.AnswerAvailable() {
+		payID, err := h.PaymentService.CreateExternalPayment(r.Context(), req.TimeSlotID, req.Amount, req.PaymentType, "pending", req.ExternalRef)
 		if err != nil {
 			slog.Error("create external payment failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
@@ -113,8 +113,8 @@ func (h *Handler) CreateExternalPayment(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) GetHonorariumReasons(w http.ResponseWriter, r *http.Request) {
-	if h.QsAnswerRepo != nil {
-		reasons, err := h.QsAnswerRepo.ListHonorariumReasons(r.Context())
+	if h.PaymentService.AnswerAvailable() {
+		reasons, err := h.PaymentService.ListHonorariumReasons(r.Context())
 		if err != nil {
 			slog.Error("list hono reasons failed", "error", err)
 		}
@@ -131,8 +131,8 @@ func (h *Handler) GetHonorariumReasons(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetInterviewPaymentStatusList(w http.ResponseWriter, r *http.Request) {
-	if h.QsAnswerRepo != nil {
-		statuses, err := h.QsAnswerRepo.ListInterviewPaymentStatuses(r.Context())
+	if h.PaymentService.AnswerAvailable() {
+		statuses, err := h.PaymentService.ListInterviewPaymentStatuses(r.Context())
 		if err != nil {
 			slog.Error("list payment statuses failed", "error", err)
 		}

@@ -26,8 +26,8 @@ func (h *Handler) GetEmailTemplate(w http.ResponseWriter, r *http.Request) {
 
 	if projectIDStr != "" {
 		projectID, _ := strconv.ParseInt(projectIDStr, 10, 64)
-		if source == "iris" && h.IrisSurveyRepo != nil {
-			tpl, err := h.IrisSurveyRepo.GetEmailTemplateForProject(r.Context(), projectID)
+		if source == "iris" && h.NotificationService.IrisAvailable() {
+			tpl, err := h.NotificationService.GetEmailTemplateForProject(r.Context(), projectID)
 			if err != nil {
 				slog.Error("get email template failed", "error", err)
 			}
@@ -40,12 +40,12 @@ func (h *Handler) GetEmailTemplate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if h.QsAnswerRepo != nil {
+	if h.NotificationService.QsAvailable() {
 		name := templateType
 		if name == "" {
 			name = "reschedule"
 		}
-		tpl, _ := h.QsAnswerRepo.GetCommunicationTemplate(r.Context(), name)
+		tpl, _ := h.NotificationService.GetCommunicationTemplate(r.Context(), name)
 		if tpl != nil {
 			support.WriteJSON(w, http.StatusOK, map[string]any{
 				"subject": tpl.Subject, "body": tpl.Body,

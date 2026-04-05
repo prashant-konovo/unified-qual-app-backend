@@ -33,8 +33,8 @@ func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
 		limit = 25
 	}
 
-	if h.IrisSurveyRepo != nil {
-		media, err := h.IrisSurveyRepo.ListMediaForProject(r.Context(), projectID)
+	if h.MediaService.Available() {
+		media, err := h.MediaService.ListMediaForProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("list media failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -84,8 +84,8 @@ func (h *Handler) GetProjectMediaDetail(w http.ResponseWriter, r *http.Request) 
 	projectID, _ := validate.ParseIDParam(r, "pid")
 	mediaID, _ := validate.ParseIDParam(r, "mediaId")
 
-	if h.IrisSurveyRepo != nil {
-		m, err := h.IrisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
+	if h.MediaService.Available() {
+		m, err := h.MediaService.GetMediaByID(r.Context(), projectID, mediaID)
 		if err != nil {
 			slog.Error("get media failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -116,12 +116,12 @@ func (h *Handler) DownloadMediaPDF(w http.ResponseWriter, r *http.Request) {
 	projectID, _ := validate.ParseIDParam(r, "pid")
 	mediaID, _ := validate.ParseIDParam(r, "mediaId")
 
-	if h.IrisSurveyRepo == nil || h.Services.S3 == nil {
+	if !h.MediaService.Available() || h.Services.S3 == nil {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
-	m, err := h.IrisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
+	m, err := h.MediaService.GetMediaByID(r.Context(), projectID, mediaID)
 	if err != nil || m == nil || !m.S3Key.Valid {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
@@ -153,12 +153,12 @@ func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
 	pageStr, _ := validate.ParseStringParam(r, "page")
 	page, _ := strconv.Atoi(pageStr)
 
-	if h.IrisSurveyRepo == nil || h.Services.S3 == nil {
+	if !h.MediaService.Available() || h.Services.S3 == nil {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
-	m, err := h.IrisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
+	m, err := h.MediaService.GetMediaByID(r.Context(), projectID, mediaID)
 	if err != nil || m == nil || !m.S3Key.Valid {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
@@ -192,7 +192,7 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 	pageStr, _ := validate.ParseStringParam(r, "page")
 	page, _ := strconv.Atoi(pageStr)
 
-	if h.IrisSurveyRepo == nil || h.Services.S3 == nil {
+	if !h.MediaService.Available() || h.Services.S3 == nil {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
@@ -205,21 +205,21 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Look up timeslot by conference hash to verify access and get project ID
-	projectID, err := h.IrisSurveyRepo.GetProjectIDByConferenceHash(r.Context(), confHash)
+	projectID, err := h.MediaService.GetProjectIDByConferenceHash(r.Context(), confHash)
 	if err != nil {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 		return
 	}
 
 	// Validate participant if cookie is present (legacy security check)
-	if participantHash != "" && h.QsConferenceRepo != nil {
-		ci, ciErr := h.QsConferenceRepo.GetByHash(r.Context(), confHash)
+	if participantHash != "" && h.ConferenceService.Available() {
+		ci, ciErr := h.ConferenceService.GetByHash(r.Context(), confHash)
 		if ciErr != nil || ci == nil {
 			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 			return
 		}
 		// Verify participant belongs to this conference timeslot
-		participants, pErr := h.QsConferenceRepo.GetParticipants(r.Context(), ci.TimeSlotID)
+		participants, pErr := h.ConferenceService.GetParticipants(r.Context(), ci.TimeSlotID)
 		if pErr != nil {
 			support.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "access denied"})
 			return
@@ -237,7 +237,7 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	m, err := h.IrisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
+	m, err := h.MediaService.GetMediaByID(r.Context(), projectID, mediaID)
 	if err != nil || m == nil || !m.S3Key.Valid {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
@@ -268,9 +268,9 @@ func (h *Handler) DeleteProjectMedia(w http.ResponseWriter, r *http.Request) {
 	projectID, _ := validate.ParseIDParam(r, "pid")
 	mediaID, _ := validate.ParseIDParam(r, "mediaId")
 
-	if h.IrisSurveyRepo != nil {
+	if h.MediaService.Available() {
 		// Get media first for S3 cleanup
-		m, _ := h.IrisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
+		m, _ := h.MediaService.GetMediaByID(r.Context(), projectID, mediaID)
 		if m != nil && m.Shared {
 			support.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "cannot delete shared media"})
 			return
@@ -288,7 +288,7 @@ func (h *Handler) DeleteProjectMedia(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if err := h.IrisSurveyRepo.DeleteMedia(r.Context(), projectID, mediaID); err != nil {
+		if err := h.MediaService.DeleteMedia(r.Context(), projectID, mediaID); err != nil {
 			slog.Error("delete media failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return

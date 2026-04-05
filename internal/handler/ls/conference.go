@@ -35,8 +35,8 @@ func (h *Handler) AddConferenceLink(w http.ResponseWriter, r *http.Request) {
 		req.ConferenceHash = support.ID()[:12]
 	}
 
-	if h.QsConferenceRepo != nil {
-		linkID, err := h.QsConferenceRepo.CreateConferenceLink(r.Context(), req.TimeSlotID, projectID, req.ConferenceHash)
+	if h.ConferenceService.Available() {
+		linkID, err := h.ConferenceService.CreateConferenceLink(r.Context(), req.TimeSlotID, projectID, req.ConferenceHash)
 		if err != nil {
 			slog.Error("create conf link failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
@@ -62,8 +62,8 @@ func (h *Handler) UpdateConferenceLinkHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if h.QsConferenceRepo != nil {
-		if err := h.QsConferenceRepo.UpdateConferenceLink(r.Context(), req.TimeSlotID, req.ConferenceHash, req.Pin); err != nil {
+	if h.ConferenceService.Available() {
+		if err := h.ConferenceService.UpdateConferenceLink(r.Context(), req.TimeSlotID, req.ConferenceHash, req.Pin); err != nil {
 			slog.Error("update conf link failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
@@ -81,8 +81,8 @@ func (h *Handler) GetConferenceLinkByTimeSlot(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if h.QsConferenceRepo != nil {
-		link, err := h.QsConferenceRepo.GetConferenceLinkByTimeSlotID(r.Context(), tsID)
+	if h.ConferenceService.Available() {
+		link, err := h.ConferenceService.GetConferenceLinkByTimeSlotID(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get conf link failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})

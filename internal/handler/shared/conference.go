@@ -35,8 +35,8 @@ func (h *Handler) ConferenceLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
-	if h.QsConferenceRepo != nil {
-		data, err := h.QsConferenceRepo.Login(r.Context(), confHashStr, req.Pin)
+	if h.ConferenceService.Available() {
+		data, err := h.ConferenceService.Login(r.Context(), confHashStr, req.Pin)
 		if err != nil {
 			if strings.Contains(err.Error(), "invalid pin") {
 				support.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid pin"})
@@ -62,13 +62,13 @@ func (h *Handler) ConferenceLogin(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetConferenceParticipants(w http.ResponseWriter, r *http.Request) {
 	confHashStr, _ := validate.ParseStringParam(r, "confId")
 
-	if h.QsConferenceRepo != nil {
-		ci, err := h.QsConferenceRepo.GetByHash(r.Context(), confHashStr)
+	if h.ConferenceService.Available() {
+		ci, err := h.ConferenceService.GetByHash(r.Context(), confHashStr)
 		if err != nil || ci == nil {
 			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 			return
 		}
-		participants, err := h.QsConferenceRepo.GetParticipants(r.Context(), ci.TimeSlotID)
+		participants, err := h.ConferenceService.GetParticipants(r.Context(), ci.TimeSlotID)
 		if err != nil {
 			slog.Error("get participants failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -123,8 +123,8 @@ func (h *Handler) GetMeetingMetadata(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsConferenceRepo != nil {
-		meta, err := h.QsConferenceRepo.GetMeetingMetadata(r.Context(), hash)
+	if h.ConferenceService.Available() {
+		meta, err := h.ConferenceService.GetMeetingMetadata(r.Context(), hash)
 		if err != nil {
 			slog.Error("get meeting metadata failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -151,8 +151,8 @@ func (h *Handler) MeetingJoin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Use join ID as conference hash or participant hash
-	if h.QsConferenceRepo != nil {
-		meta, err := h.QsConferenceRepo.GetMeetingMetadata(r.Context(), joinID)
+	if h.ConferenceService.Available() {
+		meta, err := h.ConferenceService.GetMeetingMetadata(r.Context(), joinID)
 		if err == nil && meta != nil {
 			support.WriteJSON(w, http.StatusOK, meta)
 			return
@@ -178,8 +178,8 @@ func (h *Handler) GetAttendeesByMeetingID(w http.ResponseWriter, r *http.Request
 		slog.Warn("conference service get attendees failed, falling back to DB", "error", err)
 	}
 
-	if h.QsConferenceRepo != nil {
-		attendees, err := h.QsConferenceRepo.GetAttendeesByMeetingID(r.Context(), meetingID)
+	if h.ConferenceService.Available() {
+		attendees, err := h.ConferenceService.GetAttendeesByMeetingID(r.Context(), meetingID)
 		if err != nil {
 			slog.Error("get attendees failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -210,8 +210,8 @@ func (h *Handler) GetRecordingStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fallback: DB lookup
-	if h.QsConferenceRepo != nil {
-		meta, _ := h.QsConferenceRepo.GetMeetingMetadata(r.Context(), meetingID)
+	if h.ConferenceService.Available() {
+		meta, _ := h.ConferenceService.GetMeetingMetadata(r.Context(), meetingID)
 		if meta != nil {
 			support.WriteJSON(w, http.StatusOK, map[string]any{
 				"meetingId":      meetingID,
@@ -284,8 +284,8 @@ func (h *Handler) RecordingUploadCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	// Also update QS conference metadata if available
-	if h.QsConferenceRepo != nil {
-		_ = h.QsConferenceRepo.UpdateRecordingStatus(r.Context(), meetingID, "available", req.Bucket, req.Key)
+	if h.ConferenceService.Available() {
+		_ = h.ConferenceService.UpdateRecordingStatus(r.Context(), meetingID, "available", req.Bucket, req.Key)
 	}
 
 	support.WriteJSON(w, http.StatusOK, map[string]any{
@@ -333,8 +333,8 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Store meeting reference in DB
-		if h.QsConferenceRepo != nil {
-			_, _ = h.QsConferenceRepo.CreateConferenceLink(r.Context(), req.TimeSlotID, req.ProjectID, resp.MeetingID)
+		if h.ConferenceService.Available() {
+			_, _ = h.ConferenceService.CreateConferenceLink(r.Context(), req.TimeSlotID, req.ProjectID, resp.MeetingID)
 		}
 
 		support.WriteJSON(w, http.StatusCreated, map[string]any{
@@ -530,8 +530,8 @@ func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fallback: DB-only response
-	if h.QsConferenceRepo != nil {
-		meta, _ := h.QsConferenceRepo.GetMeetingMetadata(r.Context(), meetingID)
+	if h.ConferenceService.Available() {
+		meta, _ := h.ConferenceService.GetMeetingMetadata(r.Context(), meetingID)
 		if meta != nil {
 			meta["action"] = action
 			meta["actionResult"] = "success"
@@ -570,8 +570,8 @@ func (h *Handler) MeetingUniversalJoin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fallback: DB lookup
-	if h.QsConferenceRepo != nil {
-		meta, err := h.QsConferenceRepo.GetMeetingMetadata(r.Context(), meetingID)
+	if h.ConferenceService.Available() {
+		meta, err := h.ConferenceService.GetMeetingMetadata(r.Context(), meetingID)
 		if err == nil && meta != nil {
 			meta["joinUrl"] = fmt.Sprintf("https://chime.aws/join/%s", meetingID)
 			meta["joinTimestamp"] = support.Now()

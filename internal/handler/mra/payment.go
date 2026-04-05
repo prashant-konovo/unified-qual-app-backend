@@ -61,7 +61,7 @@ func (h *Handler) AddHonorariumAmountMRA(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.QsProjectRepo.AddHonorariumAmountMRA(r.Context(), projectID, honorarium, body.Currency, body.SessKey,
+	if err := h.PaymentService.AddHonorariumAmountMRA(r.Context(), projectID, honorarium, body.Currency, body.SessKey,
 		body.ExternalProjectID, body.ExternalUserSurveyID, body.ExternalUserID,
 		body.ExternalCreditOrderID, body.ExternalCountryID); err != nil {
 		slog.Error("add honorarium amount mra", "error", err)
@@ -78,7 +78,7 @@ func (h *Handler) AddHonorariumAmountMRA(w http.ResponseWriter, r *http.Request)
 // ──────────────────────────────────────────────────────────────────────────────
 
 func (h *Handler) GetHonoValueUpdateReasonListMRA(w http.ResponseWriter, r *http.Request) {
-	result, err := h.QsProjectRepo.GetHonoValueUpdateReasonListMRA(r.Context())
+	result, err := h.PaymentService.GetHonoValueUpdateReasonListMRA(r.Context())
 	if err != nil {
 		slog.Error("get hono value update reason list mra", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -115,7 +115,7 @@ func (h *Handler) AddTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Get payment info for all time slot IDs
-	paymentInfo, err := h.QsTimeSlotRepo.GetPaymentInfoByTimeSlotIdsMRA(r.Context(), body.TimeSlotIDs)
+	paymentInfo, err := h.PaymentService.GetPaymentInfoByTimeSlotIdsMRA(r.Context(), body.TimeSlotIDs)
 	if err != nil {
 		slog.Error("add time slot payments mra: get payment info", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -130,11 +130,11 @@ func (h *Handler) AddTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request)
 	var userID int64
 	email := r.Header.Get("X-User-Email")
 	if email != "" {
-		userID, _ = h.QsTimeSlotRepo.GetUserByEmailMRA(r.Context(), email)
+		userID, _ = h.PaymentService.GetUserByEmailMRA(r.Context(), email)
 	}
 
 	// Get payment type list for resolving INTERVIEW type code
-	paymentTypes, err := h.QsTimeSlotRepo.GetTimeSlotPaymentTypeListMRA(r.Context())
+	paymentTypes, err := h.PaymentService.GetTimeSlotPaymentTypeListMRA(r.Context())
 	if err != nil {
 		slog.Error("add time slot payments mra: get payment types", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -182,7 +182,7 @@ func (h *Handler) AddTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request)
 	}
 
 	if len(payments) > 0 {
-		if err := h.QsTimeSlotRepo.AddQSTimeSlotPaymentsMRA(r.Context(), payments); err != nil {
+		if err := h.PaymentService.AddQSTimeSlotPaymentsMRA(r.Context(), payments); err != nil {
 			slog.Error("add time slot payments mra: insert", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":           "Internal Error",
@@ -233,7 +233,7 @@ func (h *Handler) processPendingPaymentsForTimeslotIdsMRA(ctx context.Context, p
 		}
 	}()
 
-	pendingRecords, err := h.QsTimeSlotRepo.GetPendingPaymentsMRA(ctx, tx, timeSlotIDs)
+	pendingRecords, err := h.PaymentService.GetPendingPaymentsMRA(ctx, tx, timeSlotIDs)
 	if err != nil {
 		slog.Error("processPendingPayments: get pending", "error", err)
 		_ = tx.Rollback()
@@ -288,18 +288,18 @@ func (h *Handler) processPendingPaymentsForTimeslotIdsMRA(ctx context.Context, p
 	}
 
 	// Mark COMPLETED
-	if err := h.QsTimeSlotRepo.UpdateCompletedPaymentHistoryMRA(ctx, tx, toProcessTS, toProcessIDs); err != nil {
+	if err := h.PaymentService.UpdateCompletedPaymentHistoryMRA(ctx, tx, toProcessTS, toProcessIDs); err != nil {
 		slog.Error("processPendingPayments: update completed", "error", err)
 		_ = tx.Rollback()
-		_ = h.QsTimeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+		_ = h.PaymentService.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
 		return
 	}
 
 	// Mark remaining PENDING as CANCELED
-	if err := h.QsTimeSlotRepo.UpdateCanceledPaymentHistoryMRA(ctx, tx, toProcessTS, toProcessIDs); err != nil {
+	if err := h.PaymentService.UpdateCanceledPaymentHistoryMRA(ctx, tx, toProcessTS, toProcessIDs); err != nil {
 		slog.Error("processPendingPayments: update canceled", "error", err)
 		_ = tx.Rollback()
-		_ = h.QsTimeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+		_ = h.PaymentService.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
 		return
 	}
 
@@ -308,7 +308,7 @@ func (h *Handler) processPendingPaymentsForTimeslotIdsMRA(ctx context.Context, p
 	if err != nil {
 		slog.Error("processPendingPayments: marshal lambda payload", "error", err)
 		_ = tx.Rollback()
-		_ = h.QsTimeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+		_ = h.PaymentService.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
 		return
 	}
 
@@ -317,20 +317,20 @@ func (h *Handler) processPendingPaymentsForTimeslotIdsMRA(ctx context.Context, p
 	if err != nil {
 		slog.Error("processPendingPayments: lambda invoke failed", "error", err, "function", fullName)
 		_ = tx.Rollback()
-		_ = h.QsTimeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+		_ = h.PaymentService.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
 		return
 	}
 
 	if statusCode != 200 {
 		slog.Error("processPendingPayments: lambda returned non-200", "statusCode", statusCode, "response", string(respPayload))
 		_ = tx.Rollback()
-		_ = h.QsTimeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+		_ = h.PaymentService.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
 		slog.Error("processPendingPayments: commit tx", "error", err)
-		_ = h.QsTimeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+		_ = h.PaymentService.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
 		return
 	}
 
@@ -359,7 +359,7 @@ func (h *Handler) AddExternalTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.
 	}
 
 	// Get payment type list for resolving type codes
-	paymentTypes, err := h.QsTimeSlotRepo.GetTimeSlotPaymentTypeListMRA(r.Context())
+	paymentTypes, err := h.PaymentService.GetTimeSlotPaymentTypeListMRA(r.Context())
 	if err != nil {
 		slog.Error("add external time slot payments mra: get payment types", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -413,7 +413,7 @@ func (h *Handler) AddExternalTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.
 	}
 
 	if len(payments) > 0 {
-		if err := h.QsTimeSlotRepo.AddExternalTimeSlotPaymentsMRA(r.Context(), payments); err != nil {
+		if err := h.PaymentService.AddExternalTimeSlotPaymentsMRA(r.Context(), payments); err != nil {
 			slog.Error("add external time slot payments mra", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":           err.Error(),
@@ -448,11 +448,11 @@ func (h *Handler) AddTimeSlotCustomHonorariumMRA(w http.ResponseWriter, r *http.
 	var userID int64
 	email := r.Header.Get("X-User-Email")
 	if email != "" {
-		userID, _ = h.QsTimeSlotRepo.GetUserByEmailMRA(r.Context(), email)
+		userID, _ = h.PaymentService.GetUserByEmailMRA(r.Context(), email)
 	}
 
 	// Resolve reason code to ID
-	reasons, err := h.QsProjectRepo.GetHonoValueUpdateReasonListMRA(r.Context())
+	reasons, err := h.PaymentService.GetHonoValueUpdateReasonListMRA(r.Context())
 	if err != nil {
 		slog.Error("add time slot custom honorarium mra: get reasons", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
@@ -474,7 +474,7 @@ func (h *Handler) AddTimeSlotCustomHonorariumMRA(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if err := h.QsTimeSlotRepo.AddTimeSlotCustomHonorariumMRA(r.Context(), body.TimeSlotID, body.OldValue, body.NewValue, reasonID, userID); err != nil {
+	if err := h.PaymentService.AddTimeSlotCustomHonorariumMRA(r.Context(), body.TimeSlotID, body.OldValue, body.NewValue, reasonID, userID); err != nil {
 		slog.Error("add time slot custom honorarium mra", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
 		return
@@ -494,7 +494,7 @@ func (h *Handler) AddTimeSlotCustomHonorariumMRA(w http.ResponseWriter, r *http.
 // to sync custom honorarium updates to IRIS. Runs in a goroutine (fire-and-forget with logging).
 func (h *Handler) callStepFunctionForCustomHonoMRA(ctx context.Context, timeSlotID int64, oldValue, newValue float64, reasonCode string, userID int64) {
 	// Look up externalUserSurveyId for this timeslot
-	externalSurveyID, err := h.QsTimeSlotRepo.GetExternalSurveyIdByTimeSlotIdMRA(ctx, timeSlotID)
+	externalSurveyID, err := h.PaymentService.GetExternalSurveyIdByTimeSlotIdMRA(ctx, timeSlotID)
 	if err != nil {
 		slog.Error("callStepFunctionForCustomHono: get external survey id", "error", err, "timeSlotId", timeSlotID)
 		return
@@ -550,7 +550,7 @@ func (h *Handler) callStepFunctionForCustomHonoMRA(ctx context.Context, timeSlot
 // ──────────────────────────────────────────────────────────────────────────────
 
 func (h *Handler) GetInterviewPaymentStatusListMRA(w http.ResponseWriter, r *http.Request) {
-	result, err := h.QsTimeSlotRepo.GetTimeSlotPaymentStatusListMRA(r.Context())
+	result, err := h.PaymentService.GetTimeSlotPaymentStatusListMRA(r.Context())
 	if err != nil {
 		slog.Error("get interview payment status list mra", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{

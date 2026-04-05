@@ -18,7 +18,7 @@ import (
 // Contract-identical with legacy: inserts meeting info per language, inserts conference_invitation,
 // updates project.modified_on. All side effects fully implemented.
 func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsConferenceRepo == nil {
+	if !h.ConferenceService.Available() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "conference repository not available",
 			"errorMessage": "conference repository not available",
@@ -56,7 +56,7 @@ func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 		userID, _ = strconv.ParseInt(v, 10, 64)
 	}
 
-	result, err := h.QsConferenceRepo.AddConferenceLinkMRA(
+	result, err := h.ConferenceService.AddConferenceLinkMRA(
 		r.Context(), projectID, participantGroupID, userID, body.ConferenceLink, body.MeetingInformation,
 	)
 	if err != nil {
@@ -77,7 +77,7 @@ func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 // updates project.modified_on. Side effects fully implemented.
 // Legacy also updates pending timeslot calendar events (external Lambda call) — logged but requires integration.
 func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsConferenceRepo == nil {
+	if !h.ConferenceService.Available() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "conference repository not available",
 			"errorMessage": "conference repository not available",
@@ -116,7 +116,7 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 	}
 
 	// Legacy checks which languages already have meeting info to decide UPDATE vs INSERT
-	existingLangs, err := h.QsConferenceRepo.GetExistingMeetingLanguagesMRA(r.Context(), projectID)
+	existingLangs, err := h.ConferenceService.GetExistingMeetingLanguagesMRA(r.Context(), projectID)
 	if err != nil {
 		slog.Error("get existing meeting languages failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -127,7 +127,7 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 	}
 
 	// Perform the upserts: conference_invitation + project_meeting_translation + project.modified_on
-	if err := h.QsConferenceRepo.UpdateConferenceLinkMRA(
+	if err := h.ConferenceService.UpdateConferenceLinkMRA(
 		r.Context(), projectID, participantGroupID, userID, body.ConferenceLink, body.MeetingInformation, existingLangs,
 	); err != nil {
 		slog.Error("update conference link failed", "error", err)
@@ -141,7 +141,7 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 	// Legacy also fetches pending timeslots and updates calendar event communications.
 	// This is a post-DB side effect involving external Lambda calls (updateEventCommunicationService).
 	// Log the pending count for observability; full calendar event update requires integration.
-	pendingCount, _ := h.QsConferenceRepo.GetPendingTimeSlotsCountMRA(r.Context(), projectID)
+	pendingCount, _ := h.ConferenceService.GetPendingTimeSlotsCountMRA(r.Context(), projectID)
 	if pendingCount > 0 {
 		slog.Info("UpdateConferenceLinkMRA: pending timeslots need communication update",
 			"projectId", projectID, "pendingCount", pendingCount)
@@ -156,7 +156,7 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 // NOTE: Legacy passes participant_group_id but actually uses it as project_id (per code comment).
 // Response: {conference_link, meetingInformation: [["en_us","info"],["fr_fr","info"]]}
 func (h *Handler) GetConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsConferenceRepo == nil {
+	if !h.ConferenceService.Available() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "conference repository not available",
 			"errorMessage": "conference repository not available",
@@ -171,7 +171,7 @@ func (h *Handler) GetConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	records, err := h.QsConferenceRepo.GetConferenceLinkByProjectMRA(r.Context(), projectID)
+	records, err := h.ConferenceService.GetConferenceLinkByProjectMRA(r.Context(), projectID)
 	if err != nil {
 		slog.Error("get conference link failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -201,7 +201,7 @@ func (h *Handler) GetConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy: returns {conferenceLink} for a timeslot_id.
 // No side effects — pure read API.
 func (h *Handler) GetConfLinkByTimeSlotMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsConferenceRepo == nil {
+	if !h.ConferenceService.Available() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "conference repository not available",
 			"errorMessage": "An error occured while getting conference link by timeslot id",
@@ -215,7 +215,7 @@ func (h *Handler) GetConfLinkByTimeSlotMRA(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	result, err := h.QsConferenceRepo.GetConferenceLinkByTimeSlotMRA(r.Context(), tsID)
+	result, err := h.ConferenceService.GetConferenceLinkByTimeSlotMRA(r.Context(), tsID)
 	if err != nil {
 		slog.Error("get conference link by timeslot failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{

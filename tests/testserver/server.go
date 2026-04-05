@@ -136,6 +136,10 @@ func New() *TestServer {
 	deps.BookingService = service.NewBookingService(ts.QsTimeSlotRepo)
 	deps.TranslationService = service.NewTranslationService(ts.QsAnswerRepo, ts.QsProjectRepo)
 	deps.AdminService = service.NewAdminService(ts.QsUserRepo, ts.IrisUserRepo, ts.QsTimeSlotRepo)
+	deps.ConferenceService = service.NewConferenceService(ts.QsConferenceRepo)
+	deps.PaymentService = service.NewPaymentService(ts.QsAnswerRepo, ts.QsTimeSlotRepo, ts.QsProjectRepo)
+	deps.NotificationService = service.NewNotificationService(ts.IrisSurveyRepo, ts.QsAnswerRepo)
+	deps.MediaService = service.NewMediaService(ts.IrisSurveyRepo)
 
 	// Build real handlers and router
 	hs := handler.NewHandlers(deps)
