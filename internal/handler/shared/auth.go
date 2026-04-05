@@ -2,7 +2,6 @@ package shared
 
 import (
 "encoding/json"
-"fmt"
 "net/http"
 "strings"
 
@@ -212,7 +211,7 @@ return
 
 tokens, err := h.AuthService.ExchangeSSOCode(r.Context(), req.Code, req.RedirectURI)
 if err != nil {
-support.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": fmt.Sprintf("SSO authentication failed")})
+support.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "SSO authentication failed"})
 return
 }
 

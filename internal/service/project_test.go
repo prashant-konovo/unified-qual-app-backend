@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"testing"
 
@@ -226,9 +225,4 @@ func TestIrisStatusName(t *testing.T) {
 	assert.Equal(t, "In Progress", irisStatusName[3])
 	assert.Equal(t, "Complete", irisStatusName[4])
 	assert.Equal(t, "", irisStatusName[5]) // unknown
-}
-
-// helper
-func sqlNullStr(s string) sql.NullString {
-	return sql.NullString{String: s, Valid: true}
 }
