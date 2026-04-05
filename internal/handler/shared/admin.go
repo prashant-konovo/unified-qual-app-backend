@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 )
@@ -21,7 +20,7 @@ import (
 
 func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	pg := httputil.ParsePagination(r, 20, 100)
+	pg := dto.ParsePagination(r, 20, 100)
 	page, pageSize := pg.Page, pg.PageSize
 	search := r.URL.Query().Get("search")
 	source := r.URL.Query().Get("source") // "qs", "iris", or "" (both)
@@ -81,7 +80,7 @@ func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"users": allUsers})
+	dto.WriteJSON(w, http.StatusOK, map[string]any{"users": allUsers})
 }
 
 func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
@@ -93,14 +92,14 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 		RoleIDs   []int  `json:"roleIds"`
 	}
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        errs,
 			"errorMessage": "An error occured while creating a new user",
 		})
 		return
 	}
 	if req.FirstName == "" {
-		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "firstName is required",
 			"errorMessage": "An error occured while creating a new user",
 		})
@@ -110,12 +109,12 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 		req.RoleIDs = []int{3} // default: admin
 	}
 
-	source := httputil.ResolveSource(r)
+	source := dto.ResolveSource(r)
 	if (source == "" || source == "qs") && h.AdminService.QsAvailable() {
 		uid, err := h.AdminService.CreateQsUser(r.Context(), req.FirstName, req.LastName, req.Email, req.TimeZone, req.RoleIDs)
 		if err != nil {
 			slog.Error("create admin user failed", "error", err)
-			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while creating a new user",
 			})
@@ -124,13 +123,13 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 		// Legacy side effect: create user_communication_preferences row
 		_ = h.AdminService.CreateUserCommPrefsAdmin(r.Context(), uid, req.Email)
 		// Legacy returns created user row with HTTP 200
-		httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		dto.WriteJSON(w, http.StatusOK, map[string]any{
 			"id": uid, "first_name": req.FirstName, "last_name": req.LastName,
 			"email": req.Email,
 		})
 		return
 	}
-	httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+	dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 		"error":        "no database available",
 		"errorMessage": "An error occured while creating a new user",
 	})

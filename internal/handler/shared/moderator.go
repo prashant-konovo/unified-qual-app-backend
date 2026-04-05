@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 )
@@ -51,13 +50,13 @@ func (h *Handler) ListModerators(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, combined)
+	dto.WriteJSON(w, http.StatusOK, combined)
 }
 
 func (h *Handler) CreateModerator(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.ModeratorService.QsUserAvailable() {
-		httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 	var req struct {
@@ -77,17 +76,17 @@ func (h *Handler) CreateModerator(w http.ResponseWriter, r *http.Request) {
 	uid, err := h.ModeratorService.Create(ctx, req.FirstName, req.LastName, req.Email, req.TimeZone, []int{1})
 	if err != nil {
 		slog.Error("create moderator", "error", err)
-		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create moderator"})
+		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create moderator"})
 		return
 	}
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{
+	dto.WriteJSON(w, http.StatusCreated, map[string]any{
 		"id":        uid,
 		"firstName": req.FirstName,
 		"lastName":  req.LastName,
 		"email":     req.Email,
 		"role":      "moderator",
 		"status":    "active",
-		"createdAt": httputil.Now(),
+		"createdAt": dto.Now(),
 	})
 }
 
@@ -95,7 +94,7 @@ func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	nid, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -107,20 +106,20 @@ func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
 	switch source {
 	case "qs":
 		if !h.ModeratorService.QsUserAvailable() {
-			httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+			dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 			return
 		}
 		u, err := h.ModeratorService.GetByID(ctx, nid)
 		if err != nil {
 			slog.ErrorContext(ctx, "get QS moderator failed", "error", err, "id", nid)
-			httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "moderator not found"})
+			dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "moderator not found"})
 			return
 		}
 		roles := []string{}
 		for _, rid := range u.RoleIDs {
 			roles = append(roles, dto.QsRoleName(rid))
 		}
-		httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		dto.WriteJSON(w, http.StatusOK, map[string]any{
 			"id":              u.ID,
 			"firstName":       u.FirstName.String,
 			"lastName":        u.LastName.String,
@@ -135,16 +134,16 @@ func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
 		})
 	case "iris":
 		if !h.UserService.IrisAvailable() {
-			httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "IRIS database unavailable"})
+			dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "IRIS database unavailable"})
 			return
 		}
 		u, err := h.UserService.GetIrisUserByID(ctx, nid)
 		if err != nil {
 			slog.ErrorContext(ctx, "get IRIS moderator failed", "error", err, "id", nid)
-			httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "moderator not found"})
+			dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "moderator not found"})
 			return
 		}
-		httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		dto.WriteJSON(w, http.StatusOK, map[string]any{
 			"id":              u.ID,
 			"firstName":       u.FirstName,
 			"lastName":        u.LastName,
@@ -157,7 +156,7 @@ func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
 			"registeredAt":    u.RegistrationDate.Format(time.RFC3339),
 		})
 	default:
-		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid source, use qs or iris"})
+		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid source, use qs or iris"})
 	}
 }
 
@@ -165,7 +164,7 @@ func (h *Handler) UpdateModerator(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	nid, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -187,36 +186,36 @@ func (h *Handler) UpdateModerator(w http.ResponseWriter, r *http.Request) {
 	switch body.Source {
 	case "qs":
 		if !h.ModeratorService.QsUserAvailable() {
-			httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+			dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 			return
 		}
 		if err := h.ModeratorService.UpdateUser(ctx, nid, body.FirstName, body.LastName, body.TimeZone); err != nil {
 			slog.ErrorContext(ctx, "update QS moderator failed", "error", err, "id", nid)
-			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
 	case "iris":
 		if !h.UserService.IrisAvailable() {
-			httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "IRIS database unavailable"})
+			dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "IRIS database unavailable"})
 			return
 		}
 		if err := h.UserService.UpdateIrisUser(ctx, nid, body.FirstName, body.LastName, body.TimeZone); err != nil {
 			slog.ErrorContext(ctx, "update IRIS moderator failed", "error", err, "id", nid)
-			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
 	default:
-		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid source"})
+		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid source"})
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": nid})
+	dto.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": nid})
 }
 
 func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.ModeratorService.QsUserAvailable() {
-		httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		dto.WriteJSON(w, http.StatusOK, map[string]any{
 			"error":        "QS database unavailable",
 			"errorMessage": "An error occured while removing the user",
 		})
@@ -224,7 +223,7 @@ func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 	}
 	modID, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		dto.WriteJSON(w, http.StatusOK, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while removing the user",
 		})
@@ -232,18 +231,18 @@ func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.ModeratorService.SoftDelete(ctx, modID); err != nil {
 		slog.Error("delete moderator", "error", err)
-		httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		dto.WriteJSON(w, http.StatusOK, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while removing the user",
 		})
 		return
 	}
 	// Legacy returns data-api-client UPDATE result shape
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"numberOfRecordsUpdated": 1})
+	dto.WriteJSON(w, http.StatusOK, map[string]any{"numberOfRecordsUpdated": 1})
 }
 
 func (h *Handler) BulkUploadModerators(w http.ResponseWriter, r *http.Request) {
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+	dto.WriteJSON(w, http.StatusOK, map[string]any{
 		"created": 0, "failed": 0, "errors": []any{}, "message": "bulk upload not yet implemented",
 	})
 }
@@ -251,13 +250,13 @@ func (h *Handler) BulkUploadModerators(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetModeratorTimeslots(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.ModeratorService.TimeSlotAvailable() {
-		httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	modID, err := dto.ParseIDParam(r, "moderatorId")
 	if err != nil {
-		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -273,7 +272,7 @@ func (h *Handler) GetModeratorTimeslots(w http.ResponseWriter, r *http.Request) 
 	slots, total, err := h.ModeratorService.ListByModerator(ctx, modID, page, pageSize)
 	if err != nil {
 		slog.ErrorContext(ctx, "get moderator timeslots failed", "error", err, "moderatorId", modID)
-		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get moderator timeslots"})
+		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get moderator timeslots"})
 		return
 	}
 
@@ -298,7 +297,7 @@ func (h *Handler) GetModeratorTimeslots(w http.ResponseWriter, r *http.Request) 
 		result = append(result, item)
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+	dto.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    result,
 		"meta":    map[string]any{"page": page, "pageSize": pageSize, "totalCount": total},
@@ -313,12 +312,12 @@ func (h *Handler) GetModeratorAvailability(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	nid, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if !h.ModeratorService.QsUserAvailable() {
-		httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
@@ -335,7 +334,7 @@ func (h *Handler) GetModeratorAvailability(w http.ResponseWriter, r *http.Reques
 	avails, err := h.ModeratorService.ListModeratorAvailability(ctx, nid, clientID, startDate, endDate)
 	if err != nil {
 		slog.ErrorContext(ctx, "list moderator availability failed", "error", err, "moderatorId", nid)
-		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to fetch availability"})
+		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to fetch availability"})
 		return
 	}
 
@@ -350,19 +349,19 @@ func (h *Handler) GetModeratorAvailability(w http.ResponseWriter, r *http.Reques
 			"isImported":  false,
 		})
 	}
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"availabilities": items})
+	dto.WriteJSON(w, http.StatusOK, map[string]any{"availabilities": items})
 }
 
 func (h *Handler) PostModeratorAvailability(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	nid, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if !h.ModeratorService.QsUserAvailable() {
-		httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
@@ -378,23 +377,23 @@ func (h *Handler) PostModeratorAvailability(w http.ResponseWriter, r *http.Reque
 
 	st, err := time.Parse(time.RFC3339, body.StartTime)
 	if err != nil {
-		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid startTime format, use RFC3339"})
+		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid startTime format, use RFC3339"})
 		return
 	}
 	et, err := time.Parse(time.RFC3339, body.EndTime)
 	if err != nil {
-		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid endTime format, use RFC3339"})
+		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid endTime format, use RFC3339"})
 		return
 	}
 
 	avail, err := h.ModeratorService.CreateModeratorAvailability(ctx, nid, body.ClientID, st, et)
 	if err != nil {
 		slog.ErrorContext(ctx, "create moderator availability failed", "error", err, "moderatorId", nid)
-		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create availability"})
+		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create availability"})
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusCreated, map[string]any{
+	dto.WriteJSON(w, http.StatusCreated, map[string]any{
 		"id":          avail.ID,
 		"moderatorId": avail.ModeratorID,
 		"startTime":   avail.StartTime.Format(time.RFC3339),
@@ -406,26 +405,26 @@ func (h *Handler) DeleteModeratorAvailability(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 	nid, err := dto.ParseIDParam(r, "availabilityId")
 	if err != nil {
-		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if !h.ModeratorService.QsUserAvailable() {
-		httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	if err := h.ModeratorService.DeleteModeratorAvailability(ctx, nid); err != nil {
 		slog.ErrorContext(ctx, "delete moderator availability failed", "error", err, "availabilityId", nid)
-		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete availability"})
+		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete availability"})
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "availabilityId": nid})
+	dto.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "availabilityId": nid})
 }
 
 func (h *Handler) GetTimeslotModeratorOptions(w http.ResponseWriter, r *http.Request) {
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+	dto.WriteJSON(w, http.StatusOK, map[string]any{
 		"availableModerators": []map[string]any{
 			{"id": "mod-201", "firstName": "Jane", "lastName": "Smith",
 				"hasConflict": false, "availabilityId": 801},

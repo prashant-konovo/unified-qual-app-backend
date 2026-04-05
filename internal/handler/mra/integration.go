@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 )
@@ -24,7 +23,7 @@ import (
 
 func (h *Handler) ThirdPartyIntegrateMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ParticipantService.Available() {
-		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "repository not available",
 			"errorMessage": "An error occured in third party integration",
 		})
@@ -49,14 +48,14 @@ func (h *Handler) ThirdPartyIntegrateMRA(w http.ResponseWriter, r *http.Request)
 	)
 	if err != nil {
 		slog.Error("third party integrate mra failed", "error", err)
-		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured in third party integration",
 		})
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+	dto.WriteJSON(w, http.StatusOK, map[string]any{
 		"responder":    insertID,
 		"QContactr6":   fmt.Sprintf("walid.samaha.01+%d@gmail.com", insertID),
 		"QContactr7":   "81702668",
@@ -118,7 +117,7 @@ func (h *Handler) LogFrontEndEventMRA(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) QualEligibilityMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ParticipantService.TimeSlotAvailable() {
-		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "repository not available",
 			"errorMessage": "repository not available",
 		})
@@ -152,7 +151,7 @@ func (h *Handler) QualEligibilityMRA(w http.ResponseWriter, r *http.Request) {
 		validationErrors = append(validationErrors, "status must be ELIGIBLE or INELIGIBLE")
 	}
 	if len(validationErrors) > 0 {
-		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{
+		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": strings.Join(validationErrors, ", "),
 		})
 		return
@@ -196,7 +195,7 @@ func (h *Handler) QualEligibilityMRA(w http.ResponseWriter, r *http.Request) {
 		failedIDs = []any{}
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+	dto.WriteJSON(w, http.StatusOK, map[string]any{
 		"success":       len(failedIDs) == 0,
 		"processed_ids": processedIDs,
 		"failed_ids":    failedIDs,

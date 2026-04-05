@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 )
@@ -31,12 +30,12 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("decipher respondent data failed", "surveyId", surveyID, "error", err)
 		} else {
 			slog.Info("decipher data retrieved", "surveyId", surveyID, "records", len(data))
-			httputil.WriteJSON(w, http.StatusOK, map[string]any{
+			dto.WriteJSON(w, http.StatusOK, map[string]any{
 				"accepted":    true,
 				"source":      "decipher",
 				"surveyId":    surveyID,
 				"recordCount": len(data),
-				"timestamp":   httputil.Now(),
+				"timestamp":   dto.Now(),
 			})
 			return
 		}
@@ -48,7 +47,7 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("third-party integration received", "payload_keys", len(req))
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"accepted": true, "timestamp": httputil.Now()})
+	dto.WriteJSON(w, http.StatusOK, map[string]any{"accepted": true, "timestamp": dto.Now()})
 }
 
 // ──────────────────────────────────────────────
@@ -69,20 +68,20 @@ func (h *Handler) CheckQualEligibility(w http.ResponseWriter, r *http.Request) {
 		result, err := h.TranslationService.GetParticipantEligibility(r.Context(), req.ResponderID, req.ProjectID)
 		if err != nil {
 			slog.Error("eligibility check failed", "error", err)
-			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
+			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
 			return
 		}
 		if result == nil {
-			httputil.WriteJSON(w, http.StatusOK, map[string]any{
+			dto.WriteJSON(w, http.StatusOK, map[string]any{
 				"eligible": true, "responderId": req.ResponderID,
 				"projectId": req.ProjectID, "source": "qs",
 			})
 			return
 		}
 		result["source"] = "qs"
-		httputil.WriteJSON(w, http.StatusOK, result)
+		dto.WriteJSON(w, http.StatusOK, result)
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]any{"eligible": true, "responderId": req.ResponderID, "projectId": req.ProjectID})
+	dto.WriteJSON(w, http.StatusOK, map[string]any{"eligible": true, "responderId": req.ResponderID, "projectId": req.ProjectID})
 }

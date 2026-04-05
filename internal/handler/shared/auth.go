@@ -7,7 +7,6 @@ import (
 
 "github.com/InCrowd/unified-qual-api/internal/dto"
 "github.com/InCrowd/unified-qual-api/internal/service"
-	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 "github.com/InCrowd/unified-qual-api/internal/middleware"
 )
 
@@ -28,7 +27,7 @@ return
 result := h.AuthService.Login(r.Context(), req)
 
 if result.NeedsTerms {
-httputil.WriteJSON(w, 203, map[string]any{
+dto.WriteJSON(w, 203, map[string]any{
 "termsAcceptedRes": map[string]any{
 "termsAccepted": false,
 "userId":        result.TermsUserID,
@@ -45,15 +44,15 @@ return
 }
 
 if result.ErrorStatus > 0 {
-httputil.WriteJSON(w, result.ErrorStatus, result.ErrorBody)
+dto.WriteJSON(w, result.ErrorStatus, result.ErrorBody)
 return
 }
 
-httputil.WriteJSON(w, http.StatusOK, result.Response)
+dto.WriteJSON(w, http.StatusOK, result.Response)
 }
 
 func (h *AuthHandler) AuthMagicLink(w http.ResponseWriter, r *http.Request) {
-httputil.WriteJSON(w, http.StatusNotImplemented, map[string]any{
+dto.WriteJSON(w, http.StatusNotImplemented, map[string]any{
 "error": "magic link authentication not yet implemented",
 })
 }
@@ -72,12 +71,12 @@ status := http.StatusBadRequest
 if strings.Contains(result.Error.Error(), "token refresh error") {
 status = http.StatusBadGateway
 }
-httputil.WriteJSON(w, status, map[string]any{"error": result.Error.Error()})
+dto.WriteJSON(w, status, map[string]any{"error": result.Error.Error()})
 return
 }
 
 if result.Success {
-httputil.WriteJSON(w, http.StatusOK, result.Response)
+dto.WriteJSON(w, http.StatusOK, result.Response)
 return
 }
 
@@ -106,7 +105,7 @@ if newPwd == "" {
 newPwd = req.Password
 }
 if newPwd == "" {
-httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "newPassword is required"})
+dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "newPassword is required"})
 return
 }
 
@@ -130,21 +129,21 @@ status := http.StatusInternalServerError
 if strings.Contains(err.Error(), "unavailable") {
 status = http.StatusServiceUnavailable
 }
-httputil.WriteJSON(w, status, map[string]any{"error": err.Error()})
+dto.WriteJSON(w, status, map[string]any{"error": err.Error()})
 return
 }
 
-httputil.WriteJSON(w, http.StatusOK, result)
+dto.WriteJSON(w, http.StatusOK, result)
 }
 
 // AuthMe returns the authenticated user's claims from the JWT.
 func (h *AuthHandler) AuthMe(w http.ResponseWriter, r *http.Request) {
 user := middleware.GetUser(r)
 if user == nil {
-httputil.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "not authenticated"})
+dto.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "not authenticated"})
 return
 }
-httputil.WriteJSON(w, http.StatusOK, map[string]any{
+dto.WriteJSON(w, http.StatusOK, map[string]any{
 "sub":      user.Sub,
 "email":    user.Email,
 "username": user.Username,
@@ -162,7 +161,7 @@ ICAuthToken string `json:"icAuthToken"`
 _ = json.NewDecoder(r.Body).Decode(&req)
 
 h.AuthService.Logout(r.Context(), req.ICUserID, req.ICAuthToken)
-httputil.WriteJSON(w, http.StatusOK, map[string]any{"message": "logged out"})
+dto.WriteJSON(w, http.StatusOK, map[string]any{"message": "logged out"})
 }
 
 // AuthAcceptTerms proxies terms acceptance to AuthService.
@@ -176,7 +175,7 @@ return
 }
 
 h.AuthService.AcceptTerms(r.Context(), req.UserID)
-httputil.WriteJSON(w, http.StatusOK, map[string]any{"message": "terms accepted"})
+dto.WriteJSON(w, http.StatusOK, map[string]any{"message": "terms accepted"})
 }
 
 // ──────────────────────────────────────────────
@@ -187,11 +186,11 @@ func (h *AuthHandler) AuthSSOConfig(w http.ResponseWriter, r *http.Request) {
 override := r.URL.Query().Get("redirectUri")
 ssoConfig, err := h.AuthService.GetSSOConfig(override)
 if err != nil {
-httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": err.Error()})
+dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": err.Error()})
 return
 }
 
-httputil.WriteJSON(w, http.StatusOK, map[string]any{
+dto.WriteJSON(w, http.StatusOK, map[string]any{
 "data": map[string]any{
 "authorizeUrl": ssoConfig.AuthorizeURL,
 "redirectUri":  ssoConfig.RedirectURI,
@@ -211,11 +210,11 @@ return
 
 tokens, err := h.AuthService.ExchangeSSOCode(r.Context(), req.Code, req.RedirectURI)
 if err != nil {
-httputil.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "SSO authentication failed"})
+dto.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "SSO authentication failed"})
 return
 }
 
-httputil.WriteJSON(w, http.StatusOK, map[string]any{
+dto.WriteJSON(w, http.StatusOK, map[string]any{
 "statusCode": 200,
 "body": map[string]any{
 "statusCode": 200,

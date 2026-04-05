@@ -1,4 +1,4 @@
-package httputil
+package dto
 
 import (
 "encoding/json"

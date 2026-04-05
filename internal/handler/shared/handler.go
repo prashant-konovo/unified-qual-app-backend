@@ -1,12 +1,12 @@
 package shared
 
 import (
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"context"
 	"net/http"
 	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/service"
-	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 )
 
 // Handler holds the remaining (non-auth) handler methods.
@@ -33,7 +33,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	httputil.WriteJSON(w, httpCode, map[string]any{
+	dto.WriteJSON(w, httpCode, map[string]any{
 		"status":      status,
 		"version":     "1.2.0",
 		"environment": h.Cfg.Environment,
