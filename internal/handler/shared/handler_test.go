@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 	"github.com/InCrowd/unified-qual-api/internal/testutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -89,4 +89,4 @@ func TestHealth_IncludesVersion(t *testing.T) {
 }
 
 // Verify Handler satisfies the expected embedding.
-var _ *support.Deps = (&Handler{}).Deps
+var _ *qualapi.Deps = (&Handler{}).Deps

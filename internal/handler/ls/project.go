@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 
 	"github.com/InCrowd/unified-qual-api/internal/validate"
@@ -28,16 +28,16 @@ import (
 func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := support.ResolveSource(r)
+	source := qualapi.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		surveys, err := h.IrisSurveyRepo.ListSurveysForProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris project surveys failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(surveys))
@@ -48,7 +48,7 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 				"createdOn": s.CreatedOn.Format(time.RFC3339), "source": "iris",
 			})
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"surveys": result, "limit": len(result), "offset": 0, "totalCount": len(result),
 		})
 		return
@@ -59,7 +59,7 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 		surveys, err := h.QsAnswerRepo.ListNativeSurveysByProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs project surveys failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(surveys))
@@ -69,12 +69,12 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 				"createdOn": s.CreatedOn.Format(time.RFC3339), "source": "qs",
 			})
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"surveys": result, "limit": len(result), "offset": 0, "totalCount": len(result),
 		})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"surveys": []any{}, "limit": 0, "offset": 0, "totalCount": 0,
 	})
 }
@@ -85,7 +85,7 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -93,7 +93,7 @@ func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
 		slots, _, err := h.QsTimeSlotRepo.List(r.Context(), 1, 500, &projectID, nil, nil, nil, nil)
 		if err != nil {
 			slog.Error("project timeslots failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(slots))
@@ -104,12 +104,12 @@ func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
 				"statusId": s.StatusID, "statusName": s.StatusName,
 			})
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"timeSlots": result,
 		})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"timeSlots": []any{}})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"timeSlots": []any{}})
 }
 
 // GetProjectUsers returns users assigned to a project.
@@ -118,19 +118,19 @@ func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := support.ResolveSource(r)
+	source := qualapi.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		users, err := h.IrisSurveyRepo.ListUserProjects(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris project users failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"users": users, "offset": 0, "limit": len(users), "totalCount": len(users),
 		})
 		return
@@ -140,15 +140,15 @@ func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
 		users, err := h.QsAnswerRepo.ListProjectsUsers(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs project users failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"users": users, "offset": 0, "limit": len(users), "totalCount": len(users),
 		})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"users": []any{}, "offset": 0, "limit": 0, "totalCount": 0,
 	})
 }
@@ -159,7 +159,7 @@ func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -167,7 +167,7 @@ func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
 		observers, err := h.IrisSurveyRepo.ListObserversForProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get observers failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(observers))
@@ -177,10 +177,10 @@ func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
 				"timeSlotId": dto.NullInt64(o.TimeSlotID),
 			})
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"observers": []any{}})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"observers": []any{}})
 }
 
 // GetProjectQualReschedBody returns the reschedule email template body.
@@ -188,7 +188,7 @@ func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -197,7 +197,7 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			slog.Error("get qual resched body failed", "error", err)
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"html": body})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"html": body})
 		return
 	}
 
@@ -205,11 +205,11 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 	if h.QsAnswerRepo != nil {
 		t, _ := h.QsAnswerRepo.GetCommunicationTemplate(r.Context(), "reschedule")
 		if t != nil {
-			support.WriteJSON(w, http.StatusOK, map[string]any{"html": t.Body})
+			qualapi.WriteJSON(w, http.StatusOK, map[string]any{"html": t.Body})
 			return
 		}
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"html": ""})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"html": ""})
 }
 
 // GetProjectAvailability returns moderator availability for a project.
@@ -218,11 +218,11 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.IrisSurveyRepo != nil && support.ResolveSource(r) == "iris" {
+	if h.IrisSurveyRepo != nil && qualapi.ResolveSource(r) == "iris" {
 		avails, err := h.IrisSurveyRepo.GetProjectAvailability(r.Context(), projectID)
 		if err != nil {
 			slog.Error("project availability failed", "error", err)
@@ -235,7 +235,7 @@ func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request)
 				"endTime":   a.EndTime.Format(time.RFC3339),
 			})
 		}
-		support.WriteJSON(w, http.StatusOK, result)
+		qualapi.WriteJSON(w, http.StatusOK, result)
 		return
 	}
 
@@ -250,10 +250,10 @@ func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			slog.Error("get qs project avail failed", "error", err)
 		}
-		support.WriteJSON(w, http.StatusOK, avails)
+		qualapi.WriteJSON(w, http.StatusOK, avails)
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, []any{})
+	qualapi.WriteJSON(w, http.StatusOK, []any{})
 }
 
 // GetProjectSchedulerModerators returns moderators for the project scheduler.
@@ -262,16 +262,16 @@ func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request)
 func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.IrisSurveyRepo != nil && support.ResolveSource(r) == "iris" {
+	if h.IrisSurveyRepo != nil && qualapi.ResolveSource(r) == "iris" {
 		mods, err := h.IrisSurveyRepo.GetSchedulerModerators(r.Context(), projectID)
 		if err != nil {
 			slog.Error("scheduler mods failed", "error", err)
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"moderatorInfo": mods})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"moderatorInfo": mods})
 		return
 	}
 
@@ -293,10 +293,10 @@ func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.R
 		for _, v := range modMap {
 			result = append(result, v)
 		}
-		support.WriteJSON(w, http.StatusOK, result)
+		qualapi.WriteJSON(w, http.StatusOK, result)
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, []map[string]any{})
+	qualapi.WriteJSON(w, http.StatusOK, []map[string]any{})
 }
 
 // GetProjectDashboard returns combined availability and timeslot data for dashboard.
@@ -306,7 +306,7 @@ func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.R
 func (h *Handler) GetProjectDashboard(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -314,31 +314,31 @@ func (h *Handler) GetProjectDashboard(w http.ResponseWriter, r *http.Request) {
 		data, err := h.IrisSurveyRepo.GetProjectDashboardInfo(r.Context(), projectID)
 		if err != nil {
 			slog.Error("project dashboard failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, data)
+		qualapi.WriteJSON(w, http.StatusOK, data)
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"scheduled": 0, "completed": 0, "moderatorInfo": map[string]any{}})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"scheduled": 0, "completed": 0, "moderatorInfo": map[string]any{}})
 }
 
 func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "projectId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := support.ResolveSource(r)
+	source := qualapi.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		count, err := h.IrisSurveyRepo.ResetProjectModerators(r.Context(), projectID)
 		if err != nil {
 			slog.Error("reset project mods failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": count, "source": "iris"})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": count, "source": "iris"})
 		return
 	}
 
@@ -349,14 +349,14 @@ func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request)
 			 WHERE ts.project_id = ? AND ts.status_id IN (1, 2)`, projectID)
 		if err != nil {
 			slog.Error("qs reset mods failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
 			return
 		}
 		n, _ := res.RowsAffected()
-		support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": n, "source": "qs"})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": n, "source": "qs"})
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 // ──────────────────────────────────────────────
@@ -366,12 +366,12 @@ func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request)
 func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "projectId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	format := r.URL.Query().Get("format")
-	source := support.ResolveSource(r)
+	source := qualapi.ResolveSource(r)
 
 	var data []map[string]any
 
@@ -379,14 +379,14 @@ func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 		data, err = h.IrisSurveyRepo.ExportProjectData(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris export failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
 			return
 		}
 	} else if h.QsTimeSlotRepo != nil {
 		slots, _, err := h.QsTimeSlotRepo.List(r.Context(), 1, 10000, &projectID, nil, nil, nil, nil)
 		if err != nil {
 			slog.Error("qs export failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
 			return
 		}
 		for _, s := range slots {
@@ -415,7 +415,7 @@ func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "rows": data, "count": len(data)})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "rows": data, "count": len(data)})
 }
 
 // ──────────────────────────────────────────────
@@ -425,17 +425,17 @@ func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetAvailableModeratorsCount(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "projectId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := support.ResolveSource(r)
+	source := qualapi.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		count, err := h.IrisSurveyRepo.GetAvailableModeratorsCount(r.Context(), projectID)
 		if err != nil {
 			slog.Error("count mods failed", "error", err)
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "iris"})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "iris"})
 		return
 	}
 
@@ -445,31 +445,31 @@ func (h *Handler) GetAvailableModeratorsCount(w http.ResponseWriter, r *http.Req
 			`SELECT COUNT(DISTINCT mts.moderator_id) FROM moderator_time_slot mts
 			 INNER JOIN time_slot ts ON ts.id = mts.time_slot_id
 			 WHERE ts.project_id = ? AND ts.status_id = 1`, projectID).Scan(&count)
-		support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "qs"})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "qs"})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": 0})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": 0})
 }
 
 func (h *Handler) GetUnavailableModerators(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "projectId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := support.ResolveSource(r)
+	source := qualapi.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		mods, err := h.IrisSurveyRepo.GetUnavailableModerators(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get unavail mods failed", "error", err)
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"moderators": mods, "source": "iris"})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"moderators": mods, "source": "iris"})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{"moderators": []any{}, "source": "qs"})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"moderators": []any{}, "source": "qs"})
 }
 
 // ──────────────────────────────────────────────
@@ -477,15 +477,15 @@ func (h *Handler) GetUnavailableModerators(w http.ResponseWriter, r *http.Reques
 // ──────────────────────────────────────────────
 
 func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
-	page, pageSize := support.ParsePagination(r)
-	source := support.ResolveSource(r)
+	page, pageSize := qualapi.ParsePagination(r)
+	source := qualapi.ResolveSource(r)
 
 	if (source == "" || source == "qs") && h.QsUserRepo != nil {
 		managerRoleID := 2
 		users, total, err := h.QsUserRepo.List(r.Context(), page, pageSize, &managerRoleID, "")
 		if err != nil {
 			slog.Error("list PMs failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
 			return
 		}
 		result := make([]map[string]any, 0, len(users))
@@ -496,7 +496,7 @@ func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
 				"source": "qs", "serviceCategory": "MRA",
 			})
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"success": true, "data": result, "meta": map[string]any{"totalCount": total},
 		})
 		return
@@ -516,11 +516,11 @@ func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"success": true, "data": result, "meta": map[string]any{"totalCount": total},
 		})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, []any{})
+	qualapi.WriteJSON(w, http.StatusOK, []any{})
 }

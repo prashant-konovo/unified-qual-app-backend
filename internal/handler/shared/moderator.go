@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
@@ -32,8 +32,8 @@ func (h *Handler) ListModerators(w http.ResponseWriter, r *http.Request) {
 		} else {
 			for _, m := range mods {
 				roles := []string{}
-				for _, rid := range support.ParseRoleCSV(m.RoleIDs) {
-					roles = append(roles, support.QsRoleName(rid))
+				for _, rid := range qualapi.ParseRoleCSV(m.RoleIDs) {
+					roles = append(roles, qualapi.QsRoleName(rid))
 				}
 				combined = append(combined, map[string]any{
 					"id":              m.ID,
@@ -51,13 +51,13 @@ func (h *Handler) ListModerators(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	support.WriteJSON(w, http.StatusOK, combined)
+	qualapi.WriteJSON(w, http.StatusOK, combined)
 }
 
 func (h *Handler) CreateModerator(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsUserRepo == nil {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 	var req struct {
@@ -77,17 +77,17 @@ func (h *Handler) CreateModerator(w http.ResponseWriter, r *http.Request) {
 	uid, err := h.QsUserRepo.Create(ctx, req.FirstName, req.LastName, req.Email, req.TimeZone, []int{1})
 	if err != nil {
 		slog.Error("create moderator", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create moderator"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create moderator"})
 		return
 	}
-	support.WriteJSON(w, http.StatusCreated, map[string]any{
+	qualapi.WriteJSON(w, http.StatusCreated, map[string]any{
 		"id":        uid,
 		"firstName": req.FirstName,
 		"lastName":  req.LastName,
 		"email":     req.Email,
 		"role":      "moderator",
 		"status":    "active",
-		"createdAt": support.Now(),
+		"createdAt": qualapi.Now(),
 	})
 }
 
@@ -95,7 +95,7 @@ func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	nid, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -107,20 +107,20 @@ func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
 	switch source {
 	case "qs":
 		if h.QsUserRepo == nil {
-			support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+			qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 			return
 		}
 		u, err := h.QsUserRepo.GetByID(ctx, nid)
 		if err != nil {
 			slog.ErrorContext(ctx, "get QS moderator failed", "error", err, "id", nid)
-			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "moderator not found"})
+			qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "moderator not found"})
 			return
 		}
 		roles := []string{}
 		for _, rid := range u.RoleIDs {
-			roles = append(roles, support.QsRoleName(rid))
+			roles = append(roles, qualapi.QsRoleName(rid))
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"id":              u.ID,
 			"firstName":       u.FirstName.String,
 			"lastName":        u.LastName.String,
@@ -135,16 +135,16 @@ func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
 		})
 	case "iris":
 		if h.IrisUserRepo == nil {
-			support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "IRIS database unavailable"})
+			qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "IRIS database unavailable"})
 			return
 		}
 		u, err := h.IrisUserRepo.GetByID(ctx, nid)
 		if err != nil {
 			slog.ErrorContext(ctx, "get IRIS moderator failed", "error", err, "id", nid)
-			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "moderator not found"})
+			qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "moderator not found"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"id":              u.ID,
 			"firstName":       u.FirstName,
 			"lastName":        u.LastName,
@@ -157,7 +157,7 @@ func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
 			"registeredAt":    u.RegistrationDate.Format(time.RFC3339),
 		})
 	default:
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid source, use qs or iris"})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid source, use qs or iris"})
 	}
 }
 
@@ -165,7 +165,7 @@ func (h *Handler) UpdateModerator(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	nid, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -187,36 +187,36 @@ func (h *Handler) UpdateModerator(w http.ResponseWriter, r *http.Request) {
 	switch body.Source {
 	case "qs":
 		if h.QsUserRepo == nil {
-			support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+			qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 			return
 		}
 		if err := h.QsUserRepo.Update(ctx, nid, body.FirstName, body.LastName, body.TimeZone); err != nil {
 			slog.ErrorContext(ctx, "update QS moderator failed", "error", err, "id", nid)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
 	case "iris":
 		if h.IrisUserRepo == nil {
-			support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "IRIS database unavailable"})
+			qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "IRIS database unavailable"})
 			return
 		}
 		if err := h.IrisUserRepo.Update(ctx, nid, body.FirstName, body.LastName, body.TimeZone); err != nil {
 			slog.ErrorContext(ctx, "update IRIS moderator failed", "error", err, "id", nid)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
 	default:
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid source"})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid source"})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": nid})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": nid})
 }
 
 func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsUserRepo == nil {
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"error":        "QS database unavailable",
 			"errorMessage": "An error occured while removing the user",
 		})
@@ -224,7 +224,7 @@ func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 	}
 	modID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while removing the user",
 		})
@@ -232,18 +232,18 @@ func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.QsUserRepo.SoftDelete(ctx, modID); err != nil {
 		slog.Error("delete moderator", "error", err)
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while removing the user",
 		})
 		return
 	}
 	// Legacy returns data-api-client UPDATE result shape
-	support.WriteJSON(w, http.StatusOK, map[string]any{"numberOfRecordsUpdated": 1})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"numberOfRecordsUpdated": 1})
 }
 
 func (h *Handler) BulkUploadModerators(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"created": 0, "failed": 0, "errors": []any{}, "message": "bulk upload not yet implemented",
 	})
 }
@@ -251,13 +251,13 @@ func (h *Handler) BulkUploadModerators(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetModeratorTimeslots(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsTimeSlotRepo == nil {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	modID, err := validate.ParseIDParam(r, "moderatorId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -273,7 +273,7 @@ func (h *Handler) GetModeratorTimeslots(w http.ResponseWriter, r *http.Request) 
 	slots, total, err := h.QsTimeSlotRepo.ListByModerator(ctx, modID, page, pageSize)
 	if err != nil {
 		slog.ErrorContext(ctx, "get moderator timeslots failed", "error", err, "moderatorId", modID)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get moderator timeslots"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get moderator timeslots"})
 		return
 	}
 
@@ -298,7 +298,7 @@ func (h *Handler) GetModeratorTimeslots(w http.ResponseWriter, r *http.Request) 
 		result = append(result, item)
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    result,
 		"meta":    map[string]any{"page": page, "pageSize": pageSize, "totalCount": total},
@@ -313,12 +313,12 @@ func (h *Handler) GetModeratorAvailability(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	nid, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.QsUserRepo == nil {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
@@ -335,7 +335,7 @@ func (h *Handler) GetModeratorAvailability(w http.ResponseWriter, r *http.Reques
 	avails, err := h.QsUserRepo.ListModeratorAvailability(ctx, nid, clientID, startDate, endDate)
 	if err != nil {
 		slog.ErrorContext(ctx, "list moderator availability failed", "error", err, "moderatorId", nid)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to fetch availability"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to fetch availability"})
 		return
 	}
 
@@ -350,19 +350,19 @@ func (h *Handler) GetModeratorAvailability(w http.ResponseWriter, r *http.Reques
 			"isImported":  false,
 		})
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"availabilities": items})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"availabilities": items})
 }
 
 func (h *Handler) PostModeratorAvailability(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	nid, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.QsUserRepo == nil {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
@@ -378,23 +378,23 @@ func (h *Handler) PostModeratorAvailability(w http.ResponseWriter, r *http.Reque
 
 	st, err := time.Parse(time.RFC3339, body.StartTime)
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid startTime format, use RFC3339"})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid startTime format, use RFC3339"})
 		return
 	}
 	et, err := time.Parse(time.RFC3339, body.EndTime)
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid endTime format, use RFC3339"})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid endTime format, use RFC3339"})
 		return
 	}
 
 	avail, err := h.QsUserRepo.CreateModeratorAvailability(ctx, nid, body.ClientID, st, et)
 	if err != nil {
 		slog.ErrorContext(ctx, "create moderator availability failed", "error", err, "moderatorId", nid)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create availability"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create availability"})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusCreated, map[string]any{
+	qualapi.WriteJSON(w, http.StatusCreated, map[string]any{
 		"id":          avail.ID,
 		"moderatorId": avail.ModeratorID,
 		"startTime":   avail.StartTime.Format(time.RFC3339),
@@ -406,26 +406,26 @@ func (h *Handler) DeleteModeratorAvailability(w http.ResponseWriter, r *http.Req
 	ctx := r.Context()
 	nid, err := validate.ParseIDParam(r, "availabilityId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.QsUserRepo == nil {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	if err := h.QsUserRepo.DeleteModeratorAvailability(ctx, nid); err != nil {
 		slog.ErrorContext(ctx, "delete moderator availability failed", "error", err, "availabilityId", nid)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete availability"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete availability"})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "availabilityId": nid})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "availabilityId": nid})
 }
 
 func (h *Handler) GetTimeslotModeratorOptions(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"availableModerators": []map[string]any{
 			{"id": "mod-201", "firstName": "Jane", "lastName": "Smith",
 				"hasConflict": false, "availabilityId": 801},

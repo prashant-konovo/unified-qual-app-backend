@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 
 	"github.com/InCrowd/unified-qual-api/internal/integration"
@@ -37,7 +37,7 @@ func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.DB.IRISReadOnly.QueryContext(ctx, q)
 	if err != nil {
 		slog.Error("list subscriptions", "err", err)
-		support.WriteJSON(w, http.StatusOK, []map[string]any{})
+		qualapi.WriteJSON(w, http.StatusOK, []map[string]any{})
 		return
 	}
 	defer rows.Close()
@@ -55,11 +55,11 @@ func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 			"plan":    "enterprise",
 		})
 	}
-	support.WriteJSON(w, http.StatusOK, subs)
+	qualapi.WriteJSON(w, http.StatusOK, subs)
 }
 
 func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusCreated, map[string]any{"message": "subscription creation not yet implemented"})
+	qualapi.WriteJSON(w, http.StatusCreated, map[string]any{"message": "subscription creation not yet implemented"})
 }
 
 func (h *Handler) GetSubscription(w http.ResponseWriter, r *http.Request) {
@@ -68,18 +68,18 @@ func (h *Handler) GetSubscription(w http.ResponseWriter, r *http.Request) {
 	var company string
 	err := h.DB.IRISReadOnly.QueryRowContext(ctx, "SELECT company FROM subscription WHERE id = ?", sid).Scan(&company)
 	if err != nil {
-		support.WriteJSON(w, http.StatusOK, map[string]any{"id": sid, "company": "Unknown"})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"id": sid, "company": "Unknown"})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"id": sid, "company": company, "plan": "enterprise"})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"id": sid, "company": company, "plan": "enterprise"})
 }
 
 func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusOK, map[string]any{"message": "subscription update not yet implemented"})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"message": "subscription update not yet implemented"})
 }
 
 func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 // ──────────────────────────────────────────────
@@ -91,7 +91,7 @@ func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Request) {
 	subID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -99,13 +99,13 @@ func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Reque
 		interviews, err := h.IrisSurveyRepo.GetSubscriptionInterviews(r.Context(), subID)
 		if err != nil {
 			slog.Error("subscription interviews failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if interviews == nil {
 			interviews = []map[string]any{}
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"interviews": interviews})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"interviews": interviews})
 		return
 	}
 	if h.QsTimeSlotRepo != nil {
@@ -119,10 +119,10 @@ func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Reque
 				"statusId":  ts.StatusID,
 			})
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"interviews": interviews})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"interviews": interviews})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"interviews": []map[string]any{}})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"interviews": []map[string]any{}})
 }
 
 // GetSubscriptionCrowds returns crowds for a subscription.
@@ -131,12 +131,12 @@ func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Reque
 func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) {
 	subID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.IrisSurveyRepo == nil {
-		support.WriteJSON(w, http.StatusOK, map[string]any{"crowds": []map[string]any{}, "limit": 20, "offset": 0, "totalCount": 0})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"crowds": []map[string]any{}, "limit": 20, "offset": 0, "totalCount": 0})
 		return
 	}
 
@@ -167,7 +167,7 @@ func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) 
 	crowds, total, err := h.IrisSurveyRepo.ListCrowdsForSubscription(r.Context(), subID, filter)
 	if err != nil {
 		slog.Error("subscription crowds failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 
@@ -177,7 +177,7 @@ func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) 
 		result = append(result, h.buildCrowdBasicJSON(ctx, c))
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"crowds":     result,
 		"limit":      limit,
 		"offset":     offset,
@@ -297,14 +297,14 @@ func (h *Handler) GetSubscriptionQuestionTypes(w http.ResponseWriter, r *http.Re
 	_ = chi.URLParam(r, "id") // subId validated but not used for filtering (legacy returns all types)
 
 	if h.IrisSurveyRepo == nil {
-		support.WriteJSON(w, http.StatusOK, map[string]any{"totalCount": 0, "limit": nil, "offset": nil, "questionTypes": []map[string]any{}})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"totalCount": 0, "limit": nil, "offset": nil, "questionTypes": []map[string]any{}})
 		return
 	}
 
 	allTypes, err := h.IrisSurveyRepo.GetAllQuestionTypes(r.Context())
 	if err != nil {
 		slog.Error("question types failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 	if allTypes == nil {
@@ -330,7 +330,7 @@ func (h *Handler) GetSubscriptionQuestionTypes(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"totalCount":    totalCount,
 		"limit":         limitVal,
 		"offset":        offsetVal,
@@ -343,12 +343,12 @@ func (h *Handler) GetSubscriptionQuestionTypes(w http.ResponseWriter, r *http.Re
 func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Request) {
 	subID, err := validate.ParseIDParam(r, "subId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.IrisSurveyRepo == nil {
-		support.WriteJSON(w, http.StatusOK, []map[string]any{})
+		qualapi.WriteJSON(w, http.StatusOK, []map[string]any{})
 		return
 	}
 
@@ -371,7 +371,7 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 	inquiries, err := h.IrisSurveyRepo.ListProjectInquiries(r.Context(), subID, filter)
 	if err != nil {
 		slog.Error("inquiries list failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 
@@ -432,7 +432,7 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 		})
 	}
 
-	support.WriteJSON(w, http.StatusOK, result)
+	qualapi.WriteJSON(w, http.StatusOK, result)
 }
 
 // GetSubscriptionProjectInquiry returns a specific inquiry for a subscription/project.
@@ -443,7 +443,7 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 	projectID, _ := validate.ParseIDParam(r, "pid")
 
 	if h.IrisSurveyRepo == nil {
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
 		return
 	}
 
@@ -451,18 +451,18 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 	pi, err := h.IrisSurveyRepo.GetProjectInquiry(r.Context(), subID, projectID)
 	if err != nil {
 		slog.Error("get inquiry failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 	if pi == nil {
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
 		return
 	}
 
 	// 2. Get project
 	project, err := h.IrisSurveyRepo.GetProjectForInquiry(r.Context(), projectID)
 	if err != nil || project == nil {
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "project not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "project not found"})
 		return
 	}
 
@@ -545,7 +545,7 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"project":    project,
 		"crowds":     crowdObjects,
 		"proposal":   proposal,
@@ -560,12 +560,12 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.Request) {
 	subID, err := validate.ParseIDParam(r, "subId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.IrisSurveyRepo == nil {
-		support.WriteJSON(w, http.StatusOK, map[string]any{"projects": map[string]any{}})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"projects": map[string]any{}})
 		return
 	}
 
@@ -583,7 +583,7 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 	projects, err := h.IrisSurveyRepo.ListProjectsForSubscription(r.Context(), subID)
 	if err != nil {
 		slog.Error("subscription projects failed", "error", err)
-		support.WriteJSON(w, http.StatusOK, map[string]any{"projects": map[string]any{}})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"projects": map[string]any{}})
 		return
 	}
 
@@ -652,7 +652,7 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{"projects": projectsMap})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"projects": projectsMap})
 }
 
 // ──────────────────────────────────────────────
@@ -670,7 +670,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.IrisSurveyRepo == nil {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 		return
 	}
 
@@ -680,7 +680,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	allProducts, err := h.IrisSurveyRepo.GetQualProducts(ctx)
 	if err != nil {
 		slog.Error("get qual products failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get products"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get products"})
 		return
 	}
 
@@ -846,7 +846,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 		IsHardStop: isHardStop,
 	}
 
-	support.WriteJSON(w, http.StatusOK, resp)
+	qualapi.WriteJSON(w, http.StatusOK, resp)
 }
 
 // assessCrowdDifficulty calculates the feasibility score for a crowd and matches it to an assessment.
@@ -903,7 +903,7 @@ func (h *Handler) assessCrowdDifficulty(ctx context.Context, crowd *ipCrowdSpec,
 func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Request) {
 	// Legacy error helper: wraps in {"error": {"userMessage":..., "developerMessage":..., "status":"BAD REQUEST", "code":400}}
 	badRequest := func(reason string) {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]any{
 				"userMessage":      "Something sent doesn't make sense, please check your request",
 				"developerMessage": reason,
@@ -1059,5 +1059,5 @@ func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Contract-identical: legacy returns empty JSON object
-	support.WriteJSON(w, http.StatusOK, map[string]any{})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{})
 }

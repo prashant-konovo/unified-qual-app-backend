@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
@@ -39,20 +39,20 @@ func (h *Handler) ConferenceLogin(w http.ResponseWriter, r *http.Request) {
 		data, err := h.QsConferenceRepo.Login(r.Context(), confHashStr, req.Pin)
 		if err != nil {
 			if strings.Contains(err.Error(), "invalid pin") {
-				support.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid pin"})
+				qualapi.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid pin"})
 				return
 			}
 			if strings.Contains(err.Error(), "not found") {
-				support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
+				qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 				return
 			}
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "login failed"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "login failed"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, data)
+		qualapi.WriteJSON(w, http.StatusOK, data)
 		return
 	}
-	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
+	qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 }
 
 // GetConferenceParticipants returns participants in a conference.
@@ -65,13 +65,13 @@ func (h *Handler) GetConferenceParticipants(w http.ResponseWriter, r *http.Reque
 	if h.QsConferenceRepo != nil {
 		ci, err := h.QsConferenceRepo.GetByHash(r.Context(), confHashStr)
 		if err != nil || ci == nil {
-			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
+			qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 			return
 		}
 		participants, err := h.QsConferenceRepo.GetParticipants(r.Context(), ci.TimeSlotID)
 		if err != nil {
 			slog.Error("get participants failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if participants == nil {
@@ -93,13 +93,13 @@ func (h *Handler) GetConferenceParticipants(w http.ResponseWriter, r *http.Reque
 			}
 		}
 
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"participants": participants,
 			"timeSlot":     tsObj,
 		})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"participants": []any{}, "timeSlot": nil})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"participants": []any{}, "timeSlot": nil})
 }
 
 // GetMeetingMetadata returns meeting metadata.
@@ -107,19 +107,19 @@ func (h *Handler) GetConferenceParticipants(w http.ResponseWriter, r *http.Reque
 // Response: flat meeting metadata object
 func (h *Handler) GetMeetingMetadata(w http.ResponseWriter, r *http.Request) {
 	hash := r.URL.Query().Get("hash")
-	bearerToken := support.ExtractBearerToken(r)
+	bearerToken := qualapi.ExtractBearerToken(r)
 
 	// Try Conference Service for live metadata
 	if hash == "" && h.Services.Conference.Configured() {
 		meta, err := h.Services.Conference.GetMetadata(r.Context(), bearerToken)
 		if err == nil && meta != nil {
-			support.WriteJSON(w, http.StatusOK, meta)
+			qualapi.WriteJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
 
 	if hash == "" {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "hash parameter required"})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "hash parameter required"})
 		return
 	}
 
@@ -127,17 +127,17 @@ func (h *Handler) GetMeetingMetadata(w http.ResponseWriter, r *http.Request) {
 		meta, err := h.QsConferenceRepo.GetMeetingMetadata(r.Context(), hash)
 		if err != nil {
 			slog.Error("get meeting metadata failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if meta == nil {
-			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "meeting not found"})
+			qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "meeting not found"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, meta)
+		qualapi.WriteJSON(w, http.StatusOK, meta)
 		return
 	}
-	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "meeting not found"})
+	qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "meeting not found"})
 }
 
 // MeetingJoin handles join meeting by join ID.
@@ -146,7 +146,7 @@ func (h *Handler) GetMeetingMetadata(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) MeetingJoin(w http.ResponseWriter, r *http.Request) {
 	joinID, err := validate.ParseStringParam(r, "joinId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -154,11 +154,11 @@ func (h *Handler) MeetingJoin(w http.ResponseWriter, r *http.Request) {
 	if h.QsConferenceRepo != nil {
 		meta, err := h.QsConferenceRepo.GetMeetingMetadata(r.Context(), joinID)
 		if err == nil && meta != nil {
-			support.WriteJSON(w, http.StatusOK, meta)
+			qualapi.WriteJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
-	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "meeting not found"})
+	qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "meeting not found"})
 }
 
 // GetAttendeesByMeetingID returns attendees for a meeting.
@@ -166,13 +166,13 @@ func (h *Handler) MeetingJoin(w http.ResponseWriter, r *http.Request) {
 // Response: passthrough from conference service
 func (h *Handler) GetAttendeesByMeetingID(w http.ResponseWriter, r *http.Request) {
 	meetingID, _ := validate.ParseStringParam(r, "meetingId")
-	bearerToken := support.ExtractBearerToken(r)
+	bearerToken := qualapi.ExtractBearerToken(r)
 
 	// Try Conference Service for live attendee data
 	if h.Services.Conference.Configured() {
 		attendees, err := h.Services.Conference.GetAttendees(r.Context(), meetingID, bearerToken)
 		if err == nil && attendees != nil {
-			support.WriteJSON(w, http.StatusOK, attendees)
+			qualapi.WriteJSON(w, http.StatusOK, attendees)
 			return
 		}
 		slog.Warn("conference service get attendees failed, falling back to DB", "error", err)
@@ -182,13 +182,13 @@ func (h *Handler) GetAttendeesByMeetingID(w http.ResponseWriter, r *http.Request
 		attendees, err := h.QsConferenceRepo.GetAttendeesByMeetingID(r.Context(), meetingID)
 		if err != nil {
 			slog.Error("get attendees failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, attendees)
+		qualapi.WriteJSON(w, http.StatusOK, attendees)
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, []any{})
+	qualapi.WriteJSON(w, http.StatusOK, []any{})
 }
 
 // GetRecordingStatus returns recording status for a meeting.
@@ -196,14 +196,14 @@ func (h *Handler) GetAttendeesByMeetingID(w http.ResponseWriter, r *http.Request
 // Response: passthrough from conference service
 func (h *Handler) GetRecordingStatus(w http.ResponseWriter, r *http.Request) {
 	meetingID, _ := validate.ParseStringParam(r, "meetingId")
-	bearerToken := support.ExtractBearerToken(r)
+	bearerToken := qualapi.ExtractBearerToken(r)
 
 	// Call Conference Service for real recording status
 	if h.Services.Conference.Configured() {
 		status, err := h.Services.Conference.GetRecordingStatus(r.Context(), meetingID, bearerToken)
 		if err == nil && status != nil {
 			status["meetingId"] = meetingID
-			support.WriteJSON(w, http.StatusOK, status)
+			qualapi.WriteJSON(w, http.StatusOK, status)
 			return
 		}
 		slog.Warn("conference service recording status failed", "meetingId", meetingID, "error", err)
@@ -213,7 +213,7 @@ func (h *Handler) GetRecordingStatus(w http.ResponseWriter, r *http.Request) {
 	if h.QsConferenceRepo != nil {
 		meta, _ := h.QsConferenceRepo.GetMeetingMetadata(r.Context(), meetingID)
 		if meta != nil {
-			support.WriteJSON(w, http.StatusOK, map[string]any{
+			qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 				"meetingId":      meetingID,
 				"recording":      false,
 				"status":         "not_started",
@@ -224,7 +224,7 @@ func (h *Handler) GetRecordingStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"meetingId":     meetingID,
 		"recording":     false,
 		"status":        "not_started",
@@ -288,7 +288,7 @@ func (h *Handler) RecordingUploadCallback(w http.ResponseWriter, r *http.Request
 		_ = h.QsConferenceRepo.UpdateRecordingStatus(r.Context(), meetingID, "available", req.Bucket, req.Key)
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"meetingId":    meetingID,
 		"recorded":     true,
 		"status":       "available",
@@ -302,7 +302,7 @@ func (h *Handler) RecordingUploadCallback(w http.ResponseWriter, r *http.Request
 // ──────────────────────────────────────────────
 
 func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
-	bearerToken := support.ExtractBearerToken(r)
+	bearerToken := qualapi.ExtractBearerToken(r)
 
 	var req struct {
 		ProjectID      int64  `json:"projectId"`
@@ -328,7 +328,7 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 		resp, err := h.Services.Conference.CreateMeeting(r.Context(), createReq, bearerToken)
 		if err != nil {
 			slog.Error("conference create meeting failed", "error", err)
-			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to create meeting: " + err.Error()})
+			qualapi.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to create meeting: " + err.Error()})
 			return
 		}
 
@@ -337,7 +337,7 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 			_, _ = h.QsConferenceRepo.CreateConferenceLink(r.Context(), req.TimeSlotID, req.ProjectID, resp.MeetingID)
 		}
 
-		support.WriteJSON(w, http.StatusCreated, map[string]any{
+		qualapi.WriteJSON(w, http.StatusCreated, map[string]any{
 			"meetingId":         resp.MeetingID,
 			"joinUrl":           resp.JoinURL,
 			"phoneNumber":       resp.PhoneNumber,
@@ -347,7 +347,7 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "conference service not configured"})
+	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "conference service not configured"})
 }
 
 // ──────────────────────────────────────────────
@@ -369,17 +369,17 @@ func (h *Handler) CreateTranscriptionOrder(w http.ResponseWriter, r *http.Reques
 		order, err := h.Services.CastingWords.CreateOrder(r.Context(), req.AudioURL)
 		if err != nil {
 			slog.Error("castingwords create order failed", "error", err)
-			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "transcription order failed: " + err.Error()})
+			qualapi.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "transcription order failed: " + err.Error()})
 			return
 		}
-		support.WriteJSON(w, http.StatusCreated, map[string]any{
+		qualapi.WriteJSON(w, http.StatusCreated, map[string]any{
 			"orderId":   order.OrderID,
 			"meetingId": req.MeetingID,
 			"status":    order.Status,
 		})
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
+	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
 }
 
 func (h *Handler) GetTranscriptionStatus(w http.ResponseWriter, r *http.Request) {
@@ -388,13 +388,13 @@ func (h *Handler) GetTranscriptionStatus(w http.ResponseWriter, r *http.Request)
 	if h.Services.CastingWords.Configured() {
 		order, err := h.Services.CastingWords.GetOrderStatus(r.Context(), orderID)
 		if err != nil {
-			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to get status"})
+			qualapi.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to get status"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, order)
+		qualapi.WriteJSON(w, http.StatusOK, order)
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
+	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
 }
 
 func (h *Handler) GetTranscript(w http.ResponseWriter, r *http.Request) {
@@ -403,13 +403,13 @@ func (h *Handler) GetTranscript(w http.ResponseWriter, r *http.Request) {
 	if h.Services.CastingWords.Configured() {
 		transcript, err := h.Services.CastingWords.GetTranscript(r.Context(), orderID)
 		if err != nil {
-			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to get transcript"})
+			qualapi.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to get transcript"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"orderId": orderID, "transcript": transcript})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"orderId": orderID, "transcript": transcript})
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
+	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
 }
 
 // ──────────────────────────────────────────────
@@ -442,7 +442,7 @@ func (h *Handler) SendNotificationEmail(w http.ResponseWriter, r *http.Request) 
 		} else {
 			slog.Info("notification email sent via service",
 				"type", req.Type, "recipients", len(req.Recipients), "projectId", req.ProjectID)
-			support.WriteJSON(w, http.StatusOK, map[string]any{
+			qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 				"sent": true, "recipientCount": len(req.Recipients),
 				"type": req.Type, "projectId": req.ProjectID, "via": "notification-service",
 			})
@@ -453,7 +453,7 @@ func (h *Handler) SendNotificationEmail(w http.ResponseWriter, r *http.Request) 
 	// Fallback: log-only
 	slog.Info("notification email logged (service not configured or failed)",
 		"type", req.Type, "recipients", len(req.Recipients), "projectId", req.ProjectID)
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"sent": true, "recipientCount": len(req.Recipients),
 		"type": req.Type, "projectId": req.ProjectID,
 	})
@@ -478,19 +478,19 @@ func (h *Handler) SendSMS(w http.ResponseWriter, r *http.Request) {
 	if h.Services.SMS.Configured() {
 		if err := h.Services.SMS.SendSMS(r.Context(), req.To, req.From, req.Message); err != nil {
 			slog.Error("sms send failed", "error", err)
-			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "sms send failed: " + err.Error()})
+			qualapi.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "sms send failed: " + err.Error()})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"sent": true, "to": req.To})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"sent": true, "to": req.To})
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "sms service not configured"})
+	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "sms service not configured"})
 }
 
 func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 	meetingID := chi.URLParam(r, "meetingId")
 	action := chi.URLParam(r, "action")
-	bearerToken := support.ExtractBearerToken(r)
+	bearerToken := qualapi.ExtractBearerToken(r)
 
 	// Log meeting action
 	if h.DB.IRIS != nil {
@@ -523,8 +523,8 @@ func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 		if err == nil && meta != nil {
 			meta["action"] = action
 			meta["actionResult"] = "success"
-			meta["actionTimestamp"] = support.Now()
-			support.WriteJSON(w, http.StatusOK, meta)
+			meta["actionTimestamp"] = qualapi.Now()
+			qualapi.WriteJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
@@ -535,15 +535,15 @@ func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 		if meta != nil {
 			meta["action"] = action
 			meta["actionResult"] = "success"
-			meta["actionTimestamp"] = support.Now()
-			support.WriteJSON(w, http.StatusOK, meta)
+			meta["actionTimestamp"] = qualapi.Now()
+			qualapi.WriteJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"meetingId": meetingID, "action": action,
-		"result": "success", "timestamp": support.Now(),
+		"result": "success", "timestamp": qualapi.Now(),
 	})
 }
 
@@ -556,14 +556,14 @@ func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 // Response: passthrough from conference service
 func (h *Handler) MeetingUniversalJoin(w http.ResponseWriter, r *http.Request) {
 	meetingID := chi.URLParam(r, "meetingId")
-	bearerToken := support.ExtractBearerToken(r)
+	bearerToken := qualapi.ExtractBearerToken(r)
 
 	// Call Conference Service for real universal join
 	if h.Services.Conference.Configured() {
 		joinResp, err := h.Services.Conference.UniversalJoin(r.Context(), meetingID, bearerToken)
 		if err == nil && joinResp != nil {
-			joinResp["joinTimestamp"] = support.Now()
-			support.WriteJSON(w, http.StatusOK, joinResp)
+			joinResp["joinTimestamp"] = qualapi.Now()
+			qualapi.WriteJSON(w, http.StatusOK, joinResp)
 			return
 		}
 		slog.Warn("conference universal join failed", "meetingId", meetingID, "error", err)
@@ -574,16 +574,16 @@ func (h *Handler) MeetingUniversalJoin(w http.ResponseWriter, r *http.Request) {
 		meta, err := h.QsConferenceRepo.GetMeetingMetadata(r.Context(), meetingID)
 		if err == nil && meta != nil {
 			meta["joinUrl"] = fmt.Sprintf("https://chime.aws/join/%s", meetingID)
-			meta["joinTimestamp"] = support.Now()
-			support.WriteJSON(w, http.StatusOK, meta)
+			meta["joinTimestamp"] = qualapi.Now()
+			qualapi.WriteJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"meetingId":     meetingID,
 		"joinUrl":       fmt.Sprintf("https://chime.aws/join/%s", meetingID),
-		"attendeeId":    "att-" + support.ID()[:8],
-		"joinTimestamp": support.Now(),
+		"attendeeId":    "att-" + qualapi.ID()[:8],
+		"joinTimestamp": qualapi.Now(),
 	})
 }

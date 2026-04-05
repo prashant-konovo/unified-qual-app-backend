@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -25,7 +25,7 @@ import (
 // Response: flat array of user rows (result.records from data-api-client)
 func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
 	if h.QsUserRepo == nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "Error while getting all users",
 		})
@@ -37,7 +37,7 @@ func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
 	records, err := h.QsUserRepo.GetAllUsersAdmin(r.Context(), cognitoUserID)
 	if err != nil {
 		slog.Error("get all users admin failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "Error while getting all users",
 		})
@@ -45,7 +45,7 @@ func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy returns result.records (flat array)
-	support.WriteJSON(w, http.StatusOK, records)
+	qualapi.WriteJSON(w, http.StatusOK, records)
 }
 
 // GetAllProjectManagersMRA handles GET /project_manager/client/{client_id} (MRA).
@@ -53,18 +53,18 @@ func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
 // Note: Legacy SQL has client_id=1 hardcoded, ignoring the path parameter.
 func (h *Handler) GetAllProjectManagersMRA(w http.ResponseWriter, r *http.Request) {
 	if h.QsUserRepo == nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
 	records, err := h.QsUserRepo.GetAllProjectManagersListMRA(r.Context())
 	if err != nil {
 		slog.Error("get all project managers mra failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, records)
+	qualapi.WriteJSON(w, http.StatusOK, records)
 }
 
 // ──────────────────────────────────────────────
@@ -82,7 +82,7 @@ func (h *Handler) GetPMTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
 	clientID, _ := strconv.ParseInt(clientIDStr, 10, 64)
 
 	if h.QsTimeSlotRepo == nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
@@ -102,7 +102,7 @@ func (h *Handler) GetPMTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
 		records, err := h.QsTimeSlotRepo.GetAllPendingInterviewsPerProjectMRA(ctx, body.ProjectID, clientID)
 		if err != nil {
 			slog.Error("get pending interviews per project mra failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 			return
 		}
 		// Group by moderatorId
@@ -115,7 +115,7 @@ func (h *Handler) GetPMTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
 			}
 			grouped[modID] = append(arr, rec)
 		}
-		support.WriteJSON(w, http.StatusOK, grouped)
+		qualapi.WriteJSON(w, http.StatusOK, grouped)
 		return
 	}
 
@@ -130,11 +130,11 @@ func (h *Handler) GetPMTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		slog.Error("get pm timeslots mra failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, records)
+	qualapi.WriteJSON(w, http.StatusOK, records)
 }
 
 // GetAvailabilitiesForPMMRA handles POST /project_manager/get/availabilities/client/{client_id} (MRA).
@@ -144,7 +144,7 @@ func (h *Handler) GetAvailabilitiesForPMMRA(w http.ResponseWriter, r *http.Reque
 	clientID, _ := strconv.ParseInt(clientIDStr, 10, 64)
 
 	if h.QsUserRepo == nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
@@ -169,9 +169,9 @@ func (h *Handler) GetAvailabilitiesForPMMRA(w http.ResponseWriter, r *http.Reque
 	}
 	if err != nil {
 		slog.Error("get availabilities for pm mra failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, records)
+	qualapi.WriteJSON(w, http.StatusOK, records)
 }

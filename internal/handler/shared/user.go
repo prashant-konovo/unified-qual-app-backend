@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
@@ -28,24 +28,24 @@ import (
 func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
 		return
 	}
-	source := support.ResolveSource(r)
+	source := qualapi.ResolveSource(r)
 
 	if source == "iris" && h.IrisUserRepo != nil {
 		u, err := h.IrisUserRepo.GetByID(r.Context(), userID)
 		if err != nil || u == nil {
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        "An error occured while fetching user info",
 				"errorMessage": "An error occured while fetching user info",
 			})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"id": u.ID, "first_name": u.FirstName, "last_name": u.LastName,
 			"email": dto.NullStr(u.Email), "source": "iris",
 		})
@@ -55,7 +55,7 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	if h.QsUserRepo != nil {
 		u, err := h.QsUserRepo.GetByID(r.Context(), userID)
 		if err != nil || u == nil {
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        "An error occured while fetching user info",
 				"errorMessage": "An error occured while fetching user info",
 			})
@@ -111,10 +111,10 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		support.WriteJSON(w, http.StatusOK, resp)
+		qualapi.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
-	support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+	qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 		"error":        "An error occured while fetching user info",
 		"errorMessage": "An error occured while fetching user info",
 	})
@@ -126,7 +126,7 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	var req struct {
@@ -143,15 +143,15 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	if req.Source == "qs" && h.QsUserRepo != nil {
 		if err := h.QsUserRepo.Update(r.Context(), userID, req.FirstName, req.LastName, req.TimeZone); err != nil {
 			slog.Error("update qs user failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": userID, "source": "qs"})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": userID, "source": "qs"})
 		return
 	}
 
 	// IRIS user update not yet supported via this endpoint
-	support.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": userID, "source": "iris"})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": userID, "source": "iris"})
 }
 
 // CheckPasswordMatches validates a password hash (stub — real check via Cognito).
@@ -159,7 +159,7 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 // Response: {"passwordMatches": bool}
 func (h *Handler) CheckPasswordMatches(w http.ResponseWriter, r *http.Request) {
 	// Password matching is handled by Cognito, not by direct DB comparison
-	support.WriteJSON(w, http.StatusOK, map[string]any{"passwordMatch": true})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"passwordMatch": true})
 }
 
 // ──────────────────────────────────────────────
@@ -212,7 +212,7 @@ func (h *Handler) CreateEventLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("event logged", "type", req.EventType, "userId", req.UserID, "projectId", req.ProjectID)
-	support.WriteJSON(w, http.StatusOK, map[string]any{"message": "Event Logs send successfully"})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"message": "Event Logs send successfully"})
 }
 
 // ──────────────────────────────────────────────
@@ -238,7 +238,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 	if v := q.Get("accountId"); v != "" {
 		aid, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid accountId"})
+			qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid accountId"})
 			return
 		}
 		filter.AccountID = aid
@@ -262,7 +262,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 	// The route is already behind RequireRoles("admin","manager") so that's covered.
 	// Legacy controller: if no ?id and no ?accountId → return empty.
 	if filter.ID == "" && filter.AccountID == 0 {
-		support.WriteJSON(w, http.StatusOK, []map[string]any{})
+		qualapi.WriteJSON(w, http.StatusOK, []map[string]any{})
 		return
 	}
 
@@ -272,7 +272,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 		sfProjects, err := h.IrisSurveyRepo.ListSalesforceProjects(r.Context(), filter)
 		if err != nil {
 			slog.Error("iris sf projects failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		for _, s := range sfProjects {
@@ -305,7 +305,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 	if result == nil {
 		result = []map[string]any{}
 	}
-	support.WriteJSON(w, http.StatusOK, result)
+	qualapi.WriteJSON(w, http.StatusOK, result)
 }
 
 // ──────────────────────────────────────────────
@@ -322,7 +322,7 @@ func (h *Handler) GetUserEmail(w http.ResponseWriter, r *http.Request) {
 	cognitoID := chi.URLParam(r, "id")
 
 	if h.QsUserRepo == nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "no database available",
 		})
@@ -331,14 +331,14 @@ func (h *Handler) GetUserEmail(w http.ResponseWriter, r *http.Request) {
 
 	email, err := h.QsUserRepo.GetEmailByCognitoID(r.Context(), cognitoID)
 	if err != nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"email": email,
 	})
 }
@@ -366,7 +366,7 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.QsUserRepo == nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "An error occured while creating a new user",
 		})
@@ -374,7 +374,7 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.QsUserRepo.UpdateTimeZone(r.Context(), req.UserID, req.UserSelectedTimeZone); err != nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while creating a new user",
 		})
@@ -382,5 +382,5 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy returns {data: result["records"]} but UPDATE has no records → empty object
-	support.WriteJSON(w, http.StatusOK, map[string]any{})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{})
 }

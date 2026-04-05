@@ -8,7 +8,7 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/jobs"
 	"github.com/InCrowd/unified-qual-api/internal/logger"
@@ -69,7 +69,7 @@ func main() {
 
 	// Wire handlers + router
 	svcClients := integration.NewServiceClients(cfg)
-	deps := support.NewDeps(cfg, db, svcClients,
+	deps := qualapi.NewDeps(cfg, db, svcClients,
 		irisProjectRepo, qsProjectRepo,
 		irisUserRepo, qsUserRepo,
 		qsTimeSlotRepo, qsRespondentRepo,

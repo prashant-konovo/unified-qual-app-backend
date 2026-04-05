@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
@@ -23,7 +23,7 @@ import (
 func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "pid")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -37,7 +37,7 @@ func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
 		media, err := h.IrisSurveyRepo.ListMediaForProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("list media failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		totalCount := len(media)
@@ -54,7 +54,7 @@ func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
 
 		result := make([]map[string]any, 0, len(paged))
 		for _, m := range paged {
-			entry := support.MediaToJSON(m)
+			entry := qualapi.MediaToJSON(m)
 			// Add computed fields matching legacy response
 			entry["basisPDF"] = fmt.Sprintf("/v1/project/%d/interview_media/%d/media.pdf", m.ProjectID, m.ID)
 			pages := make([]map[string]any, 0, m.PageCount)
@@ -66,7 +66,7 @@ func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
 			entry["pages"] = pages
 			result = append(result, entry)
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 			"media":  result,
 			"limit":  limit,
 			"offset": offset,
@@ -74,7 +74,7 @@ func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"media": []any{}, "limit": limit, "offset": offset, "count": 0})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"media": []any{}, "limit": limit, "offset": offset, "count": 0})
 }
 
 // GetProjectMediaDetail returns a single media item with computed page URLs.
@@ -88,14 +88,14 @@ func (h *Handler) GetProjectMediaDetail(w http.ResponseWriter, r *http.Request) 
 		m, err := h.IrisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
 		if err != nil {
 			slog.Error("get media failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if m == nil {
-			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+			qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 			return
 		}
-		entry := support.MediaToJSON(*m)
+		entry := qualapi.MediaToJSON(*m)
 		entry["basisPDF"] = fmt.Sprintf("/v1/project/%d/interview_media/%d/media.pdf", m.ProjectID, m.ID)
 		pages := make([]map[string]any, 0, m.PageCount)
 		for i := 0; i < m.PageCount; i++ {
@@ -104,10 +104,10 @@ func (h *Handler) GetProjectMediaDetail(w http.ResponseWriter, r *http.Request) 
 			})
 		}
 		entry["pages"] = pages
-		support.WriteJSON(w, http.StatusOK, entry)
+		qualapi.WriteJSON(w, http.StatusOK, entry)
 		return
 	}
-	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+	qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 }
 
 // DownloadMediaPDF streams a media PDF from S3.
@@ -117,13 +117,13 @@ func (h *Handler) DownloadMediaPDF(w http.ResponseWriter, r *http.Request) {
 	mediaID, _ := validate.ParseIDParam(r, "mediaId")
 
 	if h.IrisSurveyRepo == nil || h.Services.S3 == nil {
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
 	m, err := h.IrisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
 	if err != nil || m == nil || !m.S3Key.Valid {
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
@@ -132,7 +132,7 @@ func (h *Handler) DownloadMediaPDF(w http.ResponseWriter, r *http.Request) {
 	body, contentLength, err := h.Services.S3.GetObject(r.Context(), bucket, key)
 	if err != nil {
 		slog.Error("S3 get media PDF failed", "error", err, "key", key)
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 	defer body.Close()
@@ -154,13 +154,13 @@ func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(pageStr)
 
 	if h.IrisSurveyRepo == nil || h.Services.S3 == nil {
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
 	m, err := h.IrisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
 	if err != nil || m == nil || !m.S3Key.Valid {
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
@@ -169,7 +169,7 @@ func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
 	body, contentLength, err := h.Services.S3.GetObject(r.Context(), bucket, key)
 	if err != nil {
 		slog.Error("S3 get media page failed", "error", err, "key", key)
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 	defer body.Close()
@@ -193,7 +193,7 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 	page, _ := strconv.Atoi(pageStr)
 
 	if h.IrisSurveyRepo == nil || h.Services.S3 == nil {
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
@@ -207,7 +207,7 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 	// Look up timeslot by conference hash to verify access and get project ID
 	projectID, err := h.IrisSurveyRepo.GetProjectIDByConferenceHash(r.Context(), confHash)
 	if err != nil {
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 		return
 	}
 
@@ -215,13 +215,13 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 	if participantHash != "" && h.QsConferenceRepo != nil {
 		ci, ciErr := h.QsConferenceRepo.GetByHash(r.Context(), confHash)
 		if ciErr != nil || ci == nil {
-			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
+			qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 			return
 		}
 		// Verify participant belongs to this conference timeslot
 		participants, pErr := h.QsConferenceRepo.GetParticipants(r.Context(), ci.TimeSlotID)
 		if pErr != nil {
-			support.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "access denied"})
+			qualapi.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "access denied"})
 			return
 		}
 		found := false
@@ -232,14 +232,14 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 			}
 		}
 		if !found {
-			support.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "access denied"})
+			qualapi.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "access denied"})
 			return
 		}
 	}
 
 	m, err := h.IrisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
 	if err != nil || m == nil || !m.S3Key.Valid {
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
@@ -248,7 +248,7 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 	body, contentLength, sErr := h.Services.S3.GetObject(r.Context(), bucket, key)
 	if sErr != nil {
 		slog.Error("S3 get conference media page failed", "error", sErr, "key", key)
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 	defer body.Close()
@@ -272,7 +272,7 @@ func (h *Handler) DeleteProjectMedia(w http.ResponseWriter, r *http.Request) {
 		// Get media first for S3 cleanup
 		m, _ := h.IrisSurveyRepo.GetMediaByID(r.Context(), projectID, mediaID)
 		if m != nil && m.Shared {
-			support.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "cannot delete shared media"})
+			qualapi.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "cannot delete shared media"})
 			return
 		}
 
@@ -290,13 +290,13 @@ func (h *Handler) DeleteProjectMedia(w http.ResponseWriter, r *http.Request) {
 
 		if err := h.IrisSurveyRepo.DeleteMedia(r.Context(), projectID, mediaID); err != nil {
 			slog.Error("delete media failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{})
 		return
 	}
-	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+	qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 }
 
 // ──────────────────────────────────────────────

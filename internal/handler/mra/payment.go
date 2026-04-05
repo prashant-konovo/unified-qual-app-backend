@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/InCrowd/unified-qual-api/internal/validate"
@@ -45,19 +45,19 @@ func (h *Handler) AddHonorariumAmountMRA(w http.ResponseWriter, r *http.Request)
 	honorarium, _ := body.Honorarium.Int64()
 
 	if projectID == 0 {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"message": "missing projectId param"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"message": "missing projectId param"})
 		return
 	}
 	if honorarium == 0 {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"message": "missing honorarium param"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"message": "missing honorarium param"})
 		return
 	}
 	if body.Currency == "" {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"message": "missing currency param"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"message": "missing currency param"})
 		return
 	}
 	if body.SessKey == "" {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"message": "missing sessKey param"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"message": "missing sessKey param"})
 		return
 	}
 
@@ -65,11 +65,11 @@ func (h *Handler) AddHonorariumAmountMRA(w http.ResponseWriter, r *http.Request)
 		body.ExternalProjectID, body.ExternalUserSurveyID, body.ExternalUserID,
 		body.ExternalCreditOrderID, body.ExternalCountryID); err != nil {
 		slog.Error("add honorarium amount mra", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{"message": "Successfully Added honorarium amount"})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"message": "Successfully Added honorarium amount"})
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ func (h *Handler) GetHonoValueUpdateReasonListMRA(w http.ResponseWriter, r *http
 	result, err := h.QsProjectRepo.GetHonoValueUpdateReasonListMRA(r.Context())
 	if err != nil {
 		slog.Error("get hono value update reason list mra", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":           err.Error(),
 			"errorMessage":    "an error occurred while getting data",
 			"customErrorCode": err.Error(),
@@ -89,7 +89,7 @@ func (h *Handler) GetHonoValueUpdateReasonListMRA(w http.ResponseWriter, r *http
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, result)
+	qualapi.WriteJSON(w, http.StatusOK, result)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ func (h *Handler) AddTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request)
 	}
 
 	if len(body.TimeSlotIDs) == 0 {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error":        "Bad Request",
 			"errorMessage": "timeSlotIds is not an array of int",
 		})
@@ -118,7 +118,7 @@ func (h *Handler) AddTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request)
 	paymentInfo, err := h.QsTimeSlotRepo.GetPaymentInfoByTimeSlotIdsMRA(r.Context(), body.TimeSlotIDs)
 	if err != nil {
 		slog.Error("add time slot payments mra: get payment info", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":           "Internal Error",
 			"errorMessage":    "Internal Error",
 			"customErrorCode": "Internal Error",
@@ -137,7 +137,7 @@ func (h *Handler) AddTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request)
 	paymentTypes, err := h.QsTimeSlotRepo.GetTimeSlotPaymentTypeListMRA(r.Context())
 	if err != nil {
 		slog.Error("add time slot payments mra: get payment types", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":           "Internal Error",
 			"errorMessage":    "Internal Error",
 			"customErrorCode": "Internal Error",
@@ -184,7 +184,7 @@ func (h *Handler) AddTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request)
 	if len(payments) > 0 {
 		if err := h.QsTimeSlotRepo.AddQSTimeSlotPaymentsMRA(r.Context(), payments); err != nil {
 			slog.Error("add time slot payments mra: insert", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":           "Internal Error",
 				"errorMessage":    "Internal Error",
 				"customErrorCode": "Internal Error",
@@ -199,7 +199,7 @@ func (h *Handler) AddTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	support.WriteJSON(w, http.StatusCreated, map[string]any{"message": "Success"})
+	qualapi.WriteJSON(w, http.StatusCreated, map[string]any{"message": "Success"})
 }
 
 // processPendingPaymentsForTimeslotIdsMRA implements the legacy processPendingPaymentsForTimeslotIds flow:
@@ -362,7 +362,7 @@ func (h *Handler) AddExternalTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.
 	paymentTypes, err := h.QsTimeSlotRepo.GetTimeSlotPaymentTypeListMRA(r.Context())
 	if err != nil {
 		slog.Error("add external time slot payments mra: get payment types", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":           err.Error(),
 			"errorMessage":    "an error occurred while getting data",
 			"customErrorCode": err.Error(),
@@ -382,7 +382,7 @@ func (h *Handler) AddExternalTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.
 	for _, p := range body {
 		typeID, ok := typeCodeMap[p.PaymentTypeCode]
 		if !ok {
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":           fmt.Sprintf("Invalid payment type code: %s", p.PaymentTypeCode),
 				"errorMessage":    "an error occurred while getting data",
 				"customErrorCode": fmt.Sprintf("Invalid payment type code: %s", p.PaymentTypeCode),
@@ -415,7 +415,7 @@ func (h *Handler) AddExternalTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.
 	if len(payments) > 0 {
 		if err := h.QsTimeSlotRepo.AddExternalTimeSlotPaymentsMRA(r.Context(), payments); err != nil {
 			slog.Error("add external time slot payments mra", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":           err.Error(),
 				"errorMessage":    "an error occurred while getting data",
 				"customErrorCode": err.Error(),
@@ -424,7 +424,7 @@ func (h *Handler) AddExternalTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.
 		}
 	}
 
-	support.WriteJSON(w, http.StatusCreated, map[string]any{"message": "Success"})
+	qualapi.WriteJSON(w, http.StatusCreated, map[string]any{"message": "Success"})
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -455,7 +455,7 @@ func (h *Handler) AddTimeSlotCustomHonorariumMRA(w http.ResponseWriter, r *http.
 	reasons, err := h.QsProjectRepo.GetHonoValueUpdateReasonListMRA(r.Context())
 	if err != nil {
 		slog.Error("add time slot custom honorarium mra: get reasons", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
 		return
 	}
 
@@ -467,7 +467,7 @@ func (h *Handler) AddTimeSlotCustomHonorariumMRA(w http.ResponseWriter, r *http.
 		}
 	}
 	if reasonID == 0 {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        fmt.Sprintf("Invalid reason code: %s", body.ReasonCode),
 			"errorMessage": fmt.Sprintf("Invalid reason code: %s", body.ReasonCode),
 		})
@@ -476,7 +476,7 @@ func (h *Handler) AddTimeSlotCustomHonorariumMRA(w http.ResponseWriter, r *http.
 
 	if err := h.QsTimeSlotRepo.AddTimeSlotCustomHonorariumMRA(r.Context(), body.TimeSlotID, body.OldValue, body.NewValue, reasonID, userID); err != nil {
 		slog.Error("add time slot custom honorarium mra", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
 		return
 	}
 
@@ -487,7 +487,7 @@ func (h *Handler) AddTimeSlotCustomHonorariumMRA(w http.ResponseWriter, r *http.
 		slog.Info("AddTimeSlotCustomHonorariumMRA: Step Function client not configured, skipping IRIS update")
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{"message": "Successfully Added honorarium amount"})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"message": "Successfully Added honorarium amount"})
 }
 
 // callStepFunctionForCustomHonoMRA invokes the external-calls-StateMachine Step Function
@@ -553,7 +553,7 @@ func (h *Handler) GetInterviewPaymentStatusListMRA(w http.ResponseWriter, r *htt
 	result, err := h.QsTimeSlotRepo.GetTimeSlotPaymentStatusListMRA(r.Context())
 	if err != nil {
 		slog.Error("get interview payment status list mra", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":           err.Error(),
 			"errorMessage":    "an error occurred while getting data",
 			"customErrorCode": err.Error(),
@@ -561,5 +561,5 @@ func (h *Handler) GetInterviewPaymentStatusListMRA(w http.ResponseWriter, r *htt
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, result)
+	qualapi.WriteJSON(w, http.StatusOK, result)
 }

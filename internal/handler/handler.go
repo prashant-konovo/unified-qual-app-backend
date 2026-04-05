@@ -1,7 +1,7 @@
 package handler
 
 import (
-"github.com/InCrowd/unified-qual-api/internal/handler/support"
+qualapi "github.com/InCrowd/unified-qual-api"
 "github.com/InCrowd/unified-qual-api/internal/handler/ls"
 "github.com/InCrowd/unified-qual-api/internal/handler/mra"
 "github.com/InCrowd/unified-qual-api/internal/handler/shared"
@@ -19,7 +19,7 @@ Handler   *shared.Handler // shared non-brand-specific handlers
 }
 
 // NewHandlers creates all domain handlers from shared deps.
-func NewHandlers(d *support.Deps) *Handlers {
+func NewHandlers(d *qualapi.Deps) *Handlers {
 return &Handlers{
 Auth:      &shared.AuthHandler{Deps: d},
 Project:   &shared.ProjectHandler{Deps: d},

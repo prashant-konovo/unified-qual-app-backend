@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 	"github.com/go-chi/chi/v5"
@@ -20,7 +20,7 @@ import (
 // ──────────────────────────────────────────────
 
 func (h *Handler) GetLocales(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"locales": []map[string]string{
 			{"code": "en_us", "name": "English (US)"},
 			{"code": "es_es", "name": "Spanish"},
@@ -55,8 +55,8 @@ func (h *Handler) UpdateTopicTranslations(w http.ResponseWriter, r *http.Request
 				slog.Error("update translation failed", "topicId", t.TopicID, "error", err)
 			}
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "updatedCount": len(req.Translations)})
+		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "updatedCount": len(req.Translations)})
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }

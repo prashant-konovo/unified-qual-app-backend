@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
@@ -31,12 +31,12 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("decipher respondent data failed", "surveyId", surveyID, "error", err)
 		} else {
 			slog.Info("decipher data retrieved", "surveyId", surveyID, "records", len(data))
-			support.WriteJSON(w, http.StatusOK, map[string]any{
+			qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 				"accepted":    true,
 				"source":      "decipher",
 				"surveyId":    surveyID,
 				"recordCount": len(data),
-				"timestamp":   support.Now(),
+				"timestamp":   qualapi.Now(),
 			})
 			return
 		}
@@ -48,7 +48,7 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("third-party integration received", "payload_keys", len(req))
-	support.WriteJSON(w, http.StatusOK, map[string]any{"accepted": true, "timestamp": support.Now()})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"accepted": true, "timestamp": qualapi.Now()})
 }
 
 // ──────────────────────────────────────────────
@@ -69,20 +69,20 @@ func (h *Handler) CheckQualEligibility(w http.ResponseWriter, r *http.Request) {
 		result, err := h.QsAnswerRepo.GetParticipantEligibility(r.Context(), req.ResponderID, req.ProjectID)
 		if err != nil {
 			slog.Error("eligibility check failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
+			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
 			return
 		}
 		if result == nil {
-			support.WriteJSON(w, http.StatusOK, map[string]any{
+			qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 				"eligible": true, "responderId": req.ResponderID,
 				"projectId": req.ProjectID, "source": "qs",
 			})
 			return
 		}
 		result["source"] = "qs"
-		support.WriteJSON(w, http.StatusOK, result)
+		qualapi.WriteJSON(w, http.StatusOK, result)
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{"eligible": true, "responderId": req.ResponderID, "projectId": req.ProjectID})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"eligible": true, "responderId": req.ResponderID, "projectId": req.ProjectID})
 }

@@ -3,7 +3,7 @@ package shared
 import (
 	"net/http"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 )
 
 // ──────────────────────────────────────────────
@@ -15,15 +15,15 @@ import (
 // ──────────────────────────────────────────────
 
 func (h *Handler) CreatePayment(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusCreated, map[string]any{"paymentId": 7001, "status": "PENDING"})
+	qualapi.WriteJSON(w, http.StatusCreated, map[string]any{"paymentId": 7001, "status": "PENDING"})
 }
 
 func (h *Handler) CreateCustomHonorarium(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusOK, map[string]any{"timeSlotId": 301, "honorarium": 200.00, "reasonId": 2})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"timeSlotId": 301, "honorarium": 200.00, "reasonId": 2})
 }
 
 func (h *Handler) GetPaymentStatusList(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"payments": []map[string]any{
 			{"timeSlotId": 301, "respondentName": "Alice Johnson", "amount": 150.00,
 				"currency": "USD", "status": "PENDING", "source": "QS",

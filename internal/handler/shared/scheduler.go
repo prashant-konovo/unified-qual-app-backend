@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	qualapi "github.com/InCrowd/unified-qual-api"
 
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/validate"
@@ -23,7 +23,7 @@ import (
 func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsTimeSlotRepo == nil {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
@@ -40,7 +40,7 @@ func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 	// Update timeslot status to PENDING (2)
 	if err := h.QsTimeSlotRepo.Update(ctx, body.TimeSlotID, map[string]any{"status_id": 2, "confirmed": true}); err != nil {
 		slog.ErrorContext(ctx, "schedule interview: update timeslot failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to schedule interview"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to schedule interview"})
 		return
 	}
 
@@ -51,7 +51,7 @@ func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	support.WriteJSON(w, http.StatusCreated, map[string]any{
+	qualapi.WriteJSON(w, http.StatusCreated, map[string]any{
 		"timeSlotId": body.TimeSlotID,
 		"statusId":   2,
 		"status":     "PENDING",
@@ -62,13 +62,13 @@ func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CancelInterview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsTimeSlotRepo == nil {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	tsID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -98,23 +98,23 @@ func (h *Handler) CancelInterview(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.QsTimeSlotRepo.Update(ctx, tsID, fields); err != nil {
 		slog.ErrorContext(ctx, "cancel interview failed", "error", err, "id", tsID)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "cancel failed"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "cancel failed"})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{"timeSlotId": tsID, "statusId": cancelStatusID, "status": "CANCELLED"})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"timeSlotId": tsID, "statusId": cancelStatusID, "status": "CANCELLED"})
 }
 
 func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsTimeSlotRepo == nil {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	tsID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -156,11 +156,11 @@ func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.QsTimeSlotRepo.Update(ctx, tsID, fields); err != nil {
 		slog.ErrorContext(ctx, "reschedule interview failed", "error", err, "id", tsID)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reschedule failed"})
+		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reschedule failed"})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{"timeSlotId": tsID, "statusId": rescheduleStatusID, "status": "RESCHEDULED"})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"timeSlotId": tsID, "statusId": rescheduleStatusID, "status": "RESCHEDULED"})
 }
 
 // ──────────────────────────────────────────────
@@ -168,7 +168,7 @@ func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) GetWaitingQueue(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusOK, []map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, []map[string]any{
 		{
 			"id": "wq-1", "userId": "par-301", "projectId": "proj-101",
 			"participantName": "Alice Johnson", "participantEmail": "alice@hospital.org",
@@ -191,17 +191,17 @@ func (h *Handler) GetWaitingQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) AddToWaitingQueue(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusCreated, map[string]any{
-		"id": "wq-" + support.ID()[:8], "status": "waiting", "waitingSince": support.Now(),
+	qualapi.WriteJSON(w, http.StatusCreated, map[string]any{
+		"id": "wq-" + qualapi.ID()[:8], "status": "waiting", "waitingSince": qualapi.Now(),
 	})
 }
 
 func (h *Handler) RemoveFromWaitingQueue(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 func (h *Handler) TriggerMatching(w http.ResponseWriter, r *http.Request) {
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
 		"assigned": 2, "invited": 3, "message": "Matching complete. 2 assigned, 3 invited.",
 	})
 }
