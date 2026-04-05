@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
-	"github.com/InCrowd/unified-qual-api/integrationintegrationtests/testserver"
+	"github.com/InCrowd/unified-qual-api/integrationtests/testserver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
