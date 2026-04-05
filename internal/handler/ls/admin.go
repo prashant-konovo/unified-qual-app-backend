@@ -35,7 +35,7 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsUserRepo == nil {
+	if !h.AdminService.QsAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "An error occured while adding user roles",
@@ -44,11 +44,11 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy flow: look up user by email (including deleted users)
-	user, _ := h.QsUserRepo.GetByEmailIncludeDeleted(r.Context(), req.Email)
+	user, _ := h.AdminService.GetByEmailIncludeDeleted(r.Context(), req.Email)
 
 	if user == nil {
 		// User doesn't exist → create user + role + client + comm prefs
-		userID, err := h.QsUserRepo.Create(r.Context(), req.FirstName, req.LastName, req.Email, "", []int{req.RoleID})
+		userID, err := h.AdminService.CreateQsUser(r.Context(), req.FirstName, req.LastName, req.Email, "", []int{req.RoleID})
 		if err != nil {
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
@@ -56,8 +56,8 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		_ = h.QsUserRepo.AddUserClient(r.Context(), userID, req.ClientID)
-		_ = h.QsUserRepo.CreateUserCommPrefs(r.Context(), userID, req.Email, req.CognitoUserID)
+		_ = h.AdminService.AddUserClient(r.Context(), userID, req.ClientID)
+		_ = h.AdminService.CreateUserCommPrefs(r.Context(), userID, req.Email, req.CognitoUserID)
 		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"insertId":               userID,
 			"numberOfRecordsUpdated": 1,
@@ -67,15 +67,15 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 
 	if user.Deleted == 1 {
 		// User exists but deleted → restore + role + client
-		if err := h.QsUserRepo.RestoreByEmail(r.Context(), req.Email); err != nil {
+		if err := h.AdminService.RestoreByEmail(r.Context(), req.Email); err != nil {
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while adding user roles",
 			})
 			return
 		}
-		_ = h.QsUserRepo.AddRoles(r.Context(), user.ID, []int{req.RoleID})
-		_ = h.QsUserRepo.AddUserClient(r.Context(), user.ID, req.ClientID)
+		_ = h.AdminService.AddRoles(r.Context(), user.ID, []int{req.RoleID})
+		_ = h.AdminService.AddUserClient(r.Context(), user.ID, req.ClientID)
 		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"numberOfRecordsUpdated": 1,
 		})
@@ -83,7 +83,7 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// User exists and active → just add the role
-	if err := h.QsUserRepo.AddRoles(r.Context(), user.ID, []int{req.RoleID}); err != nil {
+	if err := h.AdminService.AddRoles(r.Context(), user.ID, []int{req.RoleID}); err != nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while adding user roles",
@@ -105,7 +105,7 @@ func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsUserRepo == nil {
+	if !h.AdminService.QsAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "An error occured while removing user roles",
@@ -114,7 +114,7 @@ func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy flow: look up user by email, delete role, then soft-delete user
-	user, err := h.QsUserRepo.GetByEmail(r.Context(), req.Email)
+	user, err := h.AdminService.GetByEmail(r.Context(), req.Email)
 	if err != nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
@@ -124,7 +124,7 @@ func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Delete the role
-	if err := h.QsUserRepo.DeleteRoles(r.Context(), user.ID, []int{req.RoleID}); err != nil {
+	if err := h.AdminService.DeleteRoles(r.Context(), user.ID, []int{req.RoleID}); err != nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while removing user roles",
@@ -132,7 +132,7 @@ func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Soft-delete the user (matching legacy deleteUserRoleAndDeleteUser transaction)
-	if err := h.QsUserRepo.SoftDelete(r.Context(), user.ID); err != nil {
+	if err := h.AdminService.SoftDelete(r.Context(), user.ID); err != nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while removing user roles",

@@ -78,6 +78,10 @@ func main() {
 	)
 	deps.AuthService = service.NewAuthService(cfg, svcClients.ICAuth, qsUserRepo)
 	deps.ProjectService = service.NewProjectService(irisProjectRepo, qsProjectRepo)
+	deps.ParticipantService = service.NewParticipantService(qsRespondentRepo, qsTimeSlotRepo)
+	deps.BookingService = service.NewBookingService(qsTimeSlotRepo)
+	deps.TranslationService = service.NewTranslationService(qsAnswerRepo, qsProjectRepo)
+	deps.AdminService = service.NewAdminService(qsUserRepo, irisUserRepo, qsTimeSlotRepo)
 	hs := handler.NewHandlers(deps)
 	r := router.New(hs, jwtAuth)
 

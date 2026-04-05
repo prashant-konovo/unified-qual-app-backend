@@ -560,6 +560,14 @@ func (r *UserRepo) CreateUserCommPrefs(ctx context.Context, userID int64, email,
 	return nil
 }
 
+// CreateUserCommPrefsAdmin inserts communication preferences with audit columns (legacy admin flow).
+func (r *UserRepo) CreateUserCommPrefsAdmin(ctx context.Context, userID int64, email string) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO user_communication_preferences (user_id, email, allow_contact_by_email, modified_by, created_by) VALUES (?, ?, 0, ?, ?)`,
+		userID, email, userID, userID)
+	return err
+}
+
 // GetEmailByCognitoID returns the email for a user looked up by cognito_user_id.
 func (r *UserRepo) GetEmailByCognitoID(ctx context.Context, cognitoID string) (string, error) {
 	var email string

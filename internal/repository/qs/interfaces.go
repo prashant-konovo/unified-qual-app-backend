@@ -221,6 +221,7 @@ type UserRepository interface {
 	RestoreByEmail(ctx context.Context, email string) error
 	AddUserClient(ctx context.Context, userID, clientID int64) error
 	CreateUserCommPrefs(ctx context.Context, userID int64, email, cognitoUserID string) error
+	CreateUserCommPrefsAdmin(ctx context.Context, userID int64, email string) error
 	GetEmailByCognitoID(ctx context.Context, cognitoID string) (string, error)
 	CheckUserIsQsToolAndI2(ctx context.Context, email string) (map[string]any, error)
 	GetAllUsersAdmin(ctx context.Context, cognitoUserID string) ([]map[string]any, error)

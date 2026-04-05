@@ -23,7 +23,7 @@ import (
 
 func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.BookingService.Available() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -46,7 +46,7 @@ func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Bookings are timeslots that have a linked respondent (non-OPEN status)
-	slots, total, err := h.QsTimeSlotRepo.List(ctx, page, pageSize, projectID, nil, nil, nil, nil)
+	slots, total, err := h.BookingService.ListTimeSlots(ctx, page, pageSize, projectID, nil, nil, nil, nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "list bookings failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list bookings"})
@@ -102,7 +102,7 @@ func (h *Handler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetBookingsByUser(w http.ResponseWriter, r *http.Request) {
 	// This returns timeslots linked to a specific respondent
-	if h.QsTimeSlotRepo == nil {
+	if !h.BookingService.Available() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -119,7 +119,7 @@ func (h *Handler) GetBookingsByUser(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateBooking(w http.ResponseWriter, r *http.Request) {
 	// Booking update is a timeslot status change
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.BookingService.Available() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -143,7 +143,7 @@ func (h *Handler) UpdateBooking(w http.ResponseWriter, r *http.Request) {
 		fields["status_id"] = *body.StatusID
 	}
 
-	if err := h.QsTimeSlotRepo.Update(ctx, tsID, fields); err != nil {
+	if err := h.BookingService.UpdateTimeSlot(ctx, tsID, fields); err != nil {
 		slog.ErrorContext(ctx, "update booking failed", "error", err, "id", tsID)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 		return
@@ -154,7 +154,7 @@ func (h *Handler) UpdateBooking(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) UpdateBookingReward(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.BookingService.Available() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -174,7 +174,7 @@ func (h *Handler) UpdateBookingReward(w http.ResponseWriter, r *http.Request) {
 	if req.RewardStatus == "" {
 		req.RewardStatus = "not_credited"
 	}
-	if err := h.QsTimeSlotRepo.UpsertReward(ctx, bookingID, req.RewardPoints, req.RewardStatus); err != nil {
+	if err := h.BookingService.UpsertReward(ctx, bookingID, req.RewardPoints, req.RewardStatus); err != nil {
 		slog.Error("update booking reward", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to update reward"})
 		return

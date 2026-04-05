@@ -21,8 +21,8 @@ import (
 
 // GetLocalesReal returns locales from the QS DB.
 func (h *Handler) GetLocalesReal(w http.ResponseWriter, r *http.Request) {
-	if h.QsAnswerRepo != nil {
-		locales, err := h.QsAnswerRepo.ListLocales(r.Context())
+	if h.TranslationService.AnswerRepoAvailable() {
+		locales, err := h.TranslationService.ListLocales(r.Context())
 		if err != nil {
 			slog.Error("list locales failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -57,8 +57,8 @@ func (h *Handler) DeleteTopicTranslation(w http.ResponseWriter, r *http.Request)
 	topicID, _ := strconv.ParseInt(parts[0], 10, 64)
 	langCode := parts[1]
 
-	if h.QsAnswerRepo != nil {
-		if err := h.QsAnswerRepo.DeleteTopicTranslation(r.Context(), topicID, langCode); err != nil {
+	if h.TranslationService.AnswerRepoAvailable() {
+		if err := h.TranslationService.DeleteTopicTranslation(r.Context(), topicID, langCode); err != nil {
 			slog.Error("delete topic translation failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
@@ -74,8 +74,8 @@ func (h *Handler) DeleteTranslation(w http.ResponseWriter, r *http.Request) {
 	langCode := chi.URLParam(r, "langCode")
 	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
 
-	if h.QsAnswerRepo != nil {
-		if err := h.QsAnswerRepo.DeleteTranslation(r.Context(), projectID, langCode); err != nil {
+	if h.TranslationService.AnswerRepoAvailable() {
+		if err := h.TranslationService.DeleteTranslation(r.Context(), projectID, langCode); err != nil {
 			slog.Error("delete translation failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return

@@ -49,9 +49,9 @@ func (h *Handler) UpdateTopicTranslations(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if h.QsAnswerRepo != nil {
+	if h.TranslationService.AnswerRepoAvailable() {
 		for _, t := range req.Translations {
-			if err := h.QsAnswerRepo.UpdateTopicTranslation(r.Context(), projectID, t.TopicID, t.LanguageCode, t.TranslatedName); err != nil {
+			if err := h.TranslationService.UpdateTopicTranslation(r.Context(), projectID, t.TopicID, t.LanguageCode, t.TranslatedName); err != nil {
 				slog.Error("update translation failed", "topicId", t.TopicID, "error", err)
 			}
 		}

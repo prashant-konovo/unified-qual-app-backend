@@ -28,6 +28,10 @@ type Deps struct {
 	QsInterviewsRepo qs.InterviewsRepository
 	AuthService      *service.AuthService
 	ProjectService   *service.ProjectService
+	ParticipantService *service.ParticipantService
+	BookingService     *service.BookingService
+	TranslationService *service.TranslationService
+	AdminService       *service.AdminService
 }
 
 // NewDeps creates the shared dependency container.

@@ -21,7 +21,7 @@ import (
 // ──────────────────────────────────────────────
 
 func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsProjectRepo == nil {
+	if !h.TranslationService.ProjectRepoAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -34,7 +34,7 @@ func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) 
 
 	ctx := r.Context()
 
-	topics, err := h.QsProjectRepo.GetTopicsByProjectMRA(ctx, projectID)
+	topics, err := h.TranslationService.GetTopicsByProjectMRA(ctx, projectID)
 	if err != nil {
 		slog.Error("get topics by project failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err})
@@ -42,7 +42,7 @@ func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get project status once — legacy checks per-topic but status is the same
-	projectStatusID, err := h.QsProjectRepo.GetProjectStatusByIdMRA(ctx, projectID)
+	projectStatusID, err := h.TranslationService.GetProjectStatusByIdMRA(ctx, projectID)
 	if err != nil {
 		slog.Error("get project status failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err})
@@ -52,7 +52,7 @@ func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) 
 	// Get scheduled languages once (only if project status == 2)
 	var scheduledLanguages []string
 	if projectStatusID == 2 {
-		scheduledLanguages, err = h.QsProjectRepo.GetRespondersLanguagesByProjectIdMRA(ctx, projectID)
+		scheduledLanguages, err = h.TranslationService.GetRespondersLanguagesByProjectIdMRA(ctx, projectID)
 		if err != nil {
 			slog.Error("get responders languages failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err})
@@ -87,7 +87,7 @@ func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) 
 // ──────────────────────────────────────────────
 
 func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsProjectRepo == nil {
+	if !h.TranslationService.ProjectRepoAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -121,7 +121,7 @@ func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 			continue
 		}
 
-		exists, err := h.QsProjectRepo.GetTopicsByProjectIdAndLanguageIdMRA(ctx, projectID, languageID)
+		exists, err := h.TranslationService.GetTopicsByProjectIdAndLanguageIdMRA(ctx, projectID, languageID)
 		if err != nil {
 			slog.Error("check topic exists failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -132,9 +132,9 @@ func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		}
 
 		if exists {
-			err = h.QsProjectRepo.UpdateTopicByProjectAndLanguageMRA(ctx, topicName, languageID, projectID, req.UserID)
+			err = h.TranslationService.UpdateTopicByProjectAndLanguageMRA(ctx, topicName, languageID, projectID, req.UserID)
 		} else {
-			err = h.QsProjectRepo.AddTopicByProjectAndLanguageMRA(ctx, topicName, languageID, projectID, req.UserID)
+			err = h.TranslationService.AddTopicByProjectAndLanguageMRA(ctx, topicName, languageID, projectID, req.UserID)
 		}
 		if err != nil {
 			slog.Error("upsert topic translation failed", "error", err)
@@ -156,7 +156,7 @@ func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 // ──────────────────────────────────────────────
 
 func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsProjectRepo == nil {
+	if !h.TranslationService.ProjectRepoAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -172,7 +172,7 @@ func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 	ctx := r.Context()
 
 	// Check if scheduled interviews exist for this language
-	projectStatusID, err := h.QsProjectRepo.GetProjectStatusByIdMRA(ctx, projectID)
+	projectStatusID, err := h.TranslationService.GetProjectStatusByIdMRA(ctx, projectID)
 	if err != nil {
 		slog.Error("get project status failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -183,7 +183,7 @@ func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 	}
 
 	if projectStatusID == 2 {
-		scheduledLanguages, err := h.QsProjectRepo.GetRespondersLanguagesByProjectIdMRA(ctx, projectID)
+		scheduledLanguages, err := h.TranslationService.GetRespondersLanguagesByProjectIdMRA(ctx, projectID)
 		if err != nil {
 			slog.Error("get responders languages failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -208,7 +208,7 @@ func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.QsProjectRepo.DeleteTopicByProjectAndLanguageMRA(ctx, projectID, languageID); err != nil {
+	if err := h.TranslationService.DeleteTopicByProjectAndLanguageMRA(ctx, projectID, languageID); err != nil {
 		slog.Error("delete topic translation failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
@@ -229,21 +229,21 @@ func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 // ──────────────────────────────────────────────────────────────────────────────
 
 func (h *Handler) GetAllLocalisationsMRA(w http.ResponseWriter, r *http.Request) {
-	allLangs, err := h.QsProjectRepo.GetAllLanguageLocalisationsMRA(r.Context())
+	allLangs, err := h.TranslationService.GetAllLanguageLocalisationsMRA(r.Context())
 	if err != nil {
 		slog.Error("get all localisations mra: all", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
 		return
 	}
 
-	langData, err := h.QsProjectRepo.GetDataFromLanguageLocalisationsMRA(r.Context())
+	langData, err := h.TranslationService.GetDataFromLanguageLocalisationsMRA(r.Context())
 	if err != nil {
 		slog.Error("get all localisations mra: data", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
 		return
 	}
 
-	countriesData, err := h.QsProjectRepo.GetCountriesWithLocalisationsMRA(r.Context())
+	countriesData, err := h.TranslationService.GetCountriesWithLocalisationsMRA(r.Context())
 	if err != nil {
 		slog.Error("get all localisations mra: countries", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
@@ -271,7 +271,7 @@ func (h *Handler) DeleteTranslationMRA(w http.ResponseWriter, r *http.Request) {
 	translationToDelete := chi.URLParam(r, "transaltion_to_delete")
 
 	// Check for scheduled interviews
-	projectStatusID, err := h.QsProjectRepo.GetProjectStatusByIdMRA(r.Context(), projectID)
+	projectStatusID, err := h.TranslationService.GetProjectStatusByIdMRA(r.Context(), projectID)
 	if err != nil {
 		slog.Error("delete translation mra: get project status", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
@@ -279,7 +279,7 @@ func (h *Handler) DeleteTranslationMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if projectStatusID == 2 {
-		respondersLanguages, err := h.QsProjectRepo.GetRespondersLanguagesByProjectIdMRA(r.Context(), projectID)
+		respondersLanguages, err := h.TranslationService.GetRespondersLanguagesByProjectIdMRA(r.Context(), projectID)
 		if err != nil {
 			slog.Error("delete translation mra: get responders languages", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
@@ -301,7 +301,7 @@ func (h *Handler) DeleteTranslationMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.QsProjectRepo.DeleteMeetingInformationTranslationMRA(r.Context(), projectID, languageID)
+	result, err := h.TranslationService.DeleteMeetingInformationTranslationMRA(r.Context(), projectID, languageID)
 	if err != nil {
 		slog.Error("delete translation mra", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})

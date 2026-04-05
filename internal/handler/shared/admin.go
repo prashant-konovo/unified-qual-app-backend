@@ -28,8 +28,8 @@ func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 	var allUsers []map[string]any
 
 	// QS users
-	if (source == "" || source == "qs") && h.QsUserRepo != nil {
-		users, total, err := h.QsUserRepo.List(ctx, page, pageSize, nil, search)
+	if (source == "" || source == "qs") && h.AdminService.QsAvailable() {
+		users, total, err := h.AdminService.ListQsUsers(ctx, page, pageSize, nil, search)
 		if err != nil {
 			slog.ErrorContext(ctx, "list QS users failed", "error", err)
 		} else {
@@ -54,8 +54,8 @@ func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// IRIS users
-	if (source == "" || source == "iris") && h.IrisUserRepo != nil {
-		users, total, err := h.IrisUserRepo.List(ctx, page, pageSize, nil, search)
+	if (source == "" || source == "iris") && h.AdminService.IrisAvailable() {
+		users, total, err := h.AdminService.ListIrisUsers(ctx, page, pageSize, nil, search)
 		if err != nil {
 			slog.ErrorContext(ctx, "list IRIS users failed", "error", err)
 		} else {
@@ -110,8 +110,8 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	source := support.ResolveSource(r)
-	if (source == "" || source == "qs") && h.QsUserRepo != nil {
-		uid, err := h.QsUserRepo.Create(r.Context(), req.FirstName, req.LastName, req.Email, req.TimeZone, req.RoleIDs)
+	if (source == "" || source == "qs") && h.AdminService.QsAvailable() {
+		uid, err := h.AdminService.CreateQsUser(r.Context(), req.FirstName, req.LastName, req.Email, req.TimeZone, req.RoleIDs)
 		if err != nil {
 			slog.Error("create admin user failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -121,11 +121,7 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Legacy side effect: create user_communication_preferences row
-		if h.DB.QS != nil {
-			_, _ = h.DB.QS.ExecContext(r.Context(),
-				`INSERT INTO user_communication_preferences (user_id, email, allow_contact_by_email, modified_by, created_by) VALUES (?, ?, 0, ?, ?)`,
-				uid, req.Email, uid, uid)
-		}
+		_ = h.AdminService.CreateUserCommPrefsAdmin(r.Context(), uid, req.Email)
 		// Legacy returns created user row with HTTP 200
 		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"id": uid, "first_name": req.FirstName, "last_name": req.LastName,

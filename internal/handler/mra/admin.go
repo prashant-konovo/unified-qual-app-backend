@@ -24,7 +24,7 @@ import (
 // Contract-identical with legacy QS Tool: GET /qstoolAdmin/get-all-users
 // Response: flat array of user rows (result.records from data-api-client)
 func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsUserRepo == nil {
+	if !h.AdminService.QsAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "Error while getting all users",
@@ -34,7 +34,7 @@ func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
 
 	cognitoUserID := r.URL.Query().Get("cognitoUserId")
 
-	records, err := h.QsUserRepo.GetAllUsersAdmin(r.Context(), cognitoUserID)
+	records, err := h.AdminService.GetAllUsersAdmin(r.Context(), cognitoUserID)
 	if err != nil {
 		slog.Error("get all users admin failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -52,12 +52,12 @@ func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
 // Contract-identical: returns [{firstName, lastName, id}]
 // Note: Legacy SQL has client_id=1 hardcoded, ignoring the path parameter.
 func (h *Handler) GetAllProjectManagersMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsUserRepo == nil {
+	if !h.AdminService.QsAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
-	records, err := h.QsUserRepo.GetAllProjectManagersListMRA(r.Context())
+	records, err := h.AdminService.GetAllProjectManagersListMRA(r.Context())
 	if err != nil {
 		slog.Error("get all project managers mra failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -81,7 +81,7 @@ func (h *Handler) GetPMTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
 	clientIDStr := chi.URLParam(r, "client_id")
 	clientID, _ := strconv.ParseInt(clientIDStr, 10, 64)
 
-	if h.QsTimeSlotRepo == nil {
+	if !h.AdminService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -99,7 +99,7 @@ func (h *Handler) GetPMTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if body.Pending {
-		records, err := h.QsTimeSlotRepo.GetAllPendingInterviewsPerProjectMRA(ctx, body.ProjectID, clientID)
+		records, err := h.AdminService.GetAllPendingInterviewsPerProjectMRA(ctx, body.ProjectID, clientID)
 		if err != nil {
 			slog.Error("get pending interviews per project mra failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -122,11 +122,11 @@ func (h *Handler) GetPMTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
 	var records []map[string]any
 	var err error
 	if body.FilterBy == "Projects" && len(body.FilteredItems) > 0 {
-		records, err = h.QsTimeSlotRepo.GetPMTimeSlotsByClientIdWithProjectFilterMRA(ctx, clientID, body.FilteredItems)
+		records, err = h.AdminService.GetPMTimeSlotsByClientIdWithProjectFilterMRA(ctx, clientID, body.FilteredItems)
 	} else if body.FilterBy == "Moderators" && len(body.FilteredItems) > 0 {
-		records, err = h.QsTimeSlotRepo.GetPMTimeSlotsByClientIdWithModeratorFilterMRA(ctx, clientID, body.FilteredItems)
+		records, err = h.AdminService.GetPMTimeSlotsByClientIdWithModeratorFilterMRA(ctx, clientID, body.FilteredItems)
 	} else {
-		records, err = h.QsTimeSlotRepo.GetPMTimeSlotsByClientIdMRA(ctx, clientID)
+		records, err = h.AdminService.GetPMTimeSlotsByClientIdMRA(ctx, clientID)
 	}
 	if err != nil {
 		slog.Error("get pm timeslots mra failed", "error", err)
@@ -143,7 +143,7 @@ func (h *Handler) GetAvailabilitiesForPMMRA(w http.ResponseWriter, r *http.Reque
 	clientIDStr := chi.URLParam(r, "client_id")
 	clientID, _ := strconv.ParseInt(clientIDStr, 10, 64)
 
-	if h.QsUserRepo == nil {
+	if !h.AdminService.QsAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -161,11 +161,11 @@ func (h *Handler) GetAvailabilitiesForPMMRA(w http.ResponseWriter, r *http.Reque
 	var records []map[string]any
 	var err error
 	if body.FilterBy == "Projects" && len(body.FilteredItems) > 0 {
-		records, err = h.QsUserRepo.GetAllModeratorsAvailabilityForPMWithProjectFilterMRA(ctx, clientID, body.FilteredItems)
+		records, err = h.AdminService.GetAllModeratorsAvailabilityForPMWithProjectFilterMRA(ctx, clientID, body.FilteredItems)
 	} else if body.FilterBy == "Moderators" && len(body.FilteredItems) > 0 {
-		records, err = h.QsUserRepo.GetAllModeratorsAvailabilityForPMWithModeratorFilterMRA(ctx, clientID, body.FilteredItems)
+		records, err = h.AdminService.GetAllModeratorsAvailabilityForPMWithModeratorFilterMRA(ctx, clientID, body.FilteredItems)
 	} else {
-		records, err = h.QsUserRepo.GetAllModeratorsAvailabilityForPMMRA(ctx, clientID)
+		records, err = h.AdminService.GetAllModeratorsAvailabilityForPMMRA(ctx, clientID)
 	}
 	if err != nil {
 		slog.Error("get availabilities for pm mra failed", "error", err)

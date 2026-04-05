@@ -545,6 +545,24 @@ func (_c *MockQsUserRepository_CreateUserCommPrefs_Call) RunAndReturn(run func(c
 	return _c
 }
 
+// CreateUserCommPrefsAdmin provides a mock function with given fields: ctx, userID, email
+func (_m *MockQsUserRepository) CreateUserCommPrefsAdmin(ctx context.Context, userID int64, email string) error {
+	ret := _m.Called(ctx, userID, email)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateUserCommPrefsAdmin")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64, string) error); ok {
+		r0 = rf(ctx, userID, email)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // DeleteExternalCalStatusMRA provides a mock function with given fields: ctx, moderatorID
 func (_m *MockQsUserRepository) DeleteExternalCalStatusMRA(ctx context.Context, moderatorID int64) error {
 	ret := _m.Called(ctx, moderatorID)

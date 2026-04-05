@@ -23,7 +23,7 @@ import (
 // ──────────────────────────────────────────────
 
 func (h *Handler) ThirdPartyIntegrateMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsRespondentRepo == nil {
+	if !h.ParticipantService.Available() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "repository not available",
 			"errorMessage": "An error occured in third party integration",
@@ -36,7 +36,7 @@ func (h *Handler) ThirdPartyIntegrateMRA(w http.ResponseWriter, r *http.Request)
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
 	// Legacy uses hardcoded test values
-	insertID, err := h.QsRespondentRepo.CreateRespondentMRA(
+	insertID, err := h.ParticipantService.CreateRespondentMRA(
 		r.Context(),
 		"Mohammed",    // firstName
 		"Abadi",       // lastName
@@ -117,7 +117,7 @@ func (h *Handler) LogFrontEndEventMRA(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) QualEligibilityMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsTimeSlotRepo == nil {
+	if !h.ParticipantService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "repository not available",
 			"errorMessage": "repository not available",
@@ -168,7 +168,7 @@ func (h *Handler) QualEligibilityMRA(w http.ResponseWriter, r *http.Request) {
 		// Convert participant_id to string (may arrive as number or string)
 		pidStr := fmt.Sprintf("%v", pid)
 
-		if err := h.QsTimeSlotRepo.UpsertEligibilityStatusMRA(ctx, pidStr, isEligible, body.Reason, body.UpdatedBy); err != nil {
+		if err := h.ParticipantService.UpsertEligibilityStatusMRA(ctx, pidStr, isEligible, body.Reason, body.UpdatedBy); err != nil {
 			slog.Error("upsert eligibility status failed", "participantId", pidStr, "error", err)
 			failedIDs = append(failedIDs, pid)
 			continue
@@ -176,7 +176,7 @@ func (h *Handler) QualEligibilityMRA(w http.ResponseWriter, r *http.Request) {
 
 		// Reset ineligible mail flag when marking ELIGIBLE
 		if isEligible {
-			if err := h.QsTimeSlotRepo.ResetIneligibleMailSentMRA(ctx, pidStr); err != nil {
+			if err := h.ParticipantService.ResetIneligibleMailSentMRA(ctx, pidStr); err != nil {
 				slog.Error("reset ineligible mail sent failed", "participantId", pidStr, "error", err)
 			}
 		}

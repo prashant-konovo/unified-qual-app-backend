@@ -24,7 +24,7 @@ import (
 
 func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsRespondentRepo == nil {
+	if !h.ParticipantService.Available() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -39,7 +39,7 @@ func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 	}
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
 
-	respondents, total, err := h.QsRespondentRepo.List(ctx, page, pageSize, search)
+	respondents, total, err := h.ParticipantService.List(ctx, page, pageSize, search)
 	if err != nil {
 		slog.ErrorContext(ctx, "list participants failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list participants"})
@@ -88,7 +88,7 @@ func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsRespondentRepo == nil {
+	if !h.ParticipantService.Available() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -115,7 +115,7 @@ func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 		TimeZone:            dto.ToNullStr(body.TimeZone),
 	}
 
-	respID, err := h.QsRespondentRepo.Create(ctx, resp)
+	respID, err := h.ParticipantService.Create(ctx, resp)
 	if err != nil {
 		slog.ErrorContext(ctx, "create participant failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create participant"})
@@ -124,13 +124,13 @@ func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 
 	// Add email as communication address (transport_type_id=1)
 	if body.Email != "" {
-		if _, err := h.QsRespondentRepo.CreateCommunicationAddress(ctx, respID, 1, body.Email); err != nil {
+		if _, err := h.ParticipantService.CreateCommunicationAddress(ctx, respID, 1, body.Email); err != nil {
 			slog.ErrorContext(ctx, "create participant email failed", "error", err)
 		}
 	}
 	// Add phone as communication address (transport_type_id=2)
 	if body.Phone != "" {
-		if _, err := h.QsRespondentRepo.CreateCommunicationAddress(ctx, respID, 2, body.Phone); err != nil {
+		if _, err := h.ParticipantService.CreateCommunicationAddress(ctx, respID, 2, body.Phone); err != nil {
 			slog.ErrorContext(ctx, "create participant phone failed", "error", err)
 		}
 	}
@@ -140,7 +140,7 @@ func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsRespondentRepo == nil {
+	if !h.ParticipantService.Available() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -151,7 +151,7 @@ func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.QsRespondentRepo.GetByID(ctx, respID)
+	resp, err := h.ParticipantService.GetByID(ctx, respID)
 	if err != nil {
 		slog.ErrorContext(ctx, "get participant failed", "error", err, "id", respID)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -185,7 +185,7 @@ func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get communication addresses
-	addrs, err := h.QsRespondentRepo.GetCommunicationAddresses(ctx, respID)
+	addrs, err := h.ParticipantService.GetCommunicationAddresses(ctx, respID)
 	if err != nil {
 		slog.ErrorContext(ctx, "get participant addresses failed", "error", err)
 	}

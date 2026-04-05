@@ -132,6 +132,10 @@ func New() *TestServer {
 	ts.Deps = deps
 	deps.AuthService = service.NewAuthService(cfg, nil, ts.QsUserRepo)
 	deps.ProjectService = service.NewProjectService(ts.IrisProjectRepo, ts.QsProjectRepo)
+	deps.ParticipantService = service.NewParticipantService(ts.QsRespondentRepo, ts.QsTimeSlotRepo)
+	deps.BookingService = service.NewBookingService(ts.QsTimeSlotRepo)
+	deps.TranslationService = service.NewTranslationService(ts.QsAnswerRepo, ts.QsProjectRepo)
+	deps.AdminService = service.NewAdminService(ts.QsUserRepo, ts.IrisUserRepo, ts.QsTimeSlotRepo)
 
 	// Build real handlers and router
 	hs := handler.NewHandlers(deps)
