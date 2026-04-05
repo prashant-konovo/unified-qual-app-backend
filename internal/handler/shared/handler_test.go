@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
+	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/service"
 	"github.com/InCrowd/unified-qual-api/internal/testutil"
 	"github.com/stretchr/testify/assert"
@@ -47,7 +48,7 @@ func TestHealth_AllDBsHealthy(t *testing.T) {
 // as healthy because "not_configured" is an acceptable status.
 func TestHealth_NoDB(t *testing.T) {
 	deps := testutil.TestDeps()
-	deps.DB = &config.DBPair{} // all nil
+	deps.DB = &database.DBPair{} // all nil
 	h := &Handler{deps}
 
 	rec := callHealth(h)

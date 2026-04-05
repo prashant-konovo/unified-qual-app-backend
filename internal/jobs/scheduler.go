@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
+	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/robfig/cron/v3"
@@ -12,7 +13,7 @@ import (
 // JobDeps holds all dependencies needed by scheduled jobs.
 type JobDeps struct {
 	Cfg             *config.Config
-	DB              *config.DBPair
+	DB              *database.DBPair
 	Services        *integration.ServiceClients
 	IrisSurveyRepo  iris.SurveyRepository
 	IrisProjectRepo iris.ProjectRepository

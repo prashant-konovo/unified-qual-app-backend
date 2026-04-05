@@ -2,6 +2,7 @@ package service
 
 import (
 	"github.com/InCrowd/unified-qual-api/internal/config"
+	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
@@ -12,7 +13,7 @@ import (
 // DB is retained solely for the Health endpoint.
 type Deps struct {
 	Cfg *config.Config
-	DB  *config.DBPair // used only by Health endpoint
+	DB  *database.DBPair // used only by Health endpoint
 
 	AuthService         *AuthService
 	ProjectService      *ProjectService

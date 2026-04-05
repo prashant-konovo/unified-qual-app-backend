@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
+	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/jobs"
@@ -22,7 +23,7 @@ func main() {
 	cfg := config.Load()
 	logger.Setup(cfg.LogLevel)
 
-	db := config.ConnectDatabases(cfg)
+	db := database.ConnectDatabases(cfg)
 	defer db.Close()
 
 	jwtAuth := middleware.NewJWTAuth(

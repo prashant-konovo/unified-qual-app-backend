@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
+	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/service"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/stretchr/testify/assert"
@@ -38,7 +39,7 @@ func TestConfig() *config.Config {
 func TestDeps() *service.Deps {
 	return &service.Deps{
 		Cfg: TestConfig(),
-		DB:  &config.DBPair{},
+		DB:  &database.DBPair{},
 	}
 }
 
