@@ -79,3 +79,13 @@ func (s *InterviewService) InvalidateInterviewMRA(ctx context.Context, timeSlotI
 func (s *InterviewService) GetAllInterviewsByOffsetAndActiveTab(ctx context.Context, clientID int64, externalClientsIDs, projectsIDs []string, search string, offset int, activeTab, paymentStatusCode string) ([]map[string]any, error) {
 	return s.interviewsRepo.GetAllInterviewsByOffsetAndActiveTab(ctx, clientID, externalClientsIDs, projectsIDs, search, offset, activeTab, paymentStatusCode)
 }
+
+// DeleteModeratorTimeSlotsByProject removes moderator assignments from open/confirmed timeslots.
+func (s *InterviewService) DeleteModeratorTimeSlotsByProject(ctx context.Context, projectID int64) (int64, error) {
+	return s.timeSlotRepo.DeleteModeratorTimeSlotsByProject(ctx, projectID)
+}
+
+// GetAvailableModeratorsCountByProject counts distinct moderators assigned to open timeslots.
+func (s *InterviewService) GetAvailableModeratorsCountByProject(ctx context.Context, projectID int64) (int, error) {
+	return s.timeSlotRepo.GetAvailableModeratorsCountByProject(ctx, projectID)
+}

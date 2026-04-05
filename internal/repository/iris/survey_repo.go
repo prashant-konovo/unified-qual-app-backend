@@ -3098,3 +3098,66 @@ func (r *SurveyRepo) CalculateSLCompletions(ctx context.Context, surveyID int64)
 	return r.PropagateBasisSurvey(ctx, surveyID, sl.ProjectID)
 }
 
+// CreateActivityLog inserts a row into the IRIS activity_log table.
+func (r *SurveyRepo) CreateActivityLog(ctx context.Context, eventType, description string, userID, projectID, timeSlotID int64, metaData string) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO activity_log (event_type, description, user_id, project_id, time_slot_id, meta_data, created_on)
+		 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+		eventType, description, userID, projectID, timeSlotID, metaData)
+	if err != nil {
+		return fmt.Errorf("create iris activity log: %w", err)
+	}
+	return nil
+}
+
+// UpsertInterviewMedia inserts or updates an interview_media row in IRIS.
+func (r *SurveyRepo) UpsertInterviewMedia(ctx context.Context, meetingID string, projectID, subscriptionID int64, chimeMeetingID string, recordingURL, bucket, key string, duration int, size int64) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO interview_media (meeting_id, project_id, subscription_id, chime_meeting_id,
+		 recording_url, s3_bucket, s3_key, duration_seconds, file_size, status, created_on)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', NOW())
+		 ON DUPLICATE KEY UPDATE recording_url=VALUES(recording_url), s3_bucket=VALUES(s3_bucket),
+		 s3_key=VALUES(s3_key), duration_seconds=VALUES(duration_seconds), file_size=VALUES(file_size),
+		 status='available', updated_on=NOW()`,
+		meetingID, projectID, subscriptionID, chimeMeetingID,
+		recordingURL, bucket, key, duration, size)
+	if err != nil {
+		return fmt.Errorf("upsert interview media: %w", err)
+	}
+	return nil
+}
+
+// ListSubscriptionsForQual returns subscriptions that have qual (project_type_id=2) projects.
+func (r *SurveyRepo) ListSubscriptionsForQual(ctx context.Context) ([]SubscriptionRow, error) {
+	rows, err := r.ro().QueryContext(ctx,
+		`SELECT DISTINCT s.id, s.company
+		 FROM subscription s
+		 JOIN project p ON p.subscription_id = s.id
+		 WHERE p.project_type_id = 2
+		 ORDER BY s.company`)
+	if err != nil {
+		return nil, fmt.Errorf("list subscriptions for qual: %w", err)
+	}
+	defer rows.Close()
+
+	var subs []SubscriptionRow
+	for rows.Next() {
+		var s SubscriptionRow
+		if err := rows.Scan(&s.ID, &s.Company); err != nil {
+			continue
+		}
+		subs = append(subs, s)
+	}
+	return subs, nil
+}
+
+// GetSubscriptionCompanyByID returns the company name for a subscription.
+func (r *SurveyRepo) GetSubscriptionCompanyByID(ctx context.Context, subscriptionID int64) (string, error) {
+	var company string
+	err := r.ro().QueryRowContext(ctx, "SELECT company FROM subscription WHERE id = ?", subscriptionID).Scan(&company)
+	if err != nil {
+		return "", fmt.Errorf("get subscription company by id: %w", err)
+	}
+	return company, nil
+}
+

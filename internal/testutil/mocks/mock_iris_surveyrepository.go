@@ -6551,3 +6551,31 @@ func NewMockIrisSurveyRepository(t interface {
 
 	return mock
 }
+
+// CreateActivityLog provides a mock function with given fields: ctx, eventType, description, userID, projectID, timeSlotID, metaData
+func (_m *MockIrisSurveyRepository) CreateActivityLog(ctx context.Context, eventType string, description string, userID int64, projectID int64, timeSlotID int64, metaData string) error {
+	ret := _m.Called(ctx, eventType, description, userID, projectID, timeSlotID, metaData)
+	return ret.Error(0)
+}
+
+// UpsertInterviewMedia provides a mock function with given fields: ctx, meetingID, projectID, subscriptionID, chimeMeetingID, recordingURL, bucket, key, duration, size
+func (_m *MockIrisSurveyRepository) UpsertInterviewMedia(ctx context.Context, meetingID string, projectID int64, subscriptionID int64, chimeMeetingID string, recordingURL string, bucket string, key string, duration int, size int64) error {
+	ret := _m.Called(ctx, meetingID, projectID, subscriptionID, chimeMeetingID, recordingURL, bucket, key, duration, size)
+	return ret.Error(0)
+}
+
+// ListSubscriptionsForQual provides a mock function with given fields: ctx
+func (_m *MockIrisSurveyRepository) ListSubscriptionsForQual(ctx context.Context) ([]iris.SubscriptionRow, error) {
+	ret := _m.Called(ctx)
+	var r0 []iris.SubscriptionRow
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]iris.SubscriptionRow)
+	}
+	return r0, ret.Error(1)
+}
+
+// GetSubscriptionCompanyByID provides a mock function with given fields: ctx, subscriptionID
+func (_m *MockIrisSurveyRepository) GetSubscriptionCompanyByID(ctx context.Context, subscriptionID int64) (string, error) {
+	ret := _m.Called(ctx, subscriptionID)
+	return ret.Get(0).(string), ret.Error(1)
+}

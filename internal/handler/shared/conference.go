@@ -110,8 +110,8 @@ func (h *Handler) GetMeetingMetadata(w http.ResponseWriter, r *http.Request) {
 	bearerToken := support.ExtractBearerToken(r)
 
 	// Try Conference Service for live metadata
-	if hash == "" && h.Services.Conference.Configured() {
-		meta, err := h.Services.Conference.GetMetadata(r.Context(), bearerToken)
+	if hash == "" && h.ConferenceService.ConferenceConfigured() {
+		meta, err := h.ConferenceService.GetConferenceMetadata(r.Context(), bearerToken)
 		if err == nil && meta != nil {
 			support.WriteJSON(w, http.StatusOK, meta)
 			return
@@ -169,8 +169,8 @@ func (h *Handler) GetAttendeesByMeetingID(w http.ResponseWriter, r *http.Request
 	bearerToken := support.ExtractBearerToken(r)
 
 	// Try Conference Service for live attendee data
-	if h.Services.Conference.Configured() {
-		attendees, err := h.Services.Conference.GetAttendees(r.Context(), meetingID, bearerToken)
+	if h.ConferenceService.ConferenceConfigured() {
+		attendees, err := h.ConferenceService.GetConferenceAttendees(r.Context(), meetingID, bearerToken)
 		if err == nil && attendees != nil {
 			support.WriteJSON(w, http.StatusOK, attendees)
 			return
@@ -199,8 +199,8 @@ func (h *Handler) GetRecordingStatus(w http.ResponseWriter, r *http.Request) {
 	bearerToken := support.ExtractBearerToken(r)
 
 	// Call Conference Service for real recording status
-	if h.Services.Conference.Configured() {
-		status, err := h.Services.Conference.GetRecordingStatus(r.Context(), meetingID, bearerToken)
+	if h.ConferenceService.ConferenceConfigured() {
+		status, err := h.ConferenceService.GetConferenceRecordingStatus(r.Context(), meetingID, bearerToken)
 		if err == nil && status != nil {
 			status["meetingId"] = meetingID
 			support.WriteJSON(w, http.StatusOK, status)
@@ -271,14 +271,8 @@ func (h *Handler) RecordingUploadCallback(w http.ResponseWriter, r *http.Request
 		"bucket", req.Bucket, "key", req.Key)
 
 	// Store recording metadata in IRIS DB
-	if h.DB.IRIS != nil {
-		_, _ = h.DB.IRIS.ExecContext(r.Context(),
-			`INSERT INTO interview_media (meeting_id, project_id, subscription_id, chime_meeting_id,
-			 recording_url, s3_bucket, s3_key, duration_seconds, file_size, status, created_on)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'available', NOW())
-			 ON DUPLICATE KEY UPDATE recording_url=VALUES(recording_url), s3_bucket=VALUES(s3_bucket),
-			 s3_key=VALUES(s3_key), duration_seconds=VALUES(duration_seconds), file_size=VALUES(file_size),
-			 status='available', updated_on=NOW()`,
+	if h.MediaService.Available() {
+		_ = h.MediaService.UpsertInterviewMedia(r.Context(),
 			meetingID, projectID, subscriptionID, chimeMeetingID,
 			req.RecordingURL, req.Bucket, req.Key, req.Duration, req.Size)
 	}
@@ -317,7 +311,7 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call Conference Service to create the Chime meeting
-	if h.Services.Conference.Configured() {
+	if h.ConferenceService.ConferenceConfigured() {
 		createReq := integration.MeetingCreateRequest{
 			ProjectID:      req.ProjectID,
 			SubscriptionID: req.SubscriptionID,
@@ -325,7 +319,7 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 			TimeSlotID:     req.TimeSlotID,
 			ExternalID:     req.ExternalID,
 		}
-		resp, err := h.Services.Conference.CreateMeeting(r.Context(), createReq, bearerToken)
+		resp, err := h.ConferenceService.CreateConferenceMeeting(r.Context(), createReq, bearerToken)
 		if err != nil {
 			slog.Error("conference create meeting failed", "error", err)
 			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to create meeting: " + err.Error()})
@@ -365,8 +359,8 @@ func (h *Handler) CreateTranscriptionOrder(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if h.Services.CastingWords.Configured() {
-		order, err := h.Services.CastingWords.CreateOrder(r.Context(), req.AudioURL)
+	if h.ConferenceService.CastingWordsConfigured() {
+		order, err := h.ConferenceService.CreateTranscriptionOrder(r.Context(), req.AudioURL)
 		if err != nil {
 			slog.Error("castingwords create order failed", "error", err)
 			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "transcription order failed: " + err.Error()})
@@ -385,8 +379,8 @@ func (h *Handler) CreateTranscriptionOrder(w http.ResponseWriter, r *http.Reques
 func (h *Handler) GetTranscriptionStatus(w http.ResponseWriter, r *http.Request) {
 	orderID := chi.URLParam(r, "orderId")
 
-	if h.Services.CastingWords.Configured() {
-		order, err := h.Services.CastingWords.GetOrderStatus(r.Context(), orderID)
+	if h.ConferenceService.CastingWordsConfigured() {
+		order, err := h.ConferenceService.GetTranscriptionStatus(r.Context(), orderID)
 		if err != nil {
 			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to get status"})
 			return
@@ -400,8 +394,8 @@ func (h *Handler) GetTranscriptionStatus(w http.ResponseWriter, r *http.Request)
 func (h *Handler) GetTranscript(w http.ResponseWriter, r *http.Request) {
 	orderID := chi.URLParam(r, "orderId")
 
-	if h.Services.CastingWords.Configured() {
-		transcript, err := h.Services.CastingWords.GetTranscript(r.Context(), orderID)
+	if h.ConferenceService.CastingWordsConfigured() {
+		transcript, err := h.ConferenceService.GetTranscript(r.Context(), orderID)
 		if err != nil {
 			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to get transcript"})
 			return
@@ -430,14 +424,14 @@ func (h *Handler) SendNotificationEmail(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Call Notification Service if configured
-	if h.Services.Notification.Configured() && len(req.Recipients) > 0 {
+	if h.ConferenceService.NotificationConfigured() && len(req.Recipients) > 0 {
 		msg := integration.EmailMessage{
 			To:          req.Recipients,
 			Subject:     req.Subject,
 			Body:        req.Body,
 			ContentType: "text/html",
 		}
-		if err := h.Services.Notification.SendEmail(r.Context(), msg); err != nil {
+		if err := h.ConferenceService.SendNotificationEmail(r.Context(), msg); err != nil {
 			slog.Warn("notification service send failed, logging only", "error", err)
 		} else {
 			slog.Info("notification email sent via service",
@@ -475,8 +469,8 @@ func (h *Handler) SendSMS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.Services.SMS.Configured() {
-		if err := h.Services.SMS.SendSMS(r.Context(), req.To, req.From, req.Message); err != nil {
+	if h.ConferenceService.SMSConfigured() {
+		if err := h.ConferenceService.SendSMS(r.Context(), req.To, req.From, req.Message); err != nil {
 			slog.Error("sms send failed", "error", err)
 			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "sms send failed: " + err.Error()})
 			return
@@ -493,33 +487,32 @@ func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 	bearerToken := support.ExtractBearerToken(r)
 
 	// Log meeting action
-	if h.DB.IRIS != nil {
+	if h.SurveyService.IrisAvailable() {
 		user := middleware.GetUser(r)
 		userSub := ""
 		if user != nil {
 			userSub = user.Sub
 		}
-		_, _ = h.DB.IRIS.ExecContext(r.Context(),
-			`INSERT INTO activity_log (event_type, description, meta_data, created_on)
-			 VALUES ('meeting_action', ?, ?, NOW())`,
+		_ = h.SurveyService.CreateIrisActivityLogSimple(r.Context(),
+			"meeting_action",
 			fmt.Sprintf("Meeting %s: %s", meetingID, action),
 			fmt.Sprintf(`{"meetingId":"%s","action":"%s","userId":"%s"}`, meetingID, action, userSub))
 	}
 
 	// Call Conference Service for real meeting actions
-	if h.Services.Conference.Configured() {
+	if h.ConferenceService.ConferenceConfigured() {
 		switch action {
 		case "end":
-			if err := h.Services.Conference.EndMeeting(r.Context(), meetingID, bearerToken); err != nil {
+			if err := h.ConferenceService.EndConferenceMeeting(r.Context(), meetingID, bearerToken); err != nil {
 				slog.Warn("conference end meeting failed", "meetingId", meetingID, "error", err)
 			}
 		case "start_recording":
-			if err := h.Services.Conference.StartRecording(r.Context(), meetingID, bearerToken); err != nil {
+			if err := h.ConferenceService.StartConferenceRecording(r.Context(), meetingID, bearerToken); err != nil {
 				slog.Warn("conference start recording failed", "meetingId", meetingID, "error", err)
 			}
 		}
 
-		meta, err := h.Services.Conference.GetRecordingStatus(r.Context(), meetingID, bearerToken)
+		meta, err := h.ConferenceService.GetConferenceRecordingStatus(r.Context(), meetingID, bearerToken)
 		if err == nil && meta != nil {
 			meta["action"] = action
 			meta["actionResult"] = "success"
@@ -559,8 +552,8 @@ func (h *Handler) MeetingUniversalJoin(w http.ResponseWriter, r *http.Request) {
 	bearerToken := support.ExtractBearerToken(r)
 
 	// Call Conference Service for real universal join
-	if h.Services.Conference.Configured() {
-		joinResp, err := h.Services.Conference.UniversalJoin(r.Context(), meetingID, bearerToken)
+	if h.ConferenceService.ConferenceConfigured() {
+		joinResp, err := h.ConferenceService.ConferenceUniversalJoin(r.Context(), meetingID, bearerToken)
 		if err == nil && joinResp != nil {
 			joinResp["joinTimestamp"] = support.Now()
 			support.WriteJSON(w, http.StatusOK, joinResp)

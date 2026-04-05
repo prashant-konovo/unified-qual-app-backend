@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
 
@@ -12,11 +13,15 @@ type PaymentService struct {
 	answerRepo   qs.AnswerRepository
 	timeSlotRepo qs.TimeSlotRepository
 	projectRepo  qs.ProjectRepository
+	lambda       *integration.LambdaClient
+	stepFn       *integration.StepFunctionsClient
+	awsEnv       string
+	icApiURL     string
 }
 
 // NewPaymentService creates a new PaymentService.
-func NewPaymentService(answerRepo qs.AnswerRepository, timeSlotRepo qs.TimeSlotRepository, projectRepo qs.ProjectRepository) *PaymentService {
-	return &PaymentService{answerRepo: answerRepo, timeSlotRepo: timeSlotRepo, projectRepo: projectRepo}
+func NewPaymentService(answerRepo qs.AnswerRepository, timeSlotRepo qs.TimeSlotRepository, projectRepo qs.ProjectRepository, lambda *integration.LambdaClient, stepFn *integration.StepFunctionsClient, awsEnv, icApiURL string) *PaymentService {
+	return &PaymentService{answerRepo: answerRepo, timeSlotRepo: timeSlotRepo, projectRepo: projectRepo, lambda: lambda, stepFn: stepFn, awsEnv: awsEnv, icApiURL: icApiURL}
 }
 
 // AnswerAvailable returns true if the QS answer repository is configured.
@@ -27,6 +32,34 @@ func (s *PaymentService) TimeSlotAvailable() bool { return s.timeSlotRepo != nil
 
 // ProjectAvailable returns true if the QS project repository is configured.
 func (s *PaymentService) ProjectAvailable() bool { return s.projectRepo != nil }
+
+func (s *PaymentService) LambdaConfigured() bool {
+	return s.lambda != nil && s.lambda.Configured()
+}
+
+func (s *PaymentService) InvokeLambda(ctx context.Context, functionName string, payload []byte) ([]byte, int32, error) {
+	return s.lambda.Invoke(ctx, functionName, payload)
+}
+
+func (s *PaymentService) FullLambdaName(baseName string) string {
+	return s.lambda.FullLambdaName(baseName)
+}
+
+func (s *PaymentService) StepFnConfigured() bool {
+	return s.stepFn != nil && s.stepFn.Configured()
+}
+
+func (s *PaymentService) StartStepFunctionExecution(ctx context.Context, stateMachineName string, input map[string]any) error {
+	return s.stepFn.StartExecution(ctx, stateMachineName, input)
+}
+
+func (s *PaymentService) AWSEnvironment() string {
+	return s.awsEnv
+}
+
+func (s *PaymentService) ICApiURL() string {
+	return s.icApiURL
+}
 
 // --- LS payment methods (QsAnswerRepo) ---
 
@@ -100,6 +133,11 @@ func (s *PaymentService) UpdateCanceledPaymentHistoryMRA(ctx context.Context, tx
 
 func (s *PaymentService) UpdateFailedPaymentHistoryMRA(ctx context.Context, timeSlotIDs []int64) error {
 	return s.timeSlotRepo.UpdateFailedPaymentHistoryMRA(ctx, timeSlotIDs)
+}
+
+// BeginQSTx starts a database transaction on the QS database via TimeSlotRepo.
+func (s *PaymentService) BeginQSTx(ctx context.Context) (*sql.Tx, error) {
+	return s.timeSlotRepo.BeginTx(ctx)
 }
 
 // --- MRA honorarium methods (QsProjectRepo) ---

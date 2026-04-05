@@ -171,3 +171,13 @@ func (s *SubscriptionService) GetProjectInquiryCrowds(ctx context.Context, inqui
 ) {
 	return s.irisRepo.GetProjectInquiryCrowds(ctx, inquiryID)
 }
+
+// ListSubscriptionsForQual returns subscriptions that have qual projects.
+func (s *SubscriptionService) ListSubscriptionsForQual(ctx context.Context) ([]iris.SubscriptionRow, error) {
+	return s.irisRepo.ListSubscriptionsForQual(ctx)
+}
+
+// GetSubscriptionCompanyByID returns the company name for a subscription.
+func (s *SubscriptionService) GetSubscriptionCompanyByID(ctx context.Context, subscriptionID int64) (string, error) {
+	return s.irisRepo.GetSubscriptionCompanyByID(ctx, subscriptionID)
+}

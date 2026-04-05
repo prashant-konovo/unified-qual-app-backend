@@ -28,30 +28,22 @@ import (
 // ──────────────────────────────────────────────
 
 func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	q := `SELECT DISTINCT s.id, s.company
-	      FROM subscription s
-	      JOIN project p ON p.subscription_id = s.id
-	      WHERE p.project_type_id = 2
-	      ORDER BY s.company`
-	rows, err := h.DB.IRISReadOnly.QueryContext(ctx, q)
+	if !h.SubscriptionService.Available() {
+		support.WriteJSON(w, http.StatusOK, []map[string]any{})
+		return
+	}
+	rows, err := h.SubscriptionService.ListSubscriptionsForQual(r.Context())
 	if err != nil {
 		slog.Error("list subscriptions", "err", err)
 		support.WriteJSON(w, http.StatusOK, []map[string]any{})
 		return
 	}
-	defer rows.Close()
 
 	subs := []map[string]any{}
-	for rows.Next() {
-		var id int64
-		var company string
-		if err := rows.Scan(&id, &company); err != nil {
-			continue
-		}
+	for _, row := range rows {
 		subs = append(subs, map[string]any{
-			"id":      strconv.FormatInt(id, 10),
-			"company": company,
+			"id":      strconv.FormatInt(row.ID, 10),
+			"company": row.Company,
 			"plan":    "enterprise",
 		})
 	}
@@ -64,9 +56,12 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetSubscription(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "id")
-	ctx := r.Context()
-	var company string
-	err := h.DB.IRISReadOnly.QueryRowContext(ctx, "SELECT company FROM subscription WHERE id = ?", sid).Scan(&company)
+	sidInt, _ := strconv.ParseInt(sid, 10, 64)
+	if !h.SubscriptionService.Available() {
+		support.WriteJSON(w, http.StatusOK, map[string]any{"id": sid, "company": "Unknown"})
+		return
+	}
+	company, err := h.SubscriptionService.GetSubscriptionCompanyByID(r.Context(), sidInt)
 	if err != nil {
 		support.WriteJSON(w, http.StatusOK, map[string]any{"id": sid, "company": "Unknown"})
 		return

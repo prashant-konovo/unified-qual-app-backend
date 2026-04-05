@@ -385,3 +385,13 @@ func (s *SurveyService) GetUnavailableModerators(ctx context.Context, projectID 
 func (s *SurveyService) GetSurveyByIdMRA(ctx context.Context, surveyID int64) (map[string]any, error) {
 	return s.qsRepo.GetSurveyByIdMRA(ctx, surveyID)
 }
+
+// CreateIrisActivityLog inserts a row into the IRIS activity_log table.
+func (s *SurveyService) CreateIrisActivityLog(ctx context.Context, eventType, description string, userID, projectID, timeSlotID int64, metaData string) error {
+	return s.irisRepo.CreateActivityLog(ctx, eventType, description, userID, projectID, timeSlotID, metaData)
+}
+
+// CreateIrisActivityLogSimple inserts a simpler activity_log entry (no user/project/timeslot IDs).
+func (s *SurveyService) CreateIrisActivityLogSimple(ctx context.Context, eventType, description, metaData string) error {
+	return s.irisRepo.CreateActivityLog(ctx, eventType, description, 0, 0, 0, metaData)
+}

@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+// SubscriptionRow holds a subscription ID and company name.
+type SubscriptionRow struct {
+	ID      int64
+	Company string
+}
+
 // ProjectRepository defines the contract for ProjectRepo.
 type ProjectRepository interface {
 	List(ctx context.Context, page, pageSize int, statusID *int, search string) ([]ProjectListRow, int, error)
@@ -137,6 +143,10 @@ type SurveyRepository interface {
 	CreateTimeSlotEvent(ctx context.Context, timeSlotID int64, gcalEventID string, role int, userID, observerID *int64) error
 	GetTimeSlotTimes(ctx context.Context, timeSlotID int64) (start, end time.Time, err error)
 	CalculateSLCompletions(ctx context.Context, surveyID int64) error
+	CreateActivityLog(ctx context.Context, eventType, description string, userID, projectID, timeSlotID int64, metaData string) error
+	UpsertInterviewMedia(ctx context.Context, meetingID string, projectID, subscriptionID int64, chimeMeetingID string, recordingURL, bucket, key string, duration int, size int64) error
+	ListSubscriptionsForQual(ctx context.Context) ([]SubscriptionRow, error)
+	GetSubscriptionCompanyByID(ctx context.Context, subscriptionID int64) (string, error)
 }
 
 // UserRepository defines the contract for UserRepo.

@@ -2644,3 +2644,25 @@ func NewMockQsTimeSlotRepository(t interface {
 
 	return mock
 }
+
+// BeginTx provides a mock function with given fields: ctx
+func (_m *MockQsTimeSlotRepository) BeginTx(ctx context.Context) (*sql.Tx, error) {
+	ret := _m.Called(ctx)
+	var r0 *sql.Tx
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(*sql.Tx)
+	}
+	return r0, ret.Error(1)
+}
+
+// DeleteModeratorTimeSlotsByProject provides a mock function with given fields: ctx, projectID
+func (_m *MockQsTimeSlotRepository) DeleteModeratorTimeSlotsByProject(ctx context.Context, projectID int64) (int64, error) {
+	ret := _m.Called(ctx, projectID)
+	return ret.Get(0).(int64), ret.Error(1)
+}
+
+// GetAvailableModeratorsCountByProject provides a mock function with given fields: ctx, projectID
+func (_m *MockQsTimeSlotRepository) GetAvailableModeratorsCountByProject(ctx context.Context, projectID int64) (int, error) {
+	ret := _m.Called(ctx, projectID)
+	return ret.Get(0).(int), ret.Error(1)
+}

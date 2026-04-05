@@ -1,7 +1,6 @@
 package shared
 
 import (
-	"database/sql"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -81,29 +80,28 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Fetch clientId from user_client table
-		if h.DB.QS != nil {
-			var clientID sql.NullInt64
-			_ = h.DB.QS.QueryRowContext(r.Context(),
-				"SELECT client_id FROM user_client WHERE user_id = ? LIMIT 1", userID).Scan(&clientID)
-			resp["clientId"] = dto.NullInt64(clientID)
+		if h.UserService.QsAvailable() {
+			clientID, _ := h.UserService.GetUserClientID(r.Context(), userID)
+			if clientID != 0 {
+				resp["clientId"] = clientID
+			}
 
 			// Fetch accountsSelected
-			var acctSel sql.NullInt64
-			_ = h.DB.QS.QueryRowContext(r.Context(),
-				"SELECT account_selection_account_id FROM user_account_selection WHERE userid = ? LIMIT 1", userID).Scan(&acctSel)
-			resp["accountsSelected"] = dto.NullInt64(acctSel)
+			acctSel, _ := h.UserService.GetUserAccountSelection(r.Context(), userID)
+			if acctSel != "" {
+				acctSelInt, _ := strconv.ParseInt(acctSel, 10, 64)
+				if acctSelInt != 0 {
+					resp["accountsSelected"] = acctSelInt
+				}
+			}
 
 			// Fetch clientsSelected
-			clientRows, err := h.DB.QS.QueryContext(r.Context(),
-				"SELECT client_selection_account_id FROM user_client_selection WHERE userid = ?", userID)
-			if err == nil {
-				defer clientRows.Close()
+			clientSelections, err := h.UserService.GetUserClientSelections(r.Context(), userID)
+			if err == nil && len(clientSelections) > 0 {
 				var clients []int64
-				for clientRows.Next() {
-					var cid int64
-					if clientRows.Scan(&cid) == nil {
-						clients = append(clients, cid)
-					}
+				for _, cs := range clientSelections {
+					cid, _ := strconv.ParseInt(cs, 10, 64)
+					clients = append(clients, cid)
 				}
 				if len(clients) > 0 {
 					resp["clientsSelected"] = clients
@@ -188,18 +186,14 @@ func (h *Handler) CreateEventLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log to IRIS activity_log if available
-	if h.DB.IRIS != nil {
-		_, _ = h.DB.IRIS.ExecContext(r.Context(),
-			`INSERT INTO activity_log (event_type, description, user_id, project_id, time_slot_id, meta_data, created_on)
-			 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+	if h.SurveyService.IrisAvailable() {
+		_ = h.SurveyService.CreateIrisActivityLog(r.Context(),
 			req.EventType, req.Description, req.UserID, req.ProjectID, req.TimeSlotID, req.MetaData)
 	}
 
 	// Write to QS event_log table
-	if h.DB.QS != nil {
-		_, _ = h.DB.QS.ExecContext(r.Context(),
-			`INSERT INTO event_log (event_type, description, user_id, project_id, time_slot_id, meta_data, created_on)
-			 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+	if h.UserService.QsAvailable() {
+		_ = h.UserService.CreateQSEventLog(r.Context(),
 			req.EventType, req.Description, req.UserID, req.ProjectID, req.TimeSlotID, req.MetaData)
 	}
 

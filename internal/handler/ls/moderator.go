@@ -388,9 +388,8 @@ func (h *Handler) UnlinkImportedModerator(w http.ResponseWriter, r *http.Request
 	modStr := chi.URLParam(r, "moderatorId")
 	moderatorID, _ := strconv.ParseInt(modStr, 10, 64)
 
-	if h.DB.QS != nil {
-		_, _ = h.DB.QS.ExecContext(r.Context(),
-			`DELETE FROM google_calendar_import WHERE moderator_id = ?`, moderatorID)
+	if h.UserService.QsAvailable() {
+		_ = h.UserService.DeleteGoogleCalendarImport(r.Context(), moderatorID)
 	}
 
 	support.WriteJSON(w, http.StatusOK, "Imported Moderator calendar has been unlinked")

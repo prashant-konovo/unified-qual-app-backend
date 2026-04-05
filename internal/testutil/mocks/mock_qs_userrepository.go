@@ -4207,3 +4207,37 @@ func NewMockQsUserRepository(t interface {
 
 	return mock
 }
+
+// GetUserClientID provides a mock function with given fields: ctx, userID
+func (_m *MockQsUserRepository) GetUserClientID(ctx context.Context, userID int64) (int64, error) {
+	ret := _m.Called(ctx, userID)
+	return ret.Get(0).(int64), ret.Error(1)
+}
+
+// GetUserAccountSelection provides a mock function with given fields: ctx, userID
+func (_m *MockQsUserRepository) GetUserAccountSelection(ctx context.Context, userID int64) (string, error) {
+	ret := _m.Called(ctx, userID)
+	return ret.Get(0).(string), ret.Error(1)
+}
+
+// GetUserClientSelections provides a mock function with given fields: ctx, userID
+func (_m *MockQsUserRepository) GetUserClientSelections(ctx context.Context, userID int64) ([]string, error) {
+	ret := _m.Called(ctx, userID)
+	var r0 []string
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]string)
+	}
+	return r0, ret.Error(1)
+}
+
+// CreateEventLog provides a mock function with given fields: ctx, eventType, description, userID, projectID, timeSlotID, metaData
+func (_m *MockQsUserRepository) CreateEventLog(ctx context.Context, eventType string, description string, userID int64, projectID int64, timeSlotID int64, metaData string) error {
+	ret := _m.Called(ctx, eventType, description, userID, projectID, timeSlotID, metaData)
+	return ret.Error(0)
+}
+
+// DeleteGoogleCalendarImport provides a mock function with given fields: ctx, moderatorID
+func (_m *MockQsUserRepository) DeleteGoogleCalendarImport(ctx context.Context, moderatorID int64) error {
+	ret := _m.Called(ctx, moderatorID)
+	return ret.Error(0)
+}

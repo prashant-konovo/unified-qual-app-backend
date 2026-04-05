@@ -342,17 +342,13 @@ func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if h.DB.QS != nil {
-		res, err := h.DB.QS.ExecContext(r.Context(),
-			`DELETE mts FROM moderator_time_slot mts
-			 INNER JOIN time_slot ts ON ts.id = mts.time_slot_id
-			 WHERE ts.project_id = ? AND ts.status_id IN (1, 2)`, projectID)
+	if h.InterviewService.TimeSlotAvailable() {
+		n, err := h.InterviewService.DeleteModeratorTimeSlotsByProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs reset mods failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
 			return
 		}
-		n, _ := res.RowsAffected()
 		support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": n, "source": "qs"})
 		return
 	}
@@ -439,12 +435,8 @@ func (h *Handler) GetAvailableModeratorsCount(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if h.DB.QS != nil {
-		var count int
-		_ = h.DB.QS.QueryRowContext(r.Context(),
-			`SELECT COUNT(DISTINCT mts.moderator_id) FROM moderator_time_slot mts
-			 INNER JOIN time_slot ts ON ts.id = mts.time_slot_id
-			 WHERE ts.project_id = ? AND ts.status_id = 1`, projectID).Scan(&count)
+	if h.InterviewService.TimeSlotAvailable() {
+		count, _ := h.InterviewService.GetAvailableModeratorsCountByProject(r.Context(), projectID)
 		support.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "qs"})
 		return
 	}

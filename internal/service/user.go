@@ -67,3 +67,25 @@ func (s *UserService) UpdateIrisUser(ctx context.Context, id int64, firstName, l
 func (s *UserService) GetIrisUserByEmail(ctx context.Context, email string) (*iris.ICUserWithRoles, error) {
 	return s.irisUserRepo.GetByEmail(ctx, email)
 }
+
+// --- Migrated from handler raw DB calls ---
+
+func (s *UserService) GetUserClientID(ctx context.Context, userID int64) (int64, error) {
+	return s.qsUserRepo.GetUserClientID(ctx, userID)
+}
+
+func (s *UserService) GetUserAccountSelection(ctx context.Context, userID int64) (string, error) {
+	return s.qsUserRepo.GetUserAccountSelection(ctx, userID)
+}
+
+func (s *UserService) GetUserClientSelections(ctx context.Context, userID int64) ([]string, error) {
+	return s.qsUserRepo.GetUserClientSelections(ctx, userID)
+}
+
+func (s *UserService) CreateQSEventLog(ctx context.Context, eventType, description string, userID, projectID, timeSlotID int64, metaData string) error {
+	return s.qsUserRepo.CreateEventLog(ctx, eventType, description, userID, projectID, timeSlotID, metaData)
+}
+
+func (s *UserService) DeleteGoogleCalendarImport(ctx context.Context, moderatorID int64) error {
+	return s.qsUserRepo.DeleteGoogleCalendarImport(ctx, moderatorID)
+}

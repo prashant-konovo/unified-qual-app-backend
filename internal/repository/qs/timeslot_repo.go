@@ -1461,3 +1461,34 @@ return fmt.Errorf("update failed payment history mra: %w", err)
 }
 return nil
 }
+
+// BeginTx starts a database transaction on the QS database.
+func (r *TimeSlotRepo) BeginTx(ctx context.Context) (*sql.Tx, error) {
+	return r.db.BeginTx(ctx, nil)
+}
+
+// DeleteModeratorTimeSlotsByProject removes moderator assignments from open/confirmed timeslots.
+func (r *TimeSlotRepo) DeleteModeratorTimeSlotsByProject(ctx context.Context, projectID int64) (int64, error) {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE mts FROM moderator_time_slot mts
+		 INNER JOIN time_slot ts ON ts.id = mts.time_slot_id
+		 WHERE ts.project_id = ? AND ts.status_id IN (1, 2)`, projectID)
+	if err != nil {
+		return 0, fmt.Errorf("delete moderator time slots by project: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+// GetAvailableModeratorsCountByProject counts distinct moderators assigned to open timeslots.
+func (r *TimeSlotRepo) GetAvailableModeratorsCountByProject(ctx context.Context, projectID int64) (int, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(DISTINCT mts.moderator_id) FROM moderator_time_slot mts
+		 INNER JOIN time_slot ts ON ts.id = mts.time_slot_id
+		 WHERE ts.project_id = ? AND ts.status_id = 1`, projectID).Scan(&count)
+	if err != nil && err != sql.ErrNoRows {
+		return 0, fmt.Errorf("get available moderators count by project: %w", err)
+	}
+	return count, nil
+}

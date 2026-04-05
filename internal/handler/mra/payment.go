@@ -220,7 +220,7 @@ func (h *Handler) processPendingPaymentsForTimeslotIdsMRA(ctx context.Context, p
 		return
 	}
 
-	tx, err := h.DB.QS.BeginTx(ctx, nil)
+	tx, err := h.PaymentService.BeginQSTx(ctx)
 	if err != nil {
 		slog.Error("processPendingPayments: begin tx", "error", err)
 		return

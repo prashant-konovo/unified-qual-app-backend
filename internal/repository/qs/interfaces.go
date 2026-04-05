@@ -193,6 +193,9 @@ type TimeSlotRepository interface {
 	UpdateCompletedPaymentHistoryMRA(ctx context.Context, tx *sql.Tx, timeSlotIDs []int64, paymentHistoryIDs []int64) error
 	UpdateCanceledPaymentHistoryMRA(ctx context.Context, tx *sql.Tx, timeSlotIDs []int64, paymentHistoryIDs []int64) error
 	UpdateFailedPaymentHistoryMRA(ctx context.Context, timeSlotIDs []int64) error
+	BeginTx(ctx context.Context) (*sql.Tx, error)
+	DeleteModeratorTimeSlotsByProject(ctx context.Context, projectID int64) (int64, error)
+	GetAvailableModeratorsCountByProject(ctx context.Context, projectID int64) (int, error)
 }
 
 // UserRepository defines the contract for UserRepo.
@@ -273,6 +276,13 @@ type UserRepository interface {
 	DeleteImportedAvailByModAndIdMRA(ctx context.Context, moderatorID, id int64) error
 	DeleteManualAvailByModAndIdMRA(ctx context.Context, moderatorID, id int64) error
 	AddManualAvailabilityMRA(ctx context.Context, moderatorID, clientID int64, startTime, endTime string) error
+
+	// --- Migrated from handler raw DB calls ---
+	GetUserClientID(ctx context.Context, userID int64) (int64, error)
+	GetUserAccountSelection(ctx context.Context, userID int64) (string, error)
+	GetUserClientSelections(ctx context.Context, userID int64) ([]string, error)
+	CreateEventLog(ctx context.Context, eventType, description string, userID, projectID, timeSlotID int64, metaData string) error
+	DeleteGoogleCalendarImport(ctx context.Context, moderatorID int64) error
 }
 
 // Compile-time interface satisfaction checks.

@@ -1775,3 +1775,68 @@ return fmt.Errorf("add manual availability mra: %w", err)
 }
 return nil
 }
+
+// GetUserClientID returns the client_id for a user from user_client.
+func (r *UserRepo) GetUserClientID(ctx context.Context, userID int64) (int64, error) {
+	var clientID sql.NullInt64
+	err := r.db.QueryRowContext(ctx,
+		"SELECT client_id FROM user_client WHERE user_id = ? LIMIT 1", userID).Scan(&clientID)
+	if err != nil && err != sql.ErrNoRows {
+		return 0, fmt.Errorf("get user client id: %w", err)
+	}
+	return clientID.Int64, nil
+}
+
+// GetUserAccountSelection returns the account_selection_account_id for a user.
+func (r *UserRepo) GetUserAccountSelection(ctx context.Context, userID int64) (string, error) {
+	var acctSel sql.NullInt64
+	err := r.db.QueryRowContext(ctx,
+		"SELECT account_selection_account_id FROM user_account_selection WHERE userid = ? LIMIT 1", userID).Scan(&acctSel)
+	if err != nil && err != sql.ErrNoRows {
+		return "", fmt.Errorf("get user account selection: %w", err)
+	}
+	if !acctSel.Valid {
+		return "", nil
+	}
+	return fmt.Sprintf("%d", acctSel.Int64), nil
+}
+
+// GetUserClientSelections returns client_selection_account_ids for a user.
+func (r *UserRepo) GetUserClientSelections(ctx context.Context, userID int64) ([]string, error) {
+	rows, err := r.db.QueryContext(ctx,
+		"SELECT client_selection_account_id FROM user_client_selection WHERE userid = ?", userID)
+	if err != nil {
+		return nil, fmt.Errorf("get user client selections: %w", err)
+	}
+	defer rows.Close()
+	var clients []string
+	for rows.Next() {
+		var cid int64
+		if rows.Scan(&cid) == nil {
+			clients = append(clients, fmt.Sprintf("%d", cid))
+		}
+	}
+	return clients, nil
+}
+
+// CreateEventLog inserts an event into the QS event_log table.
+func (r *UserRepo) CreateEventLog(ctx context.Context, eventType, description string, userID, projectID, timeSlotID int64, metaData string) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO event_log (event_type, description, user_id, project_id, time_slot_id, meta_data, created_on)
+		 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+		eventType, description, userID, projectID, timeSlotID, metaData)
+	if err != nil {
+		return fmt.Errorf("create qs event log: %w", err)
+	}
+	return nil
+}
+
+// DeleteGoogleCalendarImport removes google_calendar_import rows for a moderator.
+func (r *UserRepo) DeleteGoogleCalendarImport(ctx context.Context, moderatorID int64) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM google_calendar_import WHERE moderator_id = ?`, moderatorID)
+	if err != nil {
+		return fmt.Errorf("delete google calendar import: %w", err)
+	}
+	return nil
+}
