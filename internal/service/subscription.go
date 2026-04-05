@@ -2,18 +2,23 @@ package service
 
 import (
 	"context"
+	"io"
 
+	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 )
 
 // SubscriptionService encapsulates subscription, crowd, and inquiry logic.
 type SubscriptionService struct {
-	irisRepo iris.SurveyRepository
+	irisRepo              iris.SurveyRepository
+	s3                    *integration.S3Client
+	notification          *integration.NotificationClient
+	inquiryEmailRecipient string
 }
 
 // NewSubscriptionService creates a new SubscriptionService.
-func NewSubscriptionService(irisRepo iris.SurveyRepository) *SubscriptionService {
-	return &SubscriptionService{irisRepo: irisRepo}
+func NewSubscriptionService(irisRepo iris.SurveyRepository, s3 *integration.S3Client, notification *integration.NotificationClient, inquiryEmailRecipient string) *SubscriptionService {
+	return &SubscriptionService{irisRepo: irisRepo, s3: s3, notification: notification, inquiryEmailRecipient: inquiryEmailRecipient}
 }
 
 // Available returns true if the IRIS survey repository is configured.
@@ -180,4 +185,33 @@ func (s *SubscriptionService) ListSubscriptionsForQual(ctx context.Context) ([]i
 // GetSubscriptionCompanyByID returns the company name for a subscription.
 func (s *SubscriptionService) GetSubscriptionCompanyByID(ctx context.Context, subscriptionID int64) (string, error) {
 	return s.irisRepo.GetSubscriptionCompanyByID(ctx, subscriptionID)
+}
+
+// --- S3 / Notification delegation methods ---
+
+func (s *SubscriptionService) S3Configured() bool {
+	return s.s3 != nil && s.s3.Configured()
+}
+
+func (s *SubscriptionService) UploadFileToS3(ctx context.Context, bucket, key string, body io.Reader, contentType string) (string, error) {
+	return s.s3.UploadFile(ctx, bucket, key, body, contentType)
+}
+
+func (s *SubscriptionService) InquiryBucket() string {
+	if s.s3 == nil {
+		return ""
+	}
+	return s.s3.InquiryBucket()
+}
+
+func (s *SubscriptionService) NotificationConfigured() bool {
+	return s.notification != nil && s.notification.Configured()
+}
+
+func (s *SubscriptionService) SendNotificationEmail(ctx context.Context, msg integration.EmailMessage) error {
+	return s.notification.SendEmail(ctx, msg)
+}
+
+func (s *SubscriptionService) InquiryEmailRecipient() string {
+	return s.inquiryEmailRecipient
 }

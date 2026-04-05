@@ -131,20 +131,20 @@ func New() *TestServer {
 	}
 	ts.Deps = deps
 	deps.AuthService = service.NewAuthService(cfg, nil, ts.QsUserRepo)
-	deps.ProjectService = service.NewProjectService(ts.IrisProjectRepo, ts.QsProjectRepo)
+	deps.ProjectService = service.NewProjectService(ts.IrisProjectRepo, ts.QsProjectRepo, nil)
 	deps.ParticipantService = service.NewParticipantService(ts.QsRespondentRepo, ts.QsTimeSlotRepo)
 	deps.BookingService = service.NewBookingService(ts.QsTimeSlotRepo)
 	deps.TranslationService = service.NewTranslationService(ts.QsAnswerRepo, ts.QsProjectRepo)
 	deps.AdminService = service.NewAdminService(ts.QsUserRepo, ts.IrisUserRepo, ts.QsTimeSlotRepo)
-	deps.ConferenceService = service.NewConferenceService(ts.QsConferenceRepo)
-	deps.PaymentService = service.NewPaymentService(ts.QsAnswerRepo, ts.QsTimeSlotRepo, ts.QsProjectRepo)
+	deps.ConferenceService = service.NewConferenceService(ts.QsConferenceRepo, nil, nil, nil, nil)
+	deps.PaymentService = service.NewPaymentService(ts.QsAnswerRepo, ts.QsTimeSlotRepo, ts.QsProjectRepo, nil, nil, "", "")
 	deps.NotificationService = service.NewNotificationService(ts.IrisSurveyRepo, ts.QsAnswerRepo)
-	deps.MediaService = service.NewMediaService(ts.IrisSurveyRepo)
-	deps.UserService = service.NewUserService(ts.QsUserRepo, ts.IrisUserRepo)
+	deps.MediaService = service.NewMediaService(ts.IrisSurveyRepo, nil, "")
+	deps.UserService = service.NewUserService(ts.QsUserRepo, ts.IrisUserRepo, nil, "us-east-1", "")
 	deps.InterviewService = service.NewInterviewService(ts.QsTimeSlotRepo, nil)
-	deps.SurveyService = service.NewSurveyService(ts.QsSurveyRepo, ts.IrisSurveyRepo)
-	deps.ModeratorService = service.NewModeratorService(ts.QsUserRepo, ts.QsTimeSlotRepo)
-	deps.SubscriptionService = service.NewSubscriptionService(ts.IrisSurveyRepo)
+	deps.SurveyService = service.NewSurveyService(ts.QsSurveyRepo, ts.IrisSurveyRepo, nil, nil)
+	deps.ModeratorService = service.NewModeratorService(ts.QsUserRepo, ts.QsTimeSlotRepo, nil, nil)
+	deps.SubscriptionService = service.NewSubscriptionService(ts.IrisSurveyRepo, nil, nil, "")
 
 	// Build real handlers and router
 	hs := handler.NewHandlers(deps)

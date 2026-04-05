@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
 
@@ -11,11 +12,13 @@ import (
 type ModeratorService struct {
 	qsUserRepo   qs.UserRepository
 	timeSlotRepo qs.TimeSlotRepository
+	googleCal    *integration.GoogleCalendarClient
+	googleSheets *integration.GoogleSheetsClient
 }
 
 // NewModeratorService creates a new ModeratorService.
-func NewModeratorService(qsUserRepo qs.UserRepository, timeSlotRepo qs.TimeSlotRepository) *ModeratorService {
-	return &ModeratorService{qsUserRepo: qsUserRepo, timeSlotRepo: timeSlotRepo}
+func NewModeratorService(qsUserRepo qs.UserRepository, timeSlotRepo qs.TimeSlotRepository, googleCal *integration.GoogleCalendarClient, googleSheets *integration.GoogleSheetsClient) *ModeratorService {
+	return &ModeratorService{qsUserRepo: qsUserRepo, timeSlotRepo: timeSlotRepo, googleCal: googleCal, googleSheets: googleSheets}
 }
 
 // QsUserAvailable returns true if the QS user repository is configured.
@@ -23,6 +26,34 @@ func (s *ModeratorService) QsUserAvailable() bool { return s.qsUserRepo != nil }
 
 // TimeSlotAvailable returns true if the QS time slot repository is configured.
 func (s *ModeratorService) TimeSlotAvailable() bool { return s.timeSlotRepo != nil }
+
+func (s *ModeratorService) GoogleCalConfigured() bool {
+	return s.googleCal != nil && s.googleCal.Configured()
+}
+
+func (s *ModeratorService) ListGoogleCalEvents(ctx context.Context, calendarID string, from, to time.Time) ([]integration.CalendarEvent, error) {
+	return s.googleCal.ListEvents(ctx, calendarID, from, to)
+}
+
+func (s *ModeratorService) DeleteGoogleCalEvent(ctx context.Context, calendarID, eventID string) error {
+	return s.googleCal.DeleteEvent(ctx, calendarID, eventID)
+}
+
+func (s *ModeratorService) CreateGoogleCalEvent(ctx context.Context, calendarID string, event *integration.CalendarEvent) (*integration.CalendarEvent, error) {
+	return s.googleCal.CreateEvent(ctx, calendarID, event)
+}
+
+func (s *ModeratorService) GoogleSheetsConfigured() bool {
+	return s.googleSheets != nil && s.googleSheets.Configured()
+}
+
+func (s *ModeratorService) UpdateGoogleSheetFirstDate(ctx context.Context, sheetName, cellRange, value string) error {
+	return s.googleSheets.UpdateFirstDate(ctx, sheetName, cellRange, value)
+}
+
+func (s *ModeratorService) UpdateFirstDateCalendar(ctx context.Context) error {
+	return s.googleSheets.UpdateFirstDateCalendar(ctx)
+}
 
 // --- QsUserRepo delegation methods ---
 

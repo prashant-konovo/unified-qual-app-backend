@@ -78,14 +78,14 @@ func (h *Handler) SendReminder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call Notification Service if configured
-	if h.Services.Notification.Configured() && len(req.Recipients) > 0 {
+	if h.ConferenceService.NotificationConfigured() && len(req.Recipients) > 0 {
 		msg := integration.EmailMessage{
 			To:          req.Recipients,
 			Subject:     req.Subject,
 			Body:        req.Body,
 			ContentType: "text/html",
 		}
-		if err := h.Services.Notification.SendEmail(r.Context(), msg); err != nil {
+		if err := h.ConferenceService.SendNotificationEmail(r.Context(), msg); err != nil {
 			slog.Warn("notification service send reminder failed", "error", err)
 			// Don't fail the request — log and continue with DB fallback
 		} else {

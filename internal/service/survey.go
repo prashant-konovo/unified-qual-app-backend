@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
@@ -13,11 +14,13 @@ import (
 type SurveyService struct {
 	qsRepo   qs.SurveyRepository
 	irisRepo iris.SurveyRepository
+	decipher *integration.DecipherClient
+	eventLog *integration.EventLogClient
 }
 
 // NewSurveyService creates a new SurveyService.
-func NewSurveyService(qsRepo qs.SurveyRepository, irisRepo iris.SurveyRepository) *SurveyService {
-	return &SurveyService{qsRepo: qsRepo, irisRepo: irisRepo}
+func NewSurveyService(qsRepo qs.SurveyRepository, irisRepo iris.SurveyRepository, decipher *integration.DecipherClient, eventLog *integration.EventLogClient) *SurveyService {
+	return &SurveyService{qsRepo: qsRepo, irisRepo: irisRepo, decipher: decipher, eventLog: eventLog}
 }
 
 // QsAvailable returns true if the QS survey repository is configured.
@@ -394,4 +397,22 @@ func (s *SurveyService) CreateIrisActivityLog(ctx context.Context, eventType, de
 // CreateIrisActivityLogSimple inserts a simpler activity_log entry (no user/project/timeslot IDs).
 func (s *SurveyService) CreateIrisActivityLogSimple(ctx context.Context, eventType, description, metaData string) error {
 	return s.irisRepo.CreateActivityLog(ctx, eventType, description, 0, 0, 0, metaData)
+}
+
+// --- Decipher / EventLog delegation methods ---
+
+func (s *SurveyService) DecipherConfigured() bool {
+	return s.decipher != nil && s.decipher.Configured()
+}
+
+func (s *SurveyService) GetDecipherRespondentData(ctx context.Context, surveyID string) ([]map[string]any, error) {
+	return s.decipher.GetRespondentData(ctx, surveyID)
+}
+
+func (s *SurveyService) EventLogConfigured() bool {
+	return s.eventLog != nil && s.eventLog.Configured()
+}
+
+func (s *SurveyService) LogEvent(ctx context.Context, eventType, description string, metadata map[string]any) error {
+	return s.eventLog.LogEvent(ctx, eventType, description, metadata)
 }

@@ -522,7 +522,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 
 	s3Key := projectName + "_Schedule.xlsx"
 
-	if h.Services.S3 != nil && h.Services.S3.ExportBucket() != "" {
+	if h.ProjectService.S3ExportConfigured() {
 		buf, err := f.WriteToBuffer()
 		if err != nil {
 			slog.Error("excel write failed", "error", err)
@@ -533,8 +533,8 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		bucket := h.Services.S3.ExportBucket()
-		_, err = h.Services.S3.UploadFile(r.Context(), bucket, s3Key, buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		bucket := h.ProjectService.ExportBucket()
+		_, err = h.ProjectService.UploadFileToS3(r.Context(), bucket, s3Key, buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 		if err != nil {
 			slog.Error("s3 upload failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -544,7 +544,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		presignedURL, err := h.Services.S3.GetPresignedURL(r.Context(), bucket, s3Key, 15*time.Minute)
+		presignedURL, err := h.ProjectService.GetS3PresignedURL(r.Context(), bucket, s3Key, 15*time.Minute)
 		if err != nil {
 			slog.Error("presign failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{

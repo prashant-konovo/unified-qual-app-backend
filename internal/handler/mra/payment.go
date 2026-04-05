@@ -192,7 +192,7 @@ func (h *Handler) AddTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		// Process pending payments: call Credit-Rewards Lambda
-		if h.Services.Lambda != nil && h.Services.Lambda.Configured() {
+		if h.PaymentService.LambdaConfigured() {
 			h.processPendingPaymentsForTimeslotIdsMRA(r.Context(), payments)
 		} else {
 			slog.Info("AddTimeSlotPaymentsMRA: Lambda client not configured, skipping Credit-Rewards call")
@@ -312,8 +312,8 @@ func (h *Handler) processPendingPaymentsForTimeslotIdsMRA(ctx context.Context, p
 		return
 	}
 
-	fullName := h.Services.Lambda.FullLambdaName("Credit-Rewards-CDKV2")
-	respPayload, statusCode, err := h.Services.Lambda.Invoke(ctx, fullName, payloadJSON)
+	fullName := h.PaymentService.FullLambdaName("Credit-Rewards-CDKV2")
+	respPayload, statusCode, err := h.PaymentService.InvokeLambda(ctx, fullName, payloadJSON)
 	if err != nil {
 		slog.Error("processPendingPayments: lambda invoke failed", "error", err, "function", fullName)
 		_ = tx.Rollback()
@@ -481,7 +481,7 @@ func (h *Handler) AddTimeSlotCustomHonorariumMRA(w http.ResponseWriter, r *http.
 	}
 
 	// Call Step Function to update IRIS honorarium (legacy: external-calls-StateMachine)
-	if h.Services.StepFn != nil && h.Services.StepFn.Configured() {
+	if h.PaymentService.StepFnConfigured() {
 		go h.callStepFunctionForCustomHonoMRA(r.Context(), body.TimeSlotID, body.OldValue, body.NewValue, body.ReasonCode, userID)
 	} else {
 		slog.Info("AddTimeSlotCustomHonorariumMRA: Step Function client not configured, skipping IRIS update")
@@ -505,7 +505,7 @@ func (h *Handler) callStepFunctionForCustomHonoMRA(ctx context.Context, timeSlot
 	}
 
 	// Build env prefix for token secret name (legacy: prd→production, data-qa→qual-qa)
-	envPrefix := h.Cfg.AWS.Environment
+	envPrefix := h.PaymentService.AWSEnvironment()
 	switch envPrefix {
 	case "prod":
 		envPrefix = "production"
@@ -516,7 +516,7 @@ func (h *Handler) callStepFunctionForCustomHonoMRA(ctx context.Context, timeSlot
 	apiPayload := map[string]any{
 		"apiPayload": map[string]any{
 			"source": "QS",
-			"url":    h.Cfg.AWS.ICApiURL + "/v1/qual_hono_update",
+			"url":    h.PaymentService.ICApiURL() + "/v1/qual_hono_update",
 			"method": "POST",
 			"data": map[string]any{
 				"userSurveyId":   externalSurveyID,
@@ -536,7 +536,7 @@ func (h *Handler) callStepFunctionForCustomHonoMRA(ctx context.Context, timeSlot
 		},
 	}
 
-	if err := h.Services.StepFn.StartExecution(ctx, "external-calls-StateMachine", apiPayload); err != nil {
+	if err := h.PaymentService.StartStepFunctionExecution(ctx, "external-calls-StateMachine", apiPayload); err != nil {
 		slog.Error("callStepFunctionForCustomHono: step function failed", "error", err, "timeSlotId", timeSlotID)
 		return
 	}

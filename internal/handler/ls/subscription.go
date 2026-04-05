@@ -958,8 +958,8 @@ func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Reques
 	// Upload file to S3 with public/ prefix (legacy: s3Gateway.uploadAndGetPublicUrl)
 	fileName := fmt.Sprintf("public/custom_crowd_inquiry%d_%s.csv", time.Now().UnixMilli(), userIDStr)
 	var downloadLink string
-	if h.Services.S3 != nil && h.Services.S3.Configured() {
-		url, uploadErr := h.Services.S3.UploadFile(r.Context(), h.Services.S3.InquiryBucket(), fileName, file, header.Header.Get("Content-Type"))
+	if h.SubscriptionService.S3Configured() {
+		url, uploadErr := h.SubscriptionService.UploadFileToS3(r.Context(), h.SubscriptionService.InquiryBucket(), fileName, file, header.Header.Get("Content-Type"))
 		if uploadErr != nil {
 			slog.Error("S3 upload failed for custom crowd inquiry", "error", uploadErr, "userId", userIDStr)
 		} else {
@@ -1005,7 +1005,7 @@ func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Send email notification asynchronously (legacy uses Future{...})
-	if h.Services.Notification != nil && h.Services.Notification.Configured() {
+	if h.SubscriptionService.NotificationConfigured() {
 		emailBody := fmt.Sprintf(
 			"<h2>%s</h2>"+
 				"<p>%s</p>"+
@@ -1035,14 +1035,14 @@ func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Reques
 			emailBody += "<p><strong>There was an error uploading the file to S3. Please file a PS ticket to retrieve the file.</strong></p>"
 		}
 
-		recipient := h.Cfg.InquiryEmailRecipient
+		recipient := h.SubscriptionService.InquiryEmailRecipient()
 		if recipient == "" {
 			recipient = "dev-ni@incrowdnow.com"
 		}
 
 		// Fire-and-forget (legacy returns Ok before email completes)
 		go func() {
-			if emailErr := h.Services.Notification.SendEmail(r.Context(), integration.EmailMessage{
+			if emailErr := h.SubscriptionService.SendNotificationEmail(r.Context(), integration.EmailMessage{
 				To:          []string{recipient},
 				Subject:     subject,
 				Body:        emailBody,

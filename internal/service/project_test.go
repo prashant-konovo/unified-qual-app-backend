@@ -24,7 +24,7 @@ func TestListProjects_BothSources(t *testing.T) {
 	qsRepo.On("List", mock.Anything, 1, 20, (*int)(nil), "").
 		Return([]qs.ProjectListRow{{ID: 2, Name: "QS"}}, 1, nil)
 
-	svc := NewProjectService(irisRepo, qsRepo)
+	svc := NewProjectService(irisRepo, qsRepo, nil)
 	result := svc.ListProjects(context.Background(), 1, 20, "", "", nil)
 
 	assert.Len(t, result.Projects, 2)
@@ -37,14 +37,14 @@ func TestListProjects_IRISOnly(t *testing.T) {
 	irisRepo.On("List", mock.Anything, 1, 20, (*int)(nil), "").
 		Return([]iris.ProjectListRow{{ID: 1, Name: "IRIS"}}, 1, nil)
 
-	svc := NewProjectService(irisRepo, nil)
+	svc := NewProjectService(irisRepo, nil, nil)
 	result := svc.ListProjects(context.Background(), 1, 20, "iris", "", nil)
 
 	assert.Len(t, result.Projects, 1)
 }
 
 func TestListProjects_NilRepos(t *testing.T) {
-	svc := NewProjectService(nil, nil)
+	svc := NewProjectService(nil, nil, nil)
 	result := svc.ListProjects(context.Background(), 1, 20, "", "", nil)
 
 	assert.NotNil(t, result.Projects)
@@ -61,7 +61,7 @@ func TestGetProject_QSFound(t *testing.T) {
 	qsRepo.On("TimeSlotCounts", mock.Anything, int64(1)).Return(5, 3, nil)
 	qsRepo.On("GetTopics", mock.Anything, int64(1)).Return([]qs.Topic{{TopicName: "Health"}}, nil)
 
-	svc := NewProjectService(nil, qsRepo)
+	svc := NewProjectService(nil, qsRepo, nil)
 	result, err := svc.GetProject(context.Background(), 1, "")
 
 	assert.NoError(t, err)
@@ -75,7 +75,7 @@ func TestGetProject_IRISFound(t *testing.T) {
 		ID: 1, Name: "IRIS Project", ProjectStatusID: 3,
 	}, nil)
 
-	svc := NewProjectService(irisRepo, nil)
+	svc := NewProjectService(irisRepo, nil, nil)
 	result, err := svc.GetProject(context.Background(), 1, "iris")
 
 	assert.NoError(t, err)
@@ -91,7 +91,7 @@ func TestGetProject_NotFound(t *testing.T) {
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	irisRepo.On("GetByID", mock.Anything, int64(999)).Return((*iris.Project)(nil), nil)
 
-	svc := NewProjectService(irisRepo, qsRepo)
+	svc := NewProjectService(irisRepo, qsRepo, nil)
 	result, err := svc.GetProject(context.Background(), 999, "")
 
 	assert.NoError(t, err)
@@ -104,7 +104,7 @@ func TestCreateProject_QSDefault(t *testing.T) {
 	qsRepo := new(mocks.MockQsProjectRepository)
 	qsRepo.On("Create", mock.Anything, mock.AnythingOfType("*qs.Project")).Return(int64(42), nil)
 
-	svc := NewProjectService(nil, qsRepo)
+	svc := NewProjectService(nil, qsRepo, nil)
 	result, err := svc.CreateProject(context.Background(), dto.CreateProjectRequest{
 		Name:   "New Project",
 		Source: "",
@@ -120,7 +120,7 @@ func TestCreateProject_IRIS(t *testing.T) {
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	irisRepo.On("Create", mock.Anything, mock.AnythingOfType("*iris.Project")).Return(int64(10), nil)
 
-	svc := NewProjectService(irisRepo, nil)
+	svc := NewProjectService(irisRepo, nil, nil)
 	result, err := svc.CreateProject(context.Background(), dto.CreateProjectRequest{
 		Name:   "IRIS Project",
 		Source: "iris",
@@ -133,7 +133,7 @@ func TestCreateProject_IRIS(t *testing.T) {
 }
 
 func TestCreateProject_NoDB(t *testing.T) {
-	svc := NewProjectService(nil, nil)
+	svc := NewProjectService(nil, nil, nil)
 	_, err := svc.CreateProject(context.Background(), dto.CreateProjectRequest{Name: "X"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "no database available")
@@ -145,7 +145,7 @@ func TestUpdateProject_QS(t *testing.T) {
 	qsRepo := new(mocks.MockQsProjectRepository)
 	qsRepo.On("Update", mock.Anything, int64(1), mock.Anything).Return(nil)
 
-	svc := NewProjectService(nil, qsRepo)
+	svc := NewProjectService(nil, qsRepo, nil)
 	size := int64(50)
 	result, err := svc.UpdateProject(context.Background(), 1, dto.UpdateProjectRequest{
 		Name:       "Updated",
@@ -161,7 +161,7 @@ func TestUpdateProject_IRIS(t *testing.T) {
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	irisRepo.On("Update", mock.Anything, int64(1), mock.Anything).Return(nil)
 
-	svc := NewProjectService(irisRepo, nil)
+	svc := NewProjectService(irisRepo, nil, nil)
 	result, err := svc.UpdateProject(context.Background(), 1, dto.UpdateProjectRequest{
 		Name:   "Updated IRIS",
 		Source: "iris",
@@ -176,7 +176,7 @@ func TestUpdateProject_Error(t *testing.T) {
 	qsRepo := new(mocks.MockQsProjectRepository)
 	qsRepo.On("Update", mock.Anything, int64(1), mock.Anything).Return(fmt.Errorf("db error"))
 
-	svc := NewProjectService(nil, qsRepo)
+	svc := NewProjectService(nil, qsRepo, nil)
 	_, err := svc.UpdateProject(context.Background(), 1, dto.UpdateProjectRequest{Name: "X"})
 	assert.Error(t, err)
 }
@@ -187,7 +187,7 @@ func TestDeleteProject_QS(t *testing.T) {
 	qsRepo := new(mocks.MockQsProjectRepository)
 	qsRepo.On("Update", mock.Anything, int64(1), map[string]any{"project_status_id": 5}).Return(nil)
 
-	svc := NewProjectService(nil, qsRepo)
+	svc := NewProjectService(nil, qsRepo, nil)
 	result, err := svc.DeleteProject(context.Background(), 1, "qs")
 
 	assert.NoError(t, err)
@@ -199,7 +199,7 @@ func TestDeleteProject_IRIS(t *testing.T) {
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	irisRepo.On("Update", mock.Anything, int64(1), map[string]any{"is_archived": true}).Return(nil)
 
-	svc := NewProjectService(irisRepo, nil)
+	svc := NewProjectService(irisRepo, nil, nil)
 	result, err := svc.DeleteProject(context.Background(), 1, "iris")
 
 	assert.NoError(t, err)

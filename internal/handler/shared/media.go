@@ -116,7 +116,7 @@ func (h *Handler) DownloadMediaPDF(w http.ResponseWriter, r *http.Request) {
 	projectID, _ := validate.ParseIDParam(r, "pid")
 	mediaID, _ := validate.ParseIDParam(r, "mediaId")
 
-	if !h.MediaService.Available() || h.Services.S3 == nil {
+	if !h.MediaService.Available() || !h.MediaService.S3Configured() {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
@@ -128,8 +128,8 @@ func (h *Handler) DownloadMediaPDF(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := m.S3Key.String + "/media.pdf"
-	bucket := h.Cfg.S3.RecordingBucket
-	body, contentLength, err := h.Services.S3.GetObject(r.Context(), bucket, key)
+	bucket := h.MediaService.RecordingBucket()
+	body, contentLength, err := h.MediaService.GetS3Object(r.Context(), bucket, key)
 	if err != nil {
 		slog.Error("S3 get media PDF failed", "error", err, "key", key)
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
@@ -153,7 +153,7 @@ func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
 	pageStr, _ := validate.ParseStringParam(r, "page")
 	page, _ := strconv.Atoi(pageStr)
 
-	if !h.MediaService.Available() || h.Services.S3 == nil {
+	if !h.MediaService.Available() || !h.MediaService.S3Configured() {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
@@ -165,8 +165,8 @@ func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := fmt.Sprintf("%s/page/%d.pdf", m.S3Key.String, page)
-	bucket := h.Cfg.S3.RecordingBucket
-	body, contentLength, err := h.Services.S3.GetObject(r.Context(), bucket, key)
+	bucket := h.MediaService.RecordingBucket()
+	body, contentLength, err := h.MediaService.GetS3Object(r.Context(), bucket, key)
 	if err != nil {
 		slog.Error("S3 get media page failed", "error", err, "key", key)
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
@@ -192,7 +192,7 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 	pageStr, _ := validate.ParseStringParam(r, "page")
 	page, _ := strconv.Atoi(pageStr)
 
-	if !h.MediaService.Available() || h.Services.S3 == nil {
+	if !h.MediaService.Available() || !h.MediaService.S3Configured() {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
@@ -244,8 +244,8 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 	}
 
 	key := fmt.Sprintf("%s/page/%d.pdf", m.S3Key.String, page)
-	bucket := h.Cfg.S3.RecordingBucket
-	body, contentLength, sErr := h.Services.S3.GetObject(r.Context(), bucket, key)
+	bucket := h.MediaService.RecordingBucket()
+	body, contentLength, sErr := h.MediaService.GetS3Object(r.Context(), bucket, key)
 	if sErr != nil {
 		slog.Error("S3 get conference media page failed", "error", sErr, "key", key)
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
@@ -277,14 +277,14 @@ func (h *Handler) DeleteProjectMedia(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Delete S3 objects if S3 is configured and media has an S3 key
-		if m != nil && m.S3Key.Valid && h.Services.S3 != nil {
-			bucket := h.Cfg.S3.RecordingBucket
+		if m != nil && m.S3Key.Valid && h.MediaService.S3Configured() {
+			bucket := h.MediaService.RecordingBucket()
 			s3Root := m.S3Key.String
 			// Delete main PDF
-			_ = h.Services.S3.DeleteObject(r.Context(), bucket, s3Root+"/media.pdf")
+			_ = h.MediaService.DeleteS3Object(r.Context(), bucket, s3Root+"/media.pdf")
 			// Delete page PDFs
 			for i := 1; i <= m.PageCount; i++ {
-				_ = h.Services.S3.DeleteObject(r.Context(), bucket, fmt.Sprintf("%s/page/%d.pdf", s3Root, i))
+				_ = h.MediaService.DeleteS3Object(r.Context(), bucket, fmt.Sprintf("%s/page/%d.pdf", s3Root, i))
 			}
 		}
 

@@ -3,19 +3,23 @@ package service
 import (
 	"context"
 
+	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
 
 // UserService encapsulates user profile and preference operations.
 type UserService struct {
-	qsUserRepo   qs.UserRepository
-	irisUserRepo iris.UserRepository
+	qsUserRepo         qs.UserRepository
+	irisUserRepo       iris.UserRepository
+	eventLog           *integration.EventLogClient
+	cognitoRegion      string
+	cognitoAppClientID string
 }
 
 // NewUserService creates a new UserService.
-func NewUserService(qsUserRepo qs.UserRepository, irisUserRepo iris.UserRepository) *UserService {
-	return &UserService{qsUserRepo: qsUserRepo, irisUserRepo: irisUserRepo}
+func NewUserService(qsUserRepo qs.UserRepository, irisUserRepo iris.UserRepository, eventLog *integration.EventLogClient, cognitoRegion, cognitoAppClientID string) *UserService {
+	return &UserService{qsUserRepo: qsUserRepo, irisUserRepo: irisUserRepo, eventLog: eventLog, cognitoRegion: cognitoRegion, cognitoAppClientID: cognitoAppClientID}
 }
 
 // QsAvailable returns true if the QS user repository is configured.
@@ -88,4 +92,22 @@ func (s *UserService) CreateQSEventLog(ctx context.Context, eventType, descripti
 
 func (s *UserService) DeleteGoogleCalendarImport(ctx context.Context, moderatorID int64) error {
 	return s.qsUserRepo.DeleteGoogleCalendarImport(ctx, moderatorID)
+}
+
+// --- EventLog / Cognito delegation methods ---
+
+func (s *UserService) EventLogConfigured() bool {
+	return s.eventLog != nil && s.eventLog.Configured()
+}
+
+func (s *UserService) LogEvent(ctx context.Context, eventType, description string, metadata map[string]any) error {
+	return s.eventLog.LogEvent(ctx, eventType, description, metadata)
+}
+
+func (s *UserService) CognitoRegion() string {
+	return s.cognitoRegion
+}
+
+func (s *UserService) CognitoAppClientID() string {
+	return s.cognitoAppClientID
 }

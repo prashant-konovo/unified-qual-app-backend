@@ -1736,8 +1736,8 @@ func (h *Handler) UnlinkImportedModeratorMRA(w http.ResponseWriter, r *http.Requ
 // ──────────────────────────────────────────────
 
 func (h *Handler) UpdateGoogleSheetFirstDateMRA(w http.ResponseWriter, r *http.Request) {
-	if h.Services.GoogleSheets != nil && h.Services.GoogleSheets.Configured() {
-		if err := h.Services.GoogleSheets.UpdateFirstDateCalendar(r.Context()); err != nil {
+	if h.ModeratorService.GoogleSheetsConfigured() {
+		if err := h.ModeratorService.UpdateFirstDateCalendar(r.Context()); err != nil {
 			slog.Warn("google sheets update first date calendar failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),

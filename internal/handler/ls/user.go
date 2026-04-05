@@ -31,10 +31,10 @@ func (h *Handler) SendPasswordResetEmail(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Trigger Cognito ForgotPassword flow
-	if h.Cfg.Cognito.Region != "" && h.Cfg.Cognito.AppClientID != "" {
-		endpoint := fmt.Sprintf("https://cognito-idp.%s.amazonaws.com/", h.Cfg.Cognito.Region)
+	if h.UserService.CognitoRegion() != "" && h.UserService.CognitoAppClientID() != "" {
+		endpoint := fmt.Sprintf("https://cognito-idp.%s.amazonaws.com/", h.UserService.CognitoRegion())
 		payload := map[string]any{
-			"ClientId": h.Cfg.Cognito.AppClientID,
+			"ClientId": h.UserService.CognitoAppClientID(),
 			"Username": req.Email,
 		}
 		payloadBytes, _ := json.Marshal(payload)

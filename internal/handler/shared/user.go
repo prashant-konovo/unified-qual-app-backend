@@ -198,8 +198,8 @@ func (h *Handler) CreateEventLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Forward to external event logging service if configured
-	if h.Services.EventLog.Configured() {
-		_ = h.Services.EventLog.LogEvent(r.Context(), req.EventType, req.Description, map[string]any{
+	if h.UserService.EventLogConfigured() {
+		_ = h.UserService.LogEvent(r.Context(), req.EventType, req.Description, map[string]any{
 			"userId": req.UserID, "projectId": req.ProjectID,
 			"timeSlotId": req.TimeSlotID, "metaData": req.MetaData,
 		})

@@ -3,9 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
+	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
@@ -20,13 +23,15 @@ var irisStatusName = map[int]string{
 type ProjectService struct {
 	irisProjectRepo iris.ProjectRepository
 	qsProjectRepo   qs.ProjectRepository
+	s3              *integration.S3Client
 }
 
 // NewProjectService creates a new ProjectService.
-func NewProjectService(irisProjectRepo iris.ProjectRepository, qsProjectRepo qs.ProjectRepository) *ProjectService {
+func NewProjectService(irisProjectRepo iris.ProjectRepository, qsProjectRepo qs.ProjectRepository, s3 *integration.S3Client) *ProjectService {
 	return &ProjectService{
 		irisProjectRepo: irisProjectRepo,
 		qsProjectRepo:   qsProjectRepo,
+		s3:              s3,
 	}
 }
 
@@ -406,4 +411,22 @@ func (s *ProjectService) IrisGetByID(ctx context.Context, id int64) (*iris.Proje
 // QsProjectAvailable reports whether the QS project repository is configured.
 func (s *ProjectService) QsProjectAvailable() bool {
 	return s.qsProjectRepo != nil
+}
+
+// --- S3 delegation methods ---
+
+func (s *ProjectService) S3ExportConfigured() bool {
+	return s.s3 != nil && s.s3.ExportBucket() != ""
+}
+
+func (s *ProjectService) ExportBucket() string {
+	return s.s3.ExportBucket()
+}
+
+func (s *ProjectService) UploadFileToS3(ctx context.Context, bucket, key string, body io.Reader, contentType string) (string, error) {
+	return s.s3.UploadFile(ctx, bucket, key, body, contentType)
+}
+
+func (s *ProjectService) GetS3PresignedURL(ctx context.Context, bucket, key string, expires time.Duration) (string, error) {
+	return s.s3.GetPresignedURL(ctx, bucket, key, expires)
 }

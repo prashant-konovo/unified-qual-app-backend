@@ -25,8 +25,8 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If the request includes surveyId, try Decipher integration
-	if surveyID, ok := req["surveyId"].(string); ok && surveyID != "" && h.Services.Decipher.Configured() {
-		data, err := h.Services.Decipher.GetRespondentData(r.Context(), surveyID)
+	if surveyID, ok := req["surveyId"].(string); ok && surveyID != "" && h.SurveyService.DecipherConfigured() {
+		data, err := h.SurveyService.GetDecipherRespondentData(r.Context(), surveyID)
 		if err != nil {
 			slog.Warn("decipher respondent data failed", "surveyId", surveyID, "error", err)
 		} else {
@@ -43,8 +43,8 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log event if event logging is configured
-	if h.Services.EventLog.Configured() {
-		_ = h.Services.EventLog.LogEvent(r.Context(), "third_party_integrate", "Third-party integration request", req)
+	if h.SurveyService.EventLogConfigured() {
+		_ = h.SurveyService.LogEvent(r.Context(), "third_party_integrate", "Third-party integration request", req)
 	}
 
 	slog.Info("third-party integration received", "payload_keys", len(req))

@@ -3,17 +3,22 @@ package service
 import (
 	"context"
 
+	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
 
 // ConferenceService encapsulates conference/meeting management logic.
 type ConferenceService struct {
-	repo qs.ConferenceRepository
+	repo         qs.ConferenceRepository
+	conference   *integration.ConferenceClient
+	castingWords *integration.CastingWordsClient
+	sms          *integration.SMSClient
+	notification *integration.NotificationClient
 }
 
 // NewConferenceService creates a new ConferenceService.
-func NewConferenceService(repo qs.ConferenceRepository) *ConferenceService {
-	return &ConferenceService{repo: repo}
+func NewConferenceService(repo qs.ConferenceRepository, conference *integration.ConferenceClient, castingWords *integration.CastingWordsClient, sms *integration.SMSClient, notification *integration.NotificationClient) *ConferenceService {
+	return &ConferenceService{repo: repo, conference: conference, castingWords: castingWords, sms: sms, notification: notification}
 }
 
 // Available returns true if the conference repository is configured.
@@ -81,4 +86,70 @@ func (s *ConferenceService) GetConferenceLinkByProjectMRA(ctx context.Context, p
 
 func (s *ConferenceService) GetConferenceLinkByTimeSlotMRA(ctx context.Context, timeSlotID int64) (map[string]any, error) {
 	return s.repo.GetConferenceLinkByTimeSlotMRA(ctx, timeSlotID)
+}
+
+// --- Integration client wrappers ---
+
+func (s *ConferenceService) ConferenceConfigured() bool {
+	return s.conference != nil && s.conference.Configured()
+}
+
+func (s *ConferenceService) GetConferenceMetadata(ctx context.Context, bearerToken string) (map[string]any, error) {
+	return s.conference.GetMetadata(ctx, bearerToken)
+}
+
+func (s *ConferenceService) GetConferenceAttendees(ctx context.Context, meetingID, bearerToken string) ([]map[string]any, error) {
+	return s.conference.GetAttendees(ctx, meetingID, bearerToken)
+}
+
+func (s *ConferenceService) GetConferenceRecordingStatus(ctx context.Context, meetingID, bearerToken string) (map[string]any, error) {
+	return s.conference.GetRecordingStatus(ctx, meetingID, bearerToken)
+}
+
+func (s *ConferenceService) CreateConferenceMeeting(ctx context.Context, req integration.MeetingCreateRequest, bearerToken string) (*integration.MeetingCreateResponse, error) {
+	return s.conference.CreateMeeting(ctx, req, bearerToken)
+}
+
+func (s *ConferenceService) EndConferenceMeeting(ctx context.Context, meetingID, bearerToken string) error {
+	return s.conference.EndMeeting(ctx, meetingID, bearerToken)
+}
+
+func (s *ConferenceService) StartConferenceRecording(ctx context.Context, meetingID, bearerToken string) error {
+	return s.conference.StartRecording(ctx, meetingID, bearerToken)
+}
+
+func (s *ConferenceService) ConferenceUniversalJoin(ctx context.Context, meetingID, bearerToken string) (map[string]any, error) {
+	return s.conference.UniversalJoin(ctx, meetingID, bearerToken)
+}
+
+func (s *ConferenceService) CastingWordsConfigured() bool {
+	return s.castingWords != nil && s.castingWords.Configured()
+}
+
+func (s *ConferenceService) CreateTranscriptionOrder(ctx context.Context, audioURL string) (*integration.TranscriptionOrder, error) {
+	return s.castingWords.CreateOrder(ctx, audioURL)
+}
+
+func (s *ConferenceService) GetTranscriptionStatus(ctx context.Context, orderID string) (*integration.TranscriptionOrder, error) {
+	return s.castingWords.GetOrderStatus(ctx, orderID)
+}
+
+func (s *ConferenceService) GetTranscript(ctx context.Context, orderID string) (string, error) {
+	return s.castingWords.GetTranscript(ctx, orderID)
+}
+
+func (s *ConferenceService) SMSConfigured() bool {
+	return s.sms != nil && s.sms.Configured()
+}
+
+func (s *ConferenceService) SendSMS(ctx context.Context, to, from, message string) error {
+	return s.sms.SendSMS(ctx, to, from, message)
+}
+
+func (s *ConferenceService) NotificationConfigured() bool {
+	return s.notification != nil && s.notification.Configured()
+}
+
+func (s *ConferenceService) SendNotificationEmail(ctx context.Context, msg integration.EmailMessage) error {
+	return s.notification.SendEmail(ctx, msg)
 }

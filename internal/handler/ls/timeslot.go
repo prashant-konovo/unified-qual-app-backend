@@ -147,8 +147,8 @@ func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Reque
 			slog.Warn("hook: get time_slot_events failed (non-fatal)", "tsId", tsID, "error", err)
 		}
 		for _, evt := range events {
-			if h.Services.GoogleCal.Configured() {
-				if err := h.Services.GoogleCal.DeleteEvent(r.Context(), "", evt.GCalEventID); err != nil {
+			if h.ModeratorService.GoogleCalConfigured() {
+				if err := h.ModeratorService.DeleteGoogleCalEvent(r.Context(), "", evt.GCalEventID); err != nil {
 					slog.Warn("hook: delete gcal event failed (non-fatal)", "eventId", evt.GCalEventID, "error", err)
 				}
 			}
@@ -235,8 +235,8 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 			if obs != nil {
 				events, _ := h.SurveyService.GetTimeSlotEvents(ctx, tsID, nil, &obs.ID, iris.RoleObserver)
 				for _, evt := range events {
-					if h.Services.GoogleCal.Configured() {
-						if err := h.Services.GoogleCal.DeleteEvent(ctx, "", evt.GCalEventID); err != nil {
+					if h.ModeratorService.GoogleCalConfigured() {
+						if err := h.ModeratorService.DeleteGoogleCalEvent(ctx, "", evt.GCalEventID); err != nil {
 							slog.Warn("hook: delete observer gcal event failed (non-fatal)", "eventId", evt.GCalEventID, "error", err)
 						}
 					}
@@ -263,7 +263,7 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 				slog.Warn("hook: create conference_invitation failed (non-fatal)", "observerId", obs.ID, "error", err)
 			}
 			// Best-effort Google Calendar event creation
-			if h.Services.GoogleCal.Configured() {
+			if h.ModeratorService.GoogleCalConfigured() {
 				start, end, err := h.SurveyService.GetTimeSlotTimes(ctx, tsID)
 				if err == nil {
 					evt := &integration.CalendarEvent{
@@ -272,7 +272,7 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 						End:       integration.EventTime{DateTime: end.Format(time.RFC3339), TimeZone: "America/New_York"},
 						Attendees: []integration.Attendee{{Email: email}},
 					}
-					created, err := h.Services.GoogleCal.CreateEvent(ctx, "", evt)
+					created, err := h.ModeratorService.CreateGoogleCalEvent(ctx, "", evt)
 					if err != nil {
 						slog.Warn("hook: create observer gcal event failed (non-fatal)", "email", email, "error", err)
 					} else if created != nil && created.ID != "" {

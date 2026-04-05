@@ -287,10 +287,10 @@ func (h *Handler) StartModeratorImport(w http.ResponseWriter, r *http.Request) {
 	modStr := chi.URLParam(r, "moderatorId")
 	moderatorID, _ := strconv.ParseInt(modStr, 10, 64)
 
-	if h.Services.GoogleCal.Configured() {
+	if h.ModeratorService.GoogleCalConfigured() {
 		// Fetch events from Google Calendar for this moderator
 		now := time.Now()
-		events, err := h.Services.GoogleCal.ListEvents(r.Context(), "", now, now.AddDate(0, 3, 0))
+		events, err := h.ModeratorService.ListGoogleCalEvents(r.Context(), "", now, now.AddDate(0, 3, 0))
 		if err != nil {
 			slog.Warn("google calendar list events failed", "moderatorId", moderatorID, "error", err)
 			support.WriteJSON(w, http.StatusOK, map[string]any{
@@ -326,9 +326,9 @@ func (h *Handler) GetImportedAvailability(w http.ResponseWriter, r *http.Request
 	moderatorID, _ := strconv.ParseInt(modStr, 10, 64)
 
 	// Try Google Calendar for real imported availability
-	if h.Services.GoogleCal.Configured() {
+	if h.ModeratorService.GoogleCalConfigured() {
 		now := time.Now()
-		events, err := h.Services.GoogleCal.ListEvents(r.Context(), "", now, now.AddDate(0, 1, 0))
+		events, err := h.ModeratorService.ListGoogleCalEvents(r.Context(), "", now, now.AddDate(0, 1, 0))
 		if err == nil && len(events) > 0 {
 			result := make([]map[string]any, 0, len(events))
 			for _, e := range events {
@@ -368,7 +368,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 	modStr := chi.URLParam(r, "moderatorId")
 	moderatorID, _ := strconv.ParseInt(modStr, 10, 64)
 
-	if h.Services.GoogleCal.Configured() {
+	if h.ModeratorService.GoogleCalConfigured() {
 		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"moderatorId": moderatorID,
 			"status":      "configured",
@@ -406,14 +406,14 @@ func (h *Handler) UpdateGoogleSheetFirstDate(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if h.Services.GoogleSheets.Configured() {
+	if h.ModeratorService.GoogleSheetsConfigured() {
 		if req.SheetName == "" {
 			req.SheetName = "Sheet1"
 		}
 		if req.CellRange == "" {
 			req.CellRange = "A1"
 		}
-		if err := h.Services.GoogleSheets.UpdateFirstDate(r.Context(), req.SheetName, req.CellRange, req.Value); err != nil {
+		if err := h.ModeratorService.UpdateGoogleSheetFirstDate(r.Context(), req.SheetName, req.CellRange, req.Value); err != nil {
 			slog.Warn("google sheets update failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "google sheets update failed: " + err.Error()})
 			return

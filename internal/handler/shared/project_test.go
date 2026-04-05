@@ -67,7 +67,7 @@ func TestListProjects_BothSources(t *testing.T) {
 
 	deps.IrisProjectRepo = irisRepo
 	deps.QsProjectRepo = qsRepo
-	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo)
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -113,7 +113,7 @@ func TestListProjects_IRISOnly(t *testing.T) {
 
 	deps.IrisProjectRepo = irisRepo
 	deps.QsProjectRepo = qsRepo
-	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo)
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -147,7 +147,7 @@ func TestListProjects_QSOnly(t *testing.T) {
 
 	deps.IrisProjectRepo = irisRepo
 	deps.QsProjectRepo = qsRepo
-	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo)
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -184,7 +184,7 @@ func TestListProjects_EmptyResult(t *testing.T) {
 
 	deps.IrisProjectRepo = irisRepo
 	deps.QsProjectRepo = qsRepo
-	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo)
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -219,7 +219,7 @@ func TestListProjects_IRISError(t *testing.T) {
 
 	deps.IrisProjectRepo = irisRepo
 	deps.QsProjectRepo = qsRepo
-	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo)
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -244,7 +244,7 @@ func TestListProjects_IRISError(t *testing.T) {
 
 func TestListProjects_NilRepos(t *testing.T) {
 	deps := testutil.TestDeps()
-	deps.ProjectService = service.NewProjectService(nil, nil)
+	deps.ProjectService = service.NewProjectService(nil, nil, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
