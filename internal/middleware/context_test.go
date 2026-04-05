@@ -4,8 +4,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/InCrowd/unified-qual-api/internal/middleware"
 )
 
 func TestSetUser_GetUser_RoundTrip(t *testing.T) {

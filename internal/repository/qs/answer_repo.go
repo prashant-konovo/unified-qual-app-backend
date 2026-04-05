@@ -38,23 +38,23 @@ var _ AnswerRepository = (*AnswerRepo)(nil)
 
 // Answer maps to the QS answer table.
 type Answer struct {
-	ID           int64     `json:"id"`
-	SurveyID     int64     `json:"surveyId"`
-	ResponderID  int64     `json:"responderId"`
-	TimeSlotID   int64     `json:"timeSlotId"`
-	ModifiedOn   time.Time `json:"modifiedOn"`
+	ID          int64     `json:"id"`
+	SurveyID    int64     `json:"surveyId"`
+	ResponderID int64     `json:"responderId"`
+	TimeSlotID  int64     `json:"timeSlotId"`
+	ModifiedOn  time.Time `json:"modifiedOn"`
 }
 
 // AnswerDetail maps to the QS answer_details table.
 type AnswerDetail struct {
-	ID                int64          `json:"id"`
-	AnswerID          int64          `json:"answerId"`
-	SurveyQuestionID  int64          `json:"surveyQuestionId"`
-	TextResponse      sql.NullString `json:"textResponse"`
-	SelectResponse    sql.NullString `json:"selectResponse"`
-	NumericResponse   sql.NullInt64  `json:"numericResponse"`
-	BooleanResponse   sql.NullBool   `json:"booleanResponse"`
-	ModifiedOn        time.Time      `json:"modifiedOn"`
+	ID               int64          `json:"id"`
+	AnswerID         int64          `json:"answerId"`
+	SurveyQuestionID int64          `json:"surveyQuestionId"`
+	TextResponse     sql.NullString `json:"textResponse"`
+	SelectResponse   sql.NullString `json:"selectResponse"`
+	NumericResponse  sql.NullInt64  `json:"numericResponse"`
+	BooleanResponse  sql.NullBool   `json:"booleanResponse"`
+	ModifiedOn       time.Time      `json:"modifiedOn"`
 }
 
 // AnswerRepo handles QS answer + answer_details queries.
@@ -169,20 +169,20 @@ func (r *AnswerRepo) ListLocales(ctx context.Context) ([]LanguageLocalisation, e
 
 // HonorariumAmount maps to the QS honorarium_amount table.
 type HonorariumAmount struct {
-	ID         int64  `json:"id"`
-	Amount     int    `json:"amount"`
-	Currency   string `json:"currency"`
+	ID       int64  `json:"id"`
+	Amount   int    `json:"amount"`
+	Currency string `json:"currency"`
 }
 
 // PaymentHistory maps to the QS time_slot_payment_history table.
 type PaymentHistory struct {
-	ID           int64          `json:"id"`
-	TimeSlotID   int64          `json:"timeSlotId"`
-	AmountPaid   int            `json:"amountPaid"`
-	PaidOn       time.Time      `json:"paidOn"`
-	PaymentType  string         `json:"paymentType"`
-	Status       string         `json:"status"`
-	ExternalRef  sql.NullString `json:"externalRef"`
+	ID          int64          `json:"id"`
+	TimeSlotID  int64          `json:"timeSlotId"`
+	AmountPaid  int            `json:"amountPaid"`
+	PaidOn      time.Time      `json:"paidOn"`
+	PaymentType string         `json:"paymentType"`
+	Status      string         `json:"status"`
+	ExternalRef sql.NullString `json:"externalRef"`
 }
 
 // QSSalesforceProject maps to the QS salesforce_project table.
@@ -195,9 +195,9 @@ type QSSalesforceProject struct {
 
 // QSSalesforceAccount maps to the QS salesforce_account table.
 type QSSalesforceAccount struct {
-	ID                   int64  `json:"id"`
-	SalesforceAccountID  string `json:"salesforceAccountId"`
-	Name                 string `json:"name"`
+	ID                  int64  `json:"id"`
+	SalesforceAccountID string `json:"salesforceAccountId"`
+	Name                string `json:"name"`
 }
 
 // ExternalClient maps to the QS external_client table.

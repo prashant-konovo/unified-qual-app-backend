@@ -8,9 +8,10 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/service"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/utilities"
-	"github.com/go-chi/chi/v5"
 )
 
 // SurveyHandler handles survey CRUD endpoints.
@@ -39,7 +40,6 @@ func (h *SurveyHandler) ListSurveys(w http.ResponseWriter, r *http.Request) {
 	}
 	utilities.WriteJSON(w, http.StatusOK, out)
 }
-
 
 func (h *SurveyHandler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

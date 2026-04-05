@@ -1,22 +1,22 @@
 package utilities
 
 import (
-"encoding/json"
-"net/http"
-"strconv"
-"strings"
-"time"
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
-"github.com/google/uuid"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // WriteJSON encodes v as JSON and writes it to w with the given status code.
 func WriteJSON(w http.ResponseWriter, status int, v any) {
-w.Header().Set("Content-Type", "application/json")
-w.Header().Set("X-Brand", "unified")
-w.WriteHeader(status)
-_ = json.NewEncoder(w).Encode(v)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Brand", "unified")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 // ID generates a new UUID string.
@@ -27,99 +27,99 @@ func Now() string { return time.Now().UTC().Format(time.RFC3339) }
 
 // Pagination holds validated page/pageSize values.
 type Pagination struct {
-Page     int
-PageSize int
+	Page     int
+	PageSize int
 }
 
 // ParsePagination extracts page and pageSize from query params
 // with sensible defaults and bounds.
 func ParsePagination(r *http.Request, defaultSize, maxSize int) Pagination {
-if defaultSize <= 0 {
-defaultSize = 20
-}
-if maxSize <= 0 {
-maxSize = 100
-}
+	if defaultSize <= 0 {
+		defaultSize = 20
+	}
+	if maxSize <= 0 {
+		maxSize = 100
+	}
 
-page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-if page < 1 {
-page = 1
-}
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
 
-pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
-if pageSize < 1 {
-pageSize = defaultSize
-}
-if pageSize > maxSize {
-pageSize = maxSize
-}
+	pageSize, _ := strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if pageSize < 1 {
+		pageSize = defaultSize
+	}
+	if pageSize > maxSize {
+		pageSize = maxSize
+	}
 
-return Pagination{Page: page, PageSize: pageSize}
+	return Pagination{Page: page, PageSize: pageSize}
 }
 
 // ExtractBearerToken extracts the JWT bearer token from request headers.
 func ExtractBearerToken(r *http.Request) string {
-auth := r.Header.Get("Authorization")
-if strings.HasPrefix(auth, "Bearer ") {
-return auth[7:]
-}
-if t := r.Header.Get("IC-Auth"); t != "" {
-return t
-}
-if t := r.Header.Get("CognitoToken"); t != "" {
-return t
-}
-return ""
+	auth := r.Header.Get("Authorization")
+	if strings.HasPrefix(auth, "Bearer ") {
+		return auth[7:]
+	}
+	if t := r.Header.Get("IC-Auth"); t != "" {
+		return t
+	}
+	if t := r.Header.Get("CognitoToken"); t != "" {
+		return t
+	}
+	return ""
 }
 
 // ResolveSource extracts the data source ("iris" or "qs") from query params.
 func ResolveSource(r *http.Request) string {
-if s := r.URL.Query().Get("source"); s != "" {
-return strings.ToLower(s)
-}
-if sc := strings.ToUpper(r.URL.Query().Get("serviceCategory")); sc != "" {
-switch sc {
-case "LS":
-return "iris"
-case "MRA":
-return "qs"
-}
-}
-return ""
+	if s := r.URL.Query().Get("source"); s != "" {
+		return strings.ToLower(s)
+	}
+	if sc := strings.ToUpper(r.URL.Query().Get("serviceCategory")); sc != "" {
+		switch sc {
+		case "LS":
+			return "iris"
+		case "MRA":
+			return "qs"
+		}
+	}
+	return ""
 }
 
 // ParamError is returned by URL/query param parsing helpers.
 type ParamError struct {
-Param string
-Msg   string
+	Param string
+	Msg   string
 }
 
 func (e *ParamError) Error() string {
-return e.Param + " " + e.Msg
+	return e.Param + " " + e.Msg
 }
 
 // ParseIDParam parses a chi URL parameter as int64.
 // Returns 0 and an error if the parameter is missing or not a valid integer.
 func ParseIDParam(r *http.Request, param string) (int64, error) {
-raw := chi.URLParam(r, param)
-if raw == "" {
-return 0, &ParamError{Param: param, Msg: "is required"}
-}
-id, err := strconv.ParseInt(raw, 10, 64)
-if err != nil {
-return 0, &ParamError{Param: param, Msg: "must be a valid integer"}
-}
-if id <= 0 {
-return 0, &ParamError{Param: param, Msg: "must be a positive integer"}
-}
-return id, nil
+	raw := chi.URLParam(r, param)
+	if raw == "" {
+		return 0, &ParamError{Param: param, Msg: "is required"}
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, &ParamError{Param: param, Msg: "must be a valid integer"}
+	}
+	if id <= 0 {
+		return 0, &ParamError{Param: param, Msg: "must be a positive integer"}
+	}
+	return id, nil
 }
 
 // ParseStringParam returns a chi URL parameter, or an error if empty.
 func ParseStringParam(r *http.Request, param string) (string, error) {
-raw := chi.URLParam(r, param)
-if raw == "" {
-return "", &ParamError{Param: param, Msg: "is required"}
-}
-return raw, nil
+	raw := chi.URLParam(r, param)
+	if raw == "" {
+		return "", &ParamError{Param: param, Msg: "is required"}
+	}
+	return raw, nil
 }

@@ -3,11 +3,12 @@ package jobs
 import (
 	"log/slog"
 
+	"github.com/robfig/cron/v3"
+
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
-	"github.com/robfig/cron/v3"
 )
 
 // JobDeps holds all dependencies needed by scheduled jobs.

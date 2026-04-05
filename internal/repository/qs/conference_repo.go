@@ -292,7 +292,7 @@ func (r *ConferenceRepo) AddConferenceLinkMRA(ctx context.Context, projectID int
 		insertID, _ := res.LastInsertId()
 		lastResult = map[string]any{
 			"numberOfRecordsUpdated": 1,
-			"insertId":              insertID,
+			"insertId":               insertID,
 		}
 	}
 
@@ -462,13 +462,13 @@ func (r *ConferenceRepo) GetConferenceLinkByProjectMRA(ctx context.Context, proj
 			return nil, fmt.Errorf("scan conference link row: %w", err)
 		}
 		records = append(records, map[string]any{
-			"conferenceId":          confID,
-			"conference_link":       confLink,
-			"language_id":           langID,
-			"meeting_information":   meetingInfo,
-			"project_id":            projectIDVal,
-			"langCode_countryCode":  langCode,
-			"name":                  langName,
+			"conferenceId":         confID,
+			"conference_link":      confLink,
+			"language_id":          langID,
+			"meeting_information":  meetingInfo,
+			"project_id":           projectIDVal,
+			"langCode_countryCode": langCode,
+			"name":                 langName,
 		})
 	}
 	return records, rows.Err()

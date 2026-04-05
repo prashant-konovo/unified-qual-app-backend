@@ -8,11 +8,12 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
-	"github.com/InCrowd/unified-qual-api/integrationtests/testserver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
+	"github.com/InCrowd/unified-qual-api/integrationtests/testserver"
+	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 )
 
 // ── Authenticated project listing ───────────────────────────────

@@ -1,13 +1,13 @@
 package shared
 
 import (
-	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strconv"
 
+	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 )

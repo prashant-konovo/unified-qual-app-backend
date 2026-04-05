@@ -15,9 +15,9 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 )
 
 // ICAuthClient abstracts InCrowdAPI auth operations for testability.
@@ -181,10 +181,10 @@ func (s *AuthService) handleICLoginSuccess(ctx context.Context, loginResp *integ
 			"body": map[string]any{
 				"statusCode": 200,
 				"body": map[string]any{
-					"userInfo":    userInfo,
-					"apiKey":      s.cfg.AuthAPIKey,
-					"icUserId":    loginResp.ID,
-					"icAuthToken": loginResp.AccessToken,
+					"userInfo":     userInfo,
+					"apiKey":       s.cfg.AuthAPIKey,
+					"icUserId":     loginResp.ID,
+					"icAuthToken":  loginResp.AccessToken,
 					"IdToken":      loginResp.CognitoToken,
 					"AccessToken":  loginResp.AccessToken,
 					"RefreshToken": "",

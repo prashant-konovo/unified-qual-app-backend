@@ -1,8 +1,9 @@
 package dto
 
 import (
-	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"time"
+
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	qs "github.com/InCrowd/unified-qual-api/internal/repository/qs"
@@ -76,24 +77,24 @@ func ProjectDetailFromIRIS(p *iris.Project, statusName string) map[string]any {
 // ProjectDetailFromQS builds the GetProject response for a QS project.
 func ProjectDetailFromQS(p *qs.Project, scheduled, completed int, topicNames []string) map[string]any {
 	return map[string]any{
-		"id":                 p.ID,
-		"name":               p.Name,
-		"externalSurveyId":   utilities.NullStrPtr(p.ExternalSurveyID),
+		"id":                  p.ID,
+		"name":                p.Name,
+		"externalSurveyId":    utilities.NullStrPtr(p.ExternalSurveyID),
 		"salesforceJobNumber": utilities.NullStrPtr(p.SalesforceJobNumber),
-		"clientId":           utilities.NullInt64Ptr(p.ClientID),
-		"sampleSize":         utilities.NullInt64Ptr(p.SampleSize),
-		"interviewLength":    utilities.NullInt64Ptr(p.InterviewLength),
-		"statusId":           p.ProjectStatusID,
-		"schedulerGenerated": p.SchedulerGenerated,
-		"postScreeninBuffer": utilities.NullStrPtr(p.PostScreeninBuffer),
-		"moderatorBuffer":    utilities.NullStrPtr(p.ModeratorBuffer),
-		"topics":             topicNames,
-		"scheduledCount":     scheduled,
-		"completedCount":     completed,
-		"createdAt":          p.CreatedOn.Format(time.RFC3339),
-		"modifiedAt":         utilities.NullTimeStr(p.ModifiedOn),
-		"source":             "qs",
-		"serviceCategory":    "MRA",
+		"clientId":            utilities.NullInt64Ptr(p.ClientID),
+		"sampleSize":          utilities.NullInt64Ptr(p.SampleSize),
+		"interviewLength":     utilities.NullInt64Ptr(p.InterviewLength),
+		"statusId":            p.ProjectStatusID,
+		"schedulerGenerated":  p.SchedulerGenerated,
+		"postScreeninBuffer":  utilities.NullStrPtr(p.PostScreeninBuffer),
+		"moderatorBuffer":     utilities.NullStrPtr(p.ModeratorBuffer),
+		"topics":              topicNames,
+		"scheduledCount":      scheduled,
+		"completedCount":      completed,
+		"createdAt":           p.CreatedOn.Format(time.RFC3339),
+		"modifiedAt":          utilities.NullTimeStr(p.ModifiedOn),
+		"source":              "qs",
+		"serviceCategory":     "MRA",
 	}
 }
 

@@ -16,6 +16,15 @@ test:
 lint:
 	golangci-lint run ./...
 
+fmt:
+	gofmt -w .
+
+imports:
+	goimports -w -local github.com/InCrowd/unified-qual-api .
+
+fmt-check:
+	@test -z "$$(gofmt -l .)" || (echo "Files need formatting:"; gofmt -l .; exit 1)
+
 docker-build:
 	docker build -t $(APP_NAME):$(TAG) .
 

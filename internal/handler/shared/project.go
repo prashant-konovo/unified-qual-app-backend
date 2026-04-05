@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"github.com/InCrowd/unified-qual-api/internal/service"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 )
 
 // ProjectHandler handles project CRUD endpoints.

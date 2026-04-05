@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/utilities"
 )

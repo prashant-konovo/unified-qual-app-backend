@@ -1,8 +1,9 @@
 package dto
 
 import (
-	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"time"
+
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 
 	qs "github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
@@ -115,18 +116,18 @@ func SlotFromListRowSimple(s qs.TimeSlotListRow) map[string]any {
 
 // BuildTimeSlotResponse returns the timeslot fields matching legacy getTimeSlotByIdForCancelReschedule response.
 func BuildTimeSlotResponse(ts *qs.TimeSlot) map[string]any {
-return map[string]any{
-"id":                     ts.ID,
-"projectId":              ts.ProjectID,
-"isInvalidatedInterview": ts.IsInvalidatedInterview,
-"isInvalidateEmailSent":  ts.IsInvalidateEmailSent,
-"invalidationReasonCode": utilities.NullStr(ts.InvalidationReasonCode),
-"startTime":              ts.StartTime,
-"endTime":                ts.EndTime,
-"statusId":               ts.StatusID,
-"duration":               ts.Duration,
-"isInvalid":              ts.IsInvalid,
-}
+	return map[string]any{
+		"id":                     ts.ID,
+		"projectId":              ts.ProjectID,
+		"isInvalidatedInterview": ts.IsInvalidatedInterview,
+		"isInvalidateEmailSent":  ts.IsInvalidateEmailSent,
+		"invalidationReasonCode": utilities.NullStr(ts.InvalidationReasonCode),
+		"startTime":              ts.StartTime,
+		"endTime":                ts.EndTime,
+		"statusId":               ts.StatusID,
+		"duration":               ts.Duration,
+		"isInvalid":              ts.IsInvalid,
+	}
 }
 
 // LsAssignTimeslotModeratorRequest is the request body for assigning a moderator to a timeslot (LS brand).

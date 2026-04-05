@@ -107,12 +107,12 @@ type ProjectListRow struct {
 
 // Topic maps to the QS `topics` table.
 type Topic struct {
-	ID         int64          `json:"id"`
-	TopicName  string         `json:"topicName"`
-	ProjectID  int64          `json:"projectId"`
-	LanguageID sql.NullInt64  `json:"languageId"`
-	CreatedOn  sql.NullTime   `json:"createdOn"`
-	ModifiedOn sql.NullTime   `json:"modifiedOn"`
+	ID         int64         `json:"id"`
+	TopicName  string        `json:"topicName"`
+	ProjectID  int64         `json:"projectId"`
+	LanguageID sql.NullInt64 `json:"languageId"`
+	CreatedOn  sql.NullTime  `json:"createdOn"`
+	ModifiedOn sql.NullTime  `json:"modifiedOn"`
 }
 
 // ProjectRepo provides CRUD for the QS project table.
@@ -495,7 +495,7 @@ func (r *ProjectRepo) GetProjectDetailsMRA(ctx context.Context, projectID int64)
 	      WHERE project.id = ?`
 
 	var (
-		id, participantGroupID                                                int64
+		id, participantGroupID                                               int64
 		clientID, createdBy, qualModeratorID, projectStatusID, surveyID      sql.NullInt64
 		interviewLength, sampleSize, scheduled, completed                    sql.NullInt64
 		name, projectStatus                                                  string
@@ -632,7 +632,7 @@ func (r *ProjectRepo) GetProjectsMRA(ctx context.Context, creatorID, status int,
 			sampleSize, interviewLength, scheduled, completed                     sql.NullInt64
 			projectExternalClient                                                 sql.NullInt64
 			name, projectStatusName                                               string
-			sfJobNumber, firstName, lastName, topicName                            sql.NullString
+			sfJobNumber, firstName, lastName, topicName                           sql.NullString
 			createdOn, modifiedOn                                                 sql.NullString
 		)
 
@@ -648,7 +648,7 @@ func (r *ProjectRepo) GetProjectsMRA(ctx context.Context, creatorID, status int,
 			}
 			results = append(results, map[string]any{
 				"id": id, "name": name, "project_status_name": projectStatusName,
-				"external_survey_id": externalSurveyID.String,
+				"external_survey_id":    externalSurveyID.String,
 				"salesforce_job_number": sfJobNumber.String, "client_id": clientID,
 				"sample_size": sampleSize.Int64, "created_on": createdOn.String,
 				"created_by": createdBy, "interview_length": interviewLength.Int64,
@@ -657,7 +657,7 @@ func (r *ProjectRepo) GetProjectsMRA(ctx context.Context, creatorID, status int,
 				"scheduled": scheduled.Int64, "completed": completed.Int64,
 				"firstName": firstName.String, "lastName": lastName.String,
 				"project_external_client": projectExternalClient.Int64,
-				"topicName": topicName.String,
+				"topicName":               topicName.String,
 			})
 		} else {
 			if err := rows.Scan(&id, &name, &projectStatusName,
@@ -678,7 +678,7 @@ func (r *ProjectRepo) GetProjectsMRA(ctx context.Context, creatorID, status int,
 				"scheduled": scheduled.Int64, "completed": completed.Int64,
 				"firstName": firstName.String, "lastName": lastName.String,
 				"project_external_client": projectExternalClient.Int64,
-				"topicName": topicName.String,
+				"topicName":               topicName.String,
 			})
 		}
 	}
@@ -735,7 +735,7 @@ func (r *ProjectRepo) GetProjectsForModsMRA(ctx context.Context, clientID int64)
 		}
 		results = append(results, map[string]any{
 			"id": id, "name": name, "project_status_name": projectStatusName,
-			"external_survey_id": externalSurveyID.String,
+			"external_survey_id":    externalSurveyID.String,
 			"salesforce_job_number": sfJobNumber.String, "client_id": cID,
 			"sample_size": sampleSize.Int64, "created_on": createdOn.String,
 			"created_by": createdBy, "interview_length": interviewLength.Int64,
@@ -1012,9 +1012,9 @@ func (r *ProjectRepo) GetModeratorsList(ctx context.Context, projectID int64) ([
 	var results []map[string]any
 	for rows.Next() {
 		var (
-			firstName, lastName                string
-			id, clientID, interviewCount       int64
-			startTime, endTime, timezone       sql.NullString
+			firstName, lastName          string
+			id, clientID, interviewCount int64
+			startTime, endTime, timezone sql.NullString
 		)
 		if err := rows.Scan(&firstName, &lastName, &id, &clientID,
 			&interviewCount, &startTime, &endTime, &timezone); err != nil {
@@ -1118,10 +1118,10 @@ func (r *ProjectRepo) HandleProjectExportMRA(ctx context.Context, projectID int6
 	var results [][]string
 	for rows.Next() {
 		var (
-			participantId, duration, startTime, firstName, lastName, sessKey         sql.NullString
-			respondentTime, honorarium, modifiedOn, email, phone, confLink           sql.NullString
-			modFirstName, modLastName, pmFirstName, pmLastName, status, comment      sql.NullString
-			respTimezone, rescheduleLink                                             sql.NullString
+			participantId, duration, startTime, firstName, lastName, sessKey    sql.NullString
+			respondentTime, honorarium, modifiedOn, email, phone, confLink      sql.NullString
+			modFirstName, modLastName, pmFirstName, pmLastName, status, comment sql.NullString
+			respTimezone, rescheduleLink                                        sql.NullString
 		)
 		if err := rows.Scan(&participantId, &duration, &startTime, &firstName, &lastName, &sessKey,
 			&respondentTime, &honorarium, &modifiedOn, &email, &phone, &confLink,
@@ -1177,10 +1177,10 @@ func (r *ProjectRepo) HandleProjectNoTimeslotExportMRA(ctx context.Context, proj
 	var results [][]string
 	for rows.Next() {
 		var (
-			participantId, duration, startTime, firstName, lastName, sessKey         sql.NullString
-			respondentTime, honorarium, modifiedOn, email, phone, confLink           sql.NullString
-			modFirstName, modLastName, pmFirstName, pmLastName, status, comment      sql.NullString
-			rescheduleLink                                                           sql.NullString
+			participantId, duration, startTime, firstName, lastName, sessKey    sql.NullString
+			respondentTime, honorarium, modifiedOn, email, phone, confLink      sql.NullString
+			modFirstName, modLastName, pmFirstName, pmLastName, status, comment sql.NullString
+			rescheduleLink                                                      sql.NullString
 		)
 		if err := rows.Scan(&participantId, &duration, &startTime, &firstName, &lastName, &sessKey,
 			&respondentTime, &honorarium, &modifiedOn, &email, &phone, &confLink,
@@ -1410,138 +1410,138 @@ func (r *ProjectRepo) GetModeratorsTimeRangePerProjectMRA(ctx context.Context, p
 
 // GetProjectsForModeratorMRA returns projects assigned to a moderator for a client.
 func (r *ProjectRepo) GetProjectsForModeratorMRA(ctx context.Context, clientID, moderatorID int64) ([]map[string]any, error) {
-q := `SELECT p.id, p.name FROM project p
+	q := `SELECT p.id, p.name FROM project p
 INNER JOIN projects_users pu ON pu.project_id = p.id
 WHERE pu.user_id = ? AND p.client_id = ?`
-rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
-if err != nil {
-return nil, fmt.Errorf("get projects for moderator mra: %w", err)
-}
-defer rows.Close()
-var records []map[string]any
-for rows.Next() {
-var id int64
-var name string
-if err := rows.Scan(&id, &name); err != nil {
-return nil, err
-}
-records = append(records, map[string]any{"id": id, "name": name})
-}
-if records == nil {
-records = []map[string]any{}
-}
-return records, rows.Err()
+	rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get projects for moderator mra: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		records = append(records, map[string]any{"id": id, "name": name})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
 }
 
 // GetAllAccountsMRA returns account types (legacy /salesforce/getAllAccounts).
 func (r *ProjectRepo) GetAllAccountsMRA(ctx context.Context) ([]map[string]any, error) {
-q := `SELECT id, account_name FROM user_account_type`
-rows, err := r.db.QueryContext(ctx, q)
-if err != nil {
-return nil, fmt.Errorf("get all accounts mra: %w", err)
-}
-defer rows.Close()
-var records []map[string]any
-for rows.Next() {
-var id int64
-var name string
-if err := rows.Scan(&id, &name); err != nil {
-return nil, err
-}
-records = append(records, map[string]any{"id": id, "account_name": name})
-}
-if records == nil {
-records = []map[string]any{}
-}
-return records, rows.Err()
+	q := `SELECT id, account_name FROM user_account_type`
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("get all accounts mra: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		records = append(records, map[string]any{"id": id, "account_name": name})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
 }
 
 // GetSalesforceClientsMRA returns salesforce accounts that have projects (legacy /salesforce/clients).
 func (r *ProjectRepo) GetSalesforceClientsMRA(ctx context.Context) ([]map[string]any, error) {
-q := `SELECT salesforce_account_id AS accountId, name
+	q := `SELECT salesforce_account_id AS accountId, name
 FROM salesforce_account
 WHERE is_deleted = 0
 AND salesforce_account_id IN (SELECT account_c FROM salesforce_project)
 AND salesforce_account_id != 'UnKnown_UnKnown'
 ORDER BY name`
-rows, err := r.db.QueryContext(ctx, q)
-if err != nil {
-return nil, fmt.Errorf("get salesforce clients mra: %w", err)
-}
-defer rows.Close()
-var records []map[string]any
-for rows.Next() {
-var accountID, name string
-if err := rows.Scan(&accountID, &name); err != nil {
-return nil, err
-}
-records = append(records, map[string]any{"accountId": accountID, "name": name})
-}
-if records == nil {
-records = []map[string]any{}
-}
-return records, rows.Err()
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("get salesforce clients mra: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var accountID, name string
+		if err := rows.Scan(&accountID, &name); err != nil {
+			return nil, err
+		}
+		records = append(records, map[string]any{"accountId": accountID, "name": name})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
 }
 
 // GetSalesforceProjectsMRA returns salesforce projects for a client (legacy /salesforce/projects/{id}).
 func (r *ProjectRepo) GetSalesforceProjectsMRA(ctx context.Context, salesforceClientID string) ([]map[string]any, error) {
-q := `SELECT salesforce_project_id AS salesForceProjectId,
+	q := `SELECT salesforce_project_id AS salesForceProjectId,
 (CASE WHEN name_c IS NULL THEN job_number_text_c
  ELSE CONCAT(job_number_text_c, '-', name_c) END) AS salesForceProjectName
 FROM salesforce_project
 WHERE account_c = ?`
-rows, err := r.db.QueryContext(ctx, q, salesforceClientID)
-if err != nil {
-return nil, fmt.Errorf("get salesforce projects mra: %w", err)
-}
-defer rows.Close()
-var records []map[string]any
-for rows.Next() {
-var projectID, projectName string
-if err := rows.Scan(&projectID, &projectName); err != nil {
-return nil, err
-}
-records = append(records, map[string]any{"salesForceProjectId": projectID, "salesForceProjectName": projectName})
-}
-if records == nil {
-records = []map[string]any{}
-}
-return records, rows.Err()
+	rows, err := r.db.QueryContext(ctx, q, salesforceClientID)
+	if err != nil {
+		return nil, fmt.Errorf("get salesforce projects mra: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var projectID, projectName string
+		if err := rows.Scan(&projectID, &projectName); err != nil {
+			return nil, err
+		}
+		records = append(records, map[string]any{"salesForceProjectId": projectID, "salesForceProjectName": projectName})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
 }
 
 // GetSalesforceClientsWithFilterMRA returns salesforce accounts filtered by geo (legacy /salesforce/getSalesforceClientsWithFilter).
 // projectAccountId: 1=All, 2=USA(eu_account_c=0), 3=EU(eu_account_c=1)
 func (r *ProjectRepo) GetSalesforceClientsWithFilterMRA(ctx context.Context, projectAccountID int) ([]map[string]any, error) {
-var q string
-var args []any
-if projectAccountID == 1 {
-q = `SELECT salesforce_account_id, name FROM salesforce_account
+	var q string
+	var args []any
+	if projectAccountID == 1 {
+		q = `SELECT salesforce_account_id, name FROM salesforce_account
 WHERE is_deleted = 0
 AND salesforce_account_id IN (SELECT account_c FROM salesforce_project)`
-} else {
-euVal := projectAccountID - 2 // 2→0 (USA), 3→1 (EU)
-q = `SELECT salesforce_account_id, name FROM salesforce_account
+	} else {
+		euVal := projectAccountID - 2 // 2→0 (USA), 3→1 (EU)
+		q = `SELECT salesforce_account_id, name FROM salesforce_account
 WHERE is_deleted = 0 AND eu_account_c = ?
 AND salesforce_account_id IN (SELECT account_c FROM salesforce_project)`
-args = append(args, euVal)
-}
-rows, err := r.db.QueryContext(ctx, q, args...)
-if err != nil {
-return nil, fmt.Errorf("get salesforce clients with filter mra: %w", err)
-}
-defer rows.Close()
-var records []map[string]any
-for rows.Next() {
-var accountID, name string
-if err := rows.Scan(&accountID, &name); err != nil {
-return nil, err
-}
-records = append(records, map[string]any{"salesforce_account_id": accountID, "name": name})
-}
-if records == nil {
-records = []map[string]any{}
-}
-return records, rows.Err()
+		args = append(args, euVal)
+	}
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get salesforce clients with filter mra: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var accountID, name string
+		if err := rows.Scan(&accountID, &name); err != nil {
+			return nil, err
+		}
+		records = append(records, map[string]any{"salesforce_account_id": accountID, "name": name})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
 }
 
 // GetTopicsByProjectMRA returns topics with language locale codes for a project.
@@ -1567,7 +1567,7 @@ func (r *ProjectRepo) GetTopicsByProjectMRA(ctx context.Context, projectID int64
 			return nil, fmt.Errorf("scan topic by project: %w", err)
 		}
 		result = append(result, map[string]any{
-			"id":                    id,
+			"id":                   id,
 			"langCode_countryCode": langCodeCountryCode,
 			"topic_name":           topicName,
 		})
@@ -1671,105 +1671,102 @@ func (r *ProjectRepo) DeleteTopicByProjectAndLanguageMRA(ctx context.Context, pr
 	return nil
 }
 
-
-
-
 // ──────────────────────────────────────────────
 // MRA #73: GetAllLocalisations
 // ──────────────────────────────────────────────
 
 func (r *ProjectRepo) GetAllLanguageLocalisationsMRA(ctx context.Context) ([]map[string]any, error) {
-const q = `SELECT * FROM language_localisation ORDER BY country ASC`
-rows, err := r.db.QueryContext(ctx, q)
-if err != nil {
-return nil, fmt.Errorf("get all language localisations mra: %w", err)
-}
-defer rows.Close()
-cols, _ := rows.Columns()
-var result []map[string]any
-for rows.Next() {
-vals := make([]any, len(cols))
-ptrs := make([]any, len(cols))
-for i := range vals {
-ptrs[i] = &vals[i]
-}
-if err := rows.Scan(ptrs...); err != nil {
-return nil, err
-}
-row := make(map[string]any, len(cols))
-for i, c := range cols {
-v := vals[i]
-if b, ok := v.([]byte); ok {
-row[c] = string(b)
-} else {
-row[c] = v
-}
-}
-result = append(result, row)
-}
-if result == nil {
-result = []map[string]any{}
-}
-return result, rows.Err()
+	const q = `SELECT * FROM language_localisation ORDER BY country ASC`
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("get all language localisations mra: %w", err)
+	}
+	defer rows.Close()
+	cols, _ := rows.Columns()
+	var result []map[string]any
+	for rows.Next() {
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, err
+		}
+		row := make(map[string]any, len(cols))
+		for i, c := range cols {
+			v := vals[i]
+			if b, ok := v.([]byte); ok {
+				row[c] = string(b)
+			} else {
+				row[c] = v
+			}
+		}
+		result = append(result, row)
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result, rows.Err()
 }
 
 func (r *ProjectRepo) GetDataFromLanguageLocalisationsMRA(ctx context.Context) ([]map[string]any, error) {
-const q = `SELECT DISTINCT language_name, language_code FROM language_localisation WHERE language_name <> 'English' ORDER BY language_name ASC`
-rows, err := r.db.QueryContext(ctx, q)
-if err != nil {
-return nil, fmt.Errorf("get data from language localisations mra: %w", err)
-}
-defer rows.Close()
-var result []map[string]any
-for rows.Next() {
-var langName, langCode string
-if err := rows.Scan(&langName, &langCode); err != nil {
-return nil, err
-}
-result = append(result, map[string]any{"language_name": langName, "language_code": langCode})
-}
-if result == nil {
-result = []map[string]any{}
-}
-return result, rows.Err()
+	const q = `SELECT DISTINCT language_name, language_code FROM language_localisation WHERE language_name <> 'English' ORDER BY language_name ASC`
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("get data from language localisations mra: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var langName, langCode string
+		if err := rows.Scan(&langName, &langCode); err != nil {
+			return nil, err
+		}
+		result = append(result, map[string]any{"language_name": langName, "language_code": langCode})
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result, rows.Err()
 }
 
 func (r *ProjectRepo) GetCountriesWithLocalisationsMRA(ctx context.Context) ([]map[string]any, error) {
-const q = `SELECT * FROM language_localisation
+	const q = `SELECT * FROM language_localisation
 WHERE language_name IN (
 SELECT language_name FROM language_localisation GROUP BY language_name HAVING COUNT(language_name) > 1
 ) ORDER BY country`
-rows, err := r.db.QueryContext(ctx, q)
-if err != nil {
-return nil, fmt.Errorf("get countries with localisations mra: %w", err)
-}
-defer rows.Close()
-cols, _ := rows.Columns()
-var result []map[string]any
-for rows.Next() {
-vals := make([]any, len(cols))
-ptrs := make([]any, len(cols))
-for i := range vals {
-ptrs[i] = &vals[i]
-}
-if err := rows.Scan(ptrs...); err != nil {
-return nil, err
-}
-row := make(map[string]any, len(cols))
-for i, c := range cols {
-v := vals[i]
-if b, ok := v.([]byte); ok {
-row[c] = string(b)
-} else {
-row[c] = v
-}
-}
-result = append(result, row)
-}
-if result == nil {
-result = []map[string]any{}
-}
-return result, rows.Err()
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("get countries with localisations mra: %w", err)
+	}
+	defer rows.Close()
+	cols, _ := rows.Columns()
+	var result []map[string]any
+	for rows.Next() {
+		vals := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, err
+		}
+		row := make(map[string]any, len(cols))
+		for i, c := range cols {
+			v := vals[i]
+			if b, ok := v.([]byte); ok {
+				row[c] = string(b)
+			} else {
+				row[c] = v
+			}
+		}
+		result = append(result, row)
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result, rows.Err()
 }
 
 // ──────────────────────────────────────────────
@@ -1777,14 +1774,14 @@ return result, rows.Err()
 // ──────────────────────────────────────────────
 
 func (r *ProjectRepo) DeleteMeetingInformationTranslationMRA(ctx context.Context, projectID, languageID int64) (map[string]any, error) {
-res, err := r.db.ExecContext(ctx,
-`DELETE FROM project_meeting_translation WHERE project_id = ? AND language_id = ?`,
-projectID, languageID)
-if err != nil {
-return nil, fmt.Errorf("delete meeting information translation mra: %w", err)
-}
-affected, _ := res.RowsAffected()
-return map[string]any{"numberOfRecordsUpdated": affected}, nil
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM project_meeting_translation WHERE project_id = ? AND language_id = ?`,
+		projectID, languageID)
+	if err != nil {
+		return nil, fmt.Errorf("delete meeting information translation mra: %w", err)
+	}
+	affected, _ := res.RowsAffected()
+	return map[string]any{"numberOfRecordsUpdated": affected}, nil
 }
 
 // ──────────────────────────────────────────────
@@ -1792,15 +1789,15 @@ return map[string]any{"numberOfRecordsUpdated": affected}, nil
 // ──────────────────────────────────────────────
 
 func (r *ProjectRepo) AddHonorariumAmountMRA(ctx context.Context, projectID int64, honorarium int64, currency, sessKey string, extProjectID, extUserSurveyID, extUserID, extCreditOrderID, extCountryID string) error {
-const q = `INSERT INTO honorarium_amount (project_id, honorarium, currency, sessKey, external_user_survey_id, external_user_id, external_project_id, external_credit_order_id, external_country_id)
+	const q = `INSERT INTO honorarium_amount (project_id, honorarium, currency, sessKey, external_user_survey_id, external_user_id, external_project_id, external_credit_order_id, external_country_id)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE currency = ?`
-_, err := r.db.ExecContext(ctx, q, projectID, honorarium, currency, sessKey,
-extUserSurveyID, extUserID, extProjectID, extCreditOrderID, extCountryID, currency)
-if err != nil {
-return fmt.Errorf("add honorarium amount mra: %w", err)
-}
-return nil
+	_, err := r.db.ExecContext(ctx, q, projectID, honorarium, currency, sessKey,
+		extUserSurveyID, extUserID, extProjectID, extCreditOrderID, extCountryID, currency)
+	if err != nil {
+		return fmt.Errorf("add honorarium amount mra: %w", err)
+	}
+	return nil
 }
 
 // ──────────────────────────────────────────────
@@ -1808,23 +1805,23 @@ return nil
 // ──────────────────────────────────────────────
 
 func (r *ProjectRepo) GetHonoValueUpdateReasonListMRA(ctx context.Context) ([]map[string]any, error) {
-const q = `SELECT id, code, display FROM hono_value_update_reason`
-rows, err := r.db.QueryContext(ctx, q)
-if err != nil {
-return nil, fmt.Errorf("get hono value update reason list mra: %w", err)
-}
-defer rows.Close()
-var result []map[string]any
-for rows.Next() {
-var id int64
-var code, display string
-if err := rows.Scan(&id, &code, &display); err != nil {
-return nil, err
-}
-result = append(result, map[string]any{"id": id, "code": code, "display": display})
-}
-if result == nil {
-result = []map[string]any{}
-}
-return result, rows.Err()
+	const q = `SELECT id, code, display FROM hono_value_update_reason`
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("get hono value update reason list mra: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id int64
+		var code, display string
+		if err := rows.Scan(&id, &code, &display); err != nil {
+			return nil, err
+		}
+		result = append(result, map[string]any{"id": id, "code": code, "display": display})
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result, rows.Err()
 }

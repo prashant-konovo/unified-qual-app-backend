@@ -7,9 +7,10 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/InCrowd/unified-qual-api/integrationtests/testserver"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/InCrowd/unified-qual-api/integrationtests/testserver"
 )
 
 func TestHealth_FullStack_ReturnsHealthy(t *testing.T) {

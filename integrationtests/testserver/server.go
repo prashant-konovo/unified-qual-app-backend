@@ -15,6 +15,8 @@ import (
 	"net/http/httptest"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
+
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
@@ -23,7 +25,6 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/router"
 	"github.com/InCrowd/unified-qual-api/internal/service"
 	mocks "github.com/InCrowd/unified-qual-api/internal/unittests/mocks"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 const testKID = "test-kid-001"

@@ -8,14 +8,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+
 	"github.com/InCrowd/unified-qual-api/internal/handler/shared"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/InCrowd/unified-qual-api/internal/service"
 	"github.com/InCrowd/unified-qual-api/internal/unittests"
 	"github.com/InCrowd/unified-qual-api/internal/unittests/mocks"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 // listResponse mirrors utilities.PaginatedResponse for test decoding.
@@ -33,24 +34,24 @@ var fixedTime = time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC)
 
 func sampleIRISRow(id int64, name string) iris.ProjectListRow {
 	return iris.ProjectListRow{
-		ID:              id,
-		Name:            name,
-		SubscriptionID:  100,
-		ProjectStatusID: 1,
+		ID:                id,
+		Name:              name,
+		SubscriptionID:    100,
+		ProjectStatusID:   1,
 		ProjectStatusName: "Active",
-		ProjectTypeID:   1,
-		CreatedOn:       fixedTime,
+		ProjectTypeID:     1,
+		CreatedOn:         fixedTime,
 	}
 }
 
 func sampleQSRow(id int64, name string) qs.ProjectListRow {
 	return qs.ProjectListRow{
-		ID:                id,
-		Name:              name,
+		ID:                  id,
+		Name:                name,
 		SalesforceJobNumber: sql.NullString{String: "SF-001", Valid: true},
-		ProjectStatusID:  1,
-		ProjectStatusName: "Active",
-		CreatedOn:        fixedTime,
+		ProjectStatusID:     1,
+		ProjectStatusName:   "Active",
+		CreatedOn:           fixedTime,
 	}
 }
 

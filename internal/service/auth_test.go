@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	mocks "github.com/InCrowd/unified-qual-api/internal/unittests/mocks"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 // ── Test helpers ────────────────────────────────────────────────────────────
@@ -37,15 +38,15 @@ func testConfig() *config.Config {
 
 // mockICAuth implements ICAuthClient for testing.
 type mockICAuth struct {
-	configured      bool
-	loginResp       *integration.ICLoginResponse
-	loginStatus     int
-	loginErr        error
-	refreshToken    string
-	refreshErr      error
-	acceptTermsErr  error
-	logoutErr       error
-	changePwdErr    error
+	configured     bool
+	loginResp      *integration.ICLoginResponse
+	loginStatus    int
+	loginErr       error
+	refreshToken   string
+	refreshErr     error
+	acceptTermsErr error
+	logoutErr      error
+	changePwdErr   error
 
 	loginCalled     bool
 	refreshCalled   bool
@@ -53,8 +54,8 @@ type mockICAuth struct {
 	logoutCalled    bool
 	changePwdCalled bool
 
-	lastLogoutUserID    int64
-	lastAcceptUserID    int64
+	lastLogoutUserID int64
+	lastAcceptUserID int64
 }
 
 func (m *mockICAuth) Configured() bool { return m.configured }

@@ -122,14 +122,14 @@ type UserWithRoles struct {
 
 // UserListRow is a flattened row for list queries with aggregated roles.
 type UserListRow struct {
-	ID            int64          `json:"id"`
-	FirstName     sql.NullString `json:"firstName"`
-	LastName      sql.NullString `json:"lastName"`
-	Email         sql.NullString `json:"email"`
-	Deleted       int            `json:"deleted"`
-	TimeZone      sql.NullString `json:"timeZone"`
-	ModifiedOn    time.Time      `json:"modifiedOn"`
-	RoleIDs       string         `json:"roleIds"` // comma-separated from GROUP_CONCAT
+	ID         int64          `json:"id"`
+	FirstName  sql.NullString `json:"firstName"`
+	LastName   sql.NullString `json:"lastName"`
+	Email      sql.NullString `json:"email"`
+	Deleted    int            `json:"deleted"`
+	TimeZone   sql.NullString `json:"timeZone"`
+	ModifiedOn time.Time      `json:"modifiedOn"`
+	RoleIDs    string         `json:"roleIds"` // comma-separated from GROUP_CONCAT
 }
 
 // ModeratorAvailability maps to the QS `moderator_availability` table (6 columns verified).
@@ -735,10 +735,10 @@ func (r *UserRepo) GetAllUsersAdmin(ctx context.Context, cognitoUserID string) (
 			return nil, err
 		}
 		rec := map[string]any{
-			"firstName":             firstName.String,
-			"lastName":              lastName.String,
-			"email":                 email.String,
-			"cognitoUserId":         cogID.String,
+			"firstName":     firstName.String,
+			"lastName":      lastName.String,
+			"email":         email.String,
+			"cognitoUserId": cogID.String,
 		}
 		if modifiedDate.Valid {
 			rec["modifiedDate"] = modifiedDate.String
@@ -874,15 +874,15 @@ func (r *UserRepo) UpdateModeratorBufferMRA(ctx context.Context, userID int64, b
 
 // ModeratorTimeslotMRA represents a future scheduled interview for a moderator.
 type ModeratorTimeslotMRA struct {
-	TimeSlotID     int64          `json:"timeSlotId"`
-	StartTime      time.Time      `json:"startTime"`
-	EndTime        time.Time      `json:"endTime"`
-	Completed      int            `json:"completed"`
-	Duration       sql.NullInt64  `json:"duration"`
-	ImportedOverlap string        `json:"importedOverLap"`
-	IntervieweeID  sql.NullInt64  `json:"intervieweeId"`
-	ProjectID      int64          `json:"projectId"`
-	ProjectName    sql.NullString `json:"projectName"`
+	TimeSlotID      int64          `json:"timeSlotId"`
+	StartTime       time.Time      `json:"startTime"`
+	EndTime         time.Time      `json:"endTime"`
+	Completed       int            `json:"completed"`
+	Duration        sql.NullInt64  `json:"duration"`
+	ImportedOverlap string         `json:"importedOverLap"`
+	IntervieweeID   sql.NullInt64  `json:"intervieweeId"`
+	ProjectID       int64          `json:"projectId"`
+	ProjectName     sql.NullString `json:"projectName"`
 }
 
 // GetFutureModeratorTimeslotsMRA returns future scheduled interviews for a moderator+client.
@@ -1486,7 +1486,7 @@ func (r *UserRepo) GetAllModeratorsAvailabilityPerClientMRA(ctx context.Context,
 
 // GetModeratorsListMRA returns moderators for a project matching legacy getModeratorsList query.
 func (r *UserRepo) GetModeratorsListMRA(ctx context.Context, projectID int64) ([]map[string]any, error) {
-q := `SELECT DISTINCT user.first_name AS firstName, user.last_name AS lastName, user.id AS id,
+	q := `SELECT DISTINCT user.first_name AS firstName, user.last_name AS lastName, user.id AS id,
 user_client.client_id AS clientId,
 COUNT(DISTINCT moderator_time_slot.id) AS interviewCount,
 COALESCE(mtr.start_time, '') AS startTime,
@@ -1503,58 +1503,58 @@ AND time_slot.project_id = ?) moderator_time_slot ON moderator_time_slot.moderat
 LEFT OUTER JOIN (SELECT * FROM moderator_time_range WHERE project_id = ?) mtr ON mtr.moderator_id = user.id
 WHERE user_role.role_id = 1 AND user.deleted = 0 AND projects_users.project_id = ?
 GROUP BY user.id`
-rows, err := r.db.QueryContext(ctx, q, projectID, projectID, projectID)
-if err != nil {
-return nil, fmt.Errorf("get moderators list mra: %w", err)
-}
-defer rows.Close()
-var records []map[string]any
-for rows.Next() {
-var id, clientID int64
-var interviewCount int
-var firstName, lastName, startTime, endTime, timezone string
-if err := rows.Scan(&firstName, &lastName, &id, &clientID, &interviewCount, &startTime, &endTime, &timezone); err != nil {
-return nil, fmt.Errorf("scan moderator list mra: %w", err)
-}
-records = append(records, map[string]any{
-"firstName": firstName, "lastName": lastName, "id": id,
-"clientId": clientID, "interviewCount": interviewCount,
-"startTime": startTime, "endTime": endTime, "timezone": timezone,
-})
-}
-if records == nil {
-records = []map[string]any{}
-}
-return records, rows.Err()
+	rows, err := r.db.QueryContext(ctx, q, projectID, projectID, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get moderators list mra: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var id, clientID int64
+		var interviewCount int
+		var firstName, lastName, startTime, endTime, timezone string
+		if err := rows.Scan(&firstName, &lastName, &id, &clientID, &interviewCount, &startTime, &endTime, &timezone); err != nil {
+			return nil, fmt.Errorf("scan moderator list mra: %w", err)
+		}
+		records = append(records, map[string]any{
+			"firstName": firstName, "lastName": lastName, "id": id,
+			"clientId": clientID, "interviewCount": interviewCount,
+			"startTime": startTime, "endTime": endTime, "timezone": timezone,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
 }
 
 // GetAllProjectManagersListMRA returns project managers matching legacy SQL (client_id=1 hardcoded in legacy).
 func (r *UserRepo) GetAllProjectManagersListMRA(ctx context.Context) ([]map[string]any, error) {
-q := `SELECT DISTINCT user.first_name AS firstName, user.last_name AS lastName, user.id AS id
+	q := `SELECT DISTINCT user.first_name AS firstName, user.last_name AS lastName, user.id AS id
 FROM user
 INNER JOIN user_client ON user.id = user_client.user_id
 INNER JOIN user_role ON user.id = user_role.user_id
 WHERE user_client.client_id = 1 AND user_role.role_id IN (2, 3) AND user.deleted = 0
 GROUP BY user.id
 ORDER BY firstName, lastName ASC`
-rows, err := r.db.QueryContext(ctx, q)
-if err != nil {
-return nil, fmt.Errorf("get all project managers list mra: %w", err)
-}
-defer rows.Close()
-var records []map[string]any
-for rows.Next() {
-var id int64
-var firstName, lastName string
-if err := rows.Scan(&firstName, &lastName, &id); err != nil {
-return nil, err
-}
-records = append(records, map[string]any{"firstName": firstName, "lastName": lastName, "id": id})
-}
-if records == nil {
-records = []map[string]any{}
-}
-return records, rows.Err()
+	rows, err := r.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("get all project managers list mra: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var id int64
+		var firstName, lastName string
+		if err := rows.Scan(&firstName, &lastName, &id); err != nil {
+			return nil, err
+		}
+		records = append(records, map[string]any{"firstName": firstName, "lastName": lastName, "id": id})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
 }
 
 // ──────────────────────────────────────────────
@@ -1644,66 +1644,66 @@ func (r *UserRepo) GetAllModeratorsAvailabilityForPMWithModeratorFilterMRA(ctx c
 
 // UpdateModExternalCalendarUrlMRA updates the external calendar URL and key for a moderator.
 func (r *UserRepo) UpdateModExternalCalendarUrlMRA(ctx context.Context, moderatorID int64, url, key string) error {
-const q = `UPDATE moderator_external_calendar SET external_calendar_url = ?, external_calendar_key = ? WHERE moderator_id = ?`
-_, err := r.db.ExecContext(ctx, q, url, key, moderatorID)
-if err != nil {
-return fmt.Errorf("update external calendar url mra: %w", err)
-}
-return nil
+	const q = `UPDATE moderator_external_calendar SET external_calendar_url = ?, external_calendar_key = ? WHERE moderator_id = ?`
+	_, err := r.db.ExecContext(ctx, q, url, key, moderatorID)
+	if err != nil {
+		return fmt.Errorf("update external calendar url mra: %w", err)
+	}
+	return nil
 }
 
 // UpdateModExternalCalendarStatusMRA updates the external calendar import status for a moderator.
 func (r *UserRepo) UpdateModExternalCalendarStatusMRA(ctx context.Context, moderatorID int64, status string) error {
-const q = `UPDATE moderator_external_calendar SET status = ? WHERE moderator_id = ?`
-_, err := r.db.ExecContext(ctx, q, status, moderatorID)
-if err != nil {
-return fmt.Errorf("update external calendar status mra: %w", err)
-}
-return nil
+	const q = `UPDATE moderator_external_calendar SET status = ? WHERE moderator_id = ?`
+	_, err := r.db.ExecContext(ctx, q, status, moderatorID)
+	if err != nil {
+		return fmt.Errorf("update external calendar status mra: %w", err)
+	}
+	return nil
 }
 
 // DeleteImportedModeratorAvailabilityByModeratorMRA deletes imported avails for a moderator+client.
 func (r *UserRepo) DeleteImportedModeratorAvailabilityByModeratorMRA(ctx context.Context, moderatorID, clientID int64) error {
-const q = `DELETE FROM imported_moderator_availability WHERE moderator_id = ? AND client_id = ?`
-_, err := r.db.ExecContext(ctx, q, moderatorID, clientID)
-if err != nil {
-return fmt.Errorf("delete imported moderator availability mra: %w", err)
-}
-return nil
+	const q = `DELETE FROM imported_moderator_availability WHERE moderator_id = ? AND client_id = ?`
+	_, err := r.db.ExecContext(ctx, q, moderatorID, clientID)
+	if err != nil {
+		return fmt.Errorf("delete imported moderator availability mra: %w", err)
+	}
+	return nil
 }
 
 // GetImportedModeratorAvailabilityMRA returns imported moderator availability for a moderator+client.
 func (r *UserRepo) GetImportedModeratorAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error) {
-const q = `SELECT id, moderator_id AS moderatorId, client_id AS clientId,
+	const q = `SELECT id, moderator_id AS moderatorId, client_id AS clientId,
 start_time AS startTime, end_time AS endTime
 FROM imported_moderator_availability
 WHERE moderator_id = ? AND client_id = ?
 ORDER BY start_time`
-rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
-if err != nil {
-return nil, fmt.Errorf("get imported moderator availability mra: %w", err)
-}
-defer rows.Close()
+	rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get imported moderator availability mra: %w", err)
+	}
+	defer rows.Close()
 
-var result []map[string]any
-for rows.Next() {
-var id, modID, cID int64
-var startTime, endTime string
-if err := rows.Scan(&id, &modID, &cID, &startTime, &endTime); err != nil {
-return nil, fmt.Errorf("scan imported moderator availability: %w", err)
-}
-result = append(result, map[string]any{
-"id":          id,
-"moderatorId": modID,
-"clientId":    cID,
-"startTime":   startTime,
-"endTime":     endTime,
-})
-}
-if result == nil {
-result = []map[string]any{}
-}
-return result, rows.Err()
+	var result []map[string]any
+	for rows.Next() {
+		var id, modID, cID int64
+		var startTime, endTime string
+		if err := rows.Scan(&id, &modID, &cID, &startTime, &endTime); err != nil {
+			return nil, fmt.Errorf("scan imported moderator availability: %w", err)
+		}
+		result = append(result, map[string]any{
+			"id":          id,
+			"moderatorId": modID,
+			"clientId":    cID,
+			"startTime":   startTime,
+			"endTime":     endTime,
+		})
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result, rows.Err()
 }
 
 // GetModeratorExternalCalendarMRA returns all rows from moderator_external_calendar for a moderator.
@@ -1774,38 +1774,38 @@ func (r *UserRepo) DeleteExternalCalStatusMRA(ctx context.Context, moderatorID i
 
 // GetImportedModeratorAvailabilityListMRA returns imported avails with user info for a moderator+client.
 func (r *UserRepo) GetImportedModeratorAvailabilityListMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error) {
-const q = `SELECT ma.id, moderator_id AS moderatorId, first_name AS firstName, last_name AS lastName,
+	const q = `SELECT ma.id, moderator_id AS moderatorId, first_name AS firstName, last_name AS lastName,
 client_id AS clientId, start_time AS startTime, end_time AS endTime
 FROM imported_moderator_availability ma
 INNER JOIN user ON user.id = ma.moderator_id
 WHERE moderator_id = ? AND client_id = ?`
-rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
-if err != nil {
-return nil, fmt.Errorf("get imported moderator availability list mra: %w", err)
-}
-defer rows.Close()
-var result []map[string]any
-for rows.Next() {
-var id, modID int64
-var firstName, lastName string
-var cID int64
-var startTime, endTime string
-if err := rows.Scan(&id, &modID, &firstName, &lastName, &cID, &startTime, &endTime); err != nil {
-return nil, err
-}
-result = append(result, map[string]any{
-"id": id, "moderatorId": modID, "firstName": firstName, "lastName": lastName,
-"clientId": cID, "startTime": startTime, "endTime": endTime,
-})
-}
-if result == nil {
-result = []map[string]any{}
-}
-return result, rows.Err()
+	rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get imported moderator availability list mra: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id, modID int64
+		var firstName, lastName string
+		var cID int64
+		var startTime, endTime string
+		if err := rows.Scan(&id, &modID, &firstName, &lastName, &cID, &startTime, &endTime); err != nil {
+			return nil, err
+		}
+		result = append(result, map[string]any{
+			"id": id, "moderatorId": modID, "firstName": firstName, "lastName": lastName,
+			"clientId": cID, "startTime": startTime, "endTime": endTime,
+		})
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result, rows.Err()
 }
 
 func (r *UserRepo) GetOverlappingManualAvailabilityMRA(ctx context.Context, moderatorID, clientID int64, startTime, endTime string) ([]map[string]any, error) {
-const q = `SELECT ima.id, moderator_id AS moderatorId, first_name AS firstName, last_name AS lastName,
+	const q = `SELECT ima.id, moderator_id AS moderatorId, first_name AS firstName, last_name AS lastName,
 client_id AS clientId, start_time AS startTime, end_time AS endTime
 FROM moderator_availability ima
 INNER JOIN user ON user.id = ima.moderator_id
@@ -1814,32 +1814,31 @@ AND ((start_time >= ? AND start_time < ?)
 OR (end_time > ? AND end_time <= ?)
 OR (start_time < ? AND end_time > ?))
 ORDER BY start_time`
-rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID,
-startTime, endTime, startTime, endTime, startTime, endTime)
-if err != nil {
-return nil, fmt.Errorf("get overlapping manual availability mra: %w", err)
+	rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID,
+		startTime, endTime, startTime, endTime, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("get overlapping manual availability mra: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id, modID int64
+		var firstName, lastName string
+		var cID int64
+		var st, et string
+		if err := rows.Scan(&id, &modID, &firstName, &lastName, &cID, &st, &et); err != nil {
+			return nil, err
+		}
+		result = append(result, map[string]any{
+			"id": id, "moderatorId": modID, "firstName": firstName, "lastName": lastName,
+			"clientId": cID, "startTime": st, "endTime": et,
+		})
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result, rows.Err()
 }
-defer rows.Close()
-var result []map[string]any
-for rows.Next() {
-var id, modID int64
-var firstName, lastName string
-var cID int64
-var st, et string
-if err := rows.Scan(&id, &modID, &firstName, &lastName, &cID, &st, &et); err != nil {
-return nil, err
-}
-result = append(result, map[string]any{
-"id": id, "moderatorId": modID, "firstName": firstName, "lastName": lastName,
-"clientId": cID, "startTime": st, "endTime": et,
-})
-}
-if result == nil {
-result = []map[string]any{}
-}
-return result, rows.Err()
-}
-
 
 func (r *UserRepo) DeleteImportedAvailByModAndIdMRA(ctx context.Context, moderatorID, id int64) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM imported_moderator_availability WHERE moderator_id = ? AND id = ?`, moderatorID, id)
@@ -1849,21 +1848,21 @@ func (r *UserRepo) DeleteImportedAvailByModAndIdMRA(ctx context.Context, moderat
 	return nil
 }
 func (r *UserRepo) DeleteManualAvailByModAndIdMRA(ctx context.Context, moderatorID, id int64) error {
-_, err := r.db.ExecContext(ctx, `DELETE FROM moderator_availability WHERE moderator_id = ? AND id = ?`, moderatorID, id)
-if err != nil {
-return fmt.Errorf("delete manual moderator availability by id mra: %w", err)
-}
-return nil
+	_, err := r.db.ExecContext(ctx, `DELETE FROM moderator_availability WHERE moderator_id = ? AND id = ?`, moderatorID, id)
+	if err != nil {
+		return fmt.Errorf("delete manual moderator availability by id mra: %w", err)
+	}
+	return nil
 }
 
 func (r *UserRepo) AddManualAvailabilityMRA(ctx context.Context, moderatorID, clientID int64, startTime, endTime string) error {
-_, err := r.db.ExecContext(ctx,
-`INSERT INTO moderator_availability (moderator_id, client_id, start_time, end_time) VALUES (?, ?, ?, ?)`,
-moderatorID, clientID, startTime, endTime)
-if err != nil {
-return fmt.Errorf("add manual availability mra: %w", err)
-}
-return nil
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO moderator_availability (moderator_id, client_id, start_time, end_time) VALUES (?, ?, ?, ?)`,
+		moderatorID, clientID, startTime, endTime)
+	if err != nil {
+		return fmt.Errorf("add manual availability mra: %w", err)
+	}
+	return nil
 }
 
 // GetUserClientID returns the client_id for a user from user_client.

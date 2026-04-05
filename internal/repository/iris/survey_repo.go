@@ -154,54 +154,54 @@ var _ SurveyRepository = (*SurveyRepo)(nil)
 
 // ICSurvey maps core columns from the IRIS survey table.
 type ICSurvey struct {
-	ID                 int64          `json:"id"`
-	SubscriptionID     sql.NullInt64  `json:"subscriptionId"`
-	SurveyTypeID       int            `json:"surveyTypeId"`
-	NamePublic         string         `json:"namePublic"`
-	NamePrivate        sql.NullString `json:"namePrivate"`
-	TopicName          sql.NullString `json:"topicName"`
-	ProjectID          int64          `json:"projectId"`
-	Status             int            `json:"status"`
-	CompletionsNeeded  int            `json:"completionsNeeded"`
-	CreatedBy          int64          `json:"createdBy"`
-	CreatedOn          time.Time      `json:"createdOn"`
-	ModifiedOn         sql.NullTime   `json:"modifiedOn"`
-	FieldedOn          sql.NullTime   `json:"fieldedOn"`
-	ClosedOn           sql.NullTime   `json:"closedOn"`
-	IsArchived         bool           `json:"isArchived"`
-	LanguageID         int            `json:"languageId"`
+	ID                  int64          `json:"id"`
+	SubscriptionID      sql.NullInt64  `json:"subscriptionId"`
+	SurveyTypeID        int            `json:"surveyTypeId"`
+	NamePublic          string         `json:"namePublic"`
+	NamePrivate         sql.NullString `json:"namePrivate"`
+	TopicName           sql.NullString `json:"topicName"`
+	ProjectID           int64          `json:"projectId"`
+	Status              int            `json:"status"`
+	CompletionsNeeded   int            `json:"completionsNeeded"`
+	CreatedBy           int64          `json:"createdBy"`
+	CreatedOn           time.Time      `json:"createdOn"`
+	ModifiedOn          sql.NullTime   `json:"modifiedOn"`
+	FieldedOn           sql.NullTime   `json:"fieldedOn"`
+	ClosedOn            sql.NullTime   `json:"closedOn"`
+	IsArchived          bool           `json:"isArchived"`
+	LanguageID          int            `json:"languageId"`
 	SalesforceProjectID sql.NullString `json:"salesforceProjectId"`
-	LengthOfInterview  sql.NullInt64  `json:"lengthOfInterview"`
+	LengthOfInterview   sql.NullInt64  `json:"lengthOfInterview"`
 }
 
 // ICSurveyCrowd maps the survey_crowd join table (all 26 columns).
 type ICSurveyCrowd struct {
-	ID                 int64          `json:"id"`
-	SurveyID           int64          `json:"surveyId"`
-	CrowdID            int64          `json:"crowdId"`
-	AnswerRequest      int64          `json:"answerRequest"`
-	CreatedBy          int64          `json:"createdBy"`
-	CreatedOn          time.Time      `json:"createdOn"`
-	ModifiedBy         int64          `json:"modifiedBy"`
-	ModifiedOn         time.Time      `json:"modifiedOn"`
-	QualHonorarium     sql.NullInt64  `json:"qualHonorarium"`
-	QuantHonorarium    sql.NullInt64  `json:"quantHonorarium"`
-	ProductID          sql.NullInt64  `json:"productId"`
-	HonorariumGroup    sql.NullInt64  `json:"honorariumGroup"`
-	RewardLevel        sql.NullInt64  `json:"rewardLevel"`
-	Excluded           int64          `json:"excluded"`
-	IsInvitationPaused bool           `json:"isInvitationPaused"`
-	IsReminderPaused   bool           `json:"isReminderPaused"`
-	InvitationPausedOn sql.NullTime   `json:"invitationPausedOn"`
-	ReminderPausedOn   sql.NullTime   `json:"reminderPausedOn"`
-	SLAnswerRequest    int64          `json:"slAnswerRequest"`
-	SLAnswerPercent    int64          `json:"slAnswerPercent"`
-	SLSamplePaused     bool           `json:"slSamplePaused"`
-	IsSampleClosed     bool           `json:"isSampleClosed"`
-	SampleClosedOn     sql.NullTime   `json:"sampleClosedOn"`
-	PausedByQf         bool           `json:"pausedByQf"`
-	AfterQfResumedOn   sql.NullTime   `json:"afterQfResumedOn"`
-	CrowdGroupID       sql.NullInt64  `json:"crowdGroupId"`
+	ID                 int64         `json:"id"`
+	SurveyID           int64         `json:"surveyId"`
+	CrowdID            int64         `json:"crowdId"`
+	AnswerRequest      int64         `json:"answerRequest"`
+	CreatedBy          int64         `json:"createdBy"`
+	CreatedOn          time.Time     `json:"createdOn"`
+	ModifiedBy         int64         `json:"modifiedBy"`
+	ModifiedOn         time.Time     `json:"modifiedOn"`
+	QualHonorarium     sql.NullInt64 `json:"qualHonorarium"`
+	QuantHonorarium    sql.NullInt64 `json:"quantHonorarium"`
+	ProductID          sql.NullInt64 `json:"productId"`
+	HonorariumGroup    sql.NullInt64 `json:"honorariumGroup"`
+	RewardLevel        sql.NullInt64 `json:"rewardLevel"`
+	Excluded           int64         `json:"excluded"`
+	IsInvitationPaused bool          `json:"isInvitationPaused"`
+	IsReminderPaused   bool          `json:"isReminderPaused"`
+	InvitationPausedOn sql.NullTime  `json:"invitationPausedOn"`
+	ReminderPausedOn   sql.NullTime  `json:"reminderPausedOn"`
+	SLAnswerRequest    int64         `json:"slAnswerRequest"`
+	SLAnswerPercent    int64         `json:"slAnswerPercent"`
+	SLSamplePaused     bool          `json:"slSamplePaused"`
+	IsSampleClosed     bool          `json:"isSampleClosed"`
+	SampleClosedOn     sql.NullTime  `json:"sampleClosedOn"`
+	PausedByQf         bool          `json:"pausedByQf"`
+	AfterQfResumedOn   sql.NullTime  `json:"afterQfResumedOn"`
+	CrowdGroupID       sql.NullInt64 `json:"crowdGroupId"`
 }
 
 // ICCrowd maps core columns from the IRIS crowd table.
@@ -232,25 +232,25 @@ type ICCrowd struct {
 
 // ICMarket maps the IRIS market table (full legacy columns).
 type ICMarket struct {
-	ID                  int64          `json:"id"`
-	Name                string         `json:"name"`
-	CanRegister         bool           `json:"canRegister"`
-	ExemptFromValidation bool          `json:"exemptFromValidation"`
-	IsInternal          bool           `json:"isInternal"`
-	Rewards             bool           `json:"rewards"`
-	CanInterview        bool           `json:"canInterview"`
-	Rollup              sql.NullString `json:"rollup"`
-	MedproValidation    bool           `json:"medproValidation"`
-	RequiredLicensure   string         `json:"requiredLicensure"`
-	IsActive            bool           `json:"isActive"`
+	ID                   int64          `json:"id"`
+	Name                 string         `json:"name"`
+	CanRegister          bool           `json:"canRegister"`
+	ExemptFromValidation bool           `json:"exemptFromValidation"`
+	IsInternal           bool           `json:"isInternal"`
+	Rewards              bool           `json:"rewards"`
+	CanInterview         bool           `json:"canInterview"`
+	Rollup               sql.NullString `json:"rollup"`
+	MedproValidation     bool           `json:"medproValidation"`
+	RequiredLicensure    string         `json:"requiredLicensure"`
+	IsActive             bool           `json:"isActive"`
 }
 
 // ICObserver maps the IRIS observer table.
 type ICObserver struct {
-	ID         int64          `json:"id"`
-	ProjectID  int64          `json:"projectId"`
-	Email      string         `json:"email"`
-	TimeSlotID sql.NullInt64  `json:"timeSlotId"`
+	ID         int64         `json:"id"`
+	ProjectID  int64         `json:"projectId"`
+	Email      string        `json:"email"`
+	TimeSlotID sql.NullInt64 `json:"timeSlotId"`
 }
 
 // ICInterviewMedia maps the IRIS interview_media table.
@@ -639,7 +639,7 @@ func (r *SurveyRepo) GetCrowdMarketHonoGroups(ctx context.Context, crowdID, surv
 				"id":                id,
 				"marketId":          marketID,
 				"honorariumGroupId": niVal(honoGroupID),
-				"professionId":     niVal(professionID),
+				"professionId":      niVal(professionID),
 			})
 		}
 	}
@@ -1830,21 +1830,21 @@ func (r *SurveyRepo) GetSubscriptionInterviews(ctx context.Context, subscription
 		}
 		m := map[string]any{
 			"participantId":          participantID,
-			"projectId":               projectID,
-			"projectName":             projectName,
-			"crowdName":               crowdName,
-			"surveyNamePrviate":       surveyNamePrivate,
-			"duration":                duration,
-			"startTime":               startTime.Format(time.RFC3339),
-			"endTime":                 endTime.Format(time.RFC3339),
-			"timeSlotId":              timeSlotID,
-			"conferenceHash":          conferenceHash,
-			"hostModeratorId":         hostModeratorID,
-			"hostModeratorFirstName":  hostModeratorFirstName,
-			"hostModeratorLastName":   hostModeratorLastName,
-			"hostModeratorHash":       hostModeratorHash,
-			"requiresStimulus":        requiresStimulus,
-			"shareHash":               shareHashVal,
+			"projectId":              projectID,
+			"projectName":            projectName,
+			"crowdName":              crowdName,
+			"surveyNamePrviate":      surveyNamePrivate,
+			"duration":               duration,
+			"startTime":              startTime.Format(time.RFC3339),
+			"endTime":                endTime.Format(time.RFC3339),
+			"timeSlotId":             timeSlotID,
+			"conferenceHash":         conferenceHash,
+			"hostModeratorId":        hostModeratorID,
+			"hostModeratorFirstName": hostModeratorFirstName,
+			"hostModeratorLastName":  hostModeratorLastName,
+			"hostModeratorHash":      hostModeratorHash,
+			"requiresStimulus":       requiresStimulus,
+			"shareHash":              shareHashVal,
 		}
 		result = append(result, m)
 	}
@@ -1870,11 +1870,11 @@ func (r *SurveyRepo) GetAllQuestionTypes(ctx context.Context) ([]map[string]any,
 		// Get compatible logic type IDs
 		logicTypes := r.getCompatibleLogicTypes(ctx, id)
 		result = append(result, map[string]any{
-			"id":                    id,
-			"description":           description,
-			"compatibleLogicTypes":  logicTypes,
-			"allowNA":               allowNA,
-			"allowsDelta":           allowsDelta,
+			"id":                   id,
+			"description":          description,
+			"compatibleLogicTypes": logicTypes,
+			"allowNA":              allowNA,
+			"allowsDelta":          allowsDelta,
 		})
 	}
 	return result, rows.Err()
@@ -1996,6 +1996,7 @@ func (r *SurveyRepo) GetPossibleModeratorsForTimeSlot(ctx context.Context, timeS
 	}
 	return result, rows.Err()
 }
+
 // UpdateInquiryPreview updates a project inquiry's preview fields.
 func (r *SurveyRepo) UpdateInquiryPreview(ctx context.Context, subscriptionID, projectID int64, fields map[string]any) error {
 	setClauses := []string{}
@@ -2574,30 +2575,30 @@ func (r *SurveyRepo) GetTimeSlotAdminJSON(ctx context.Context, timeSlotID int64)
 	}
 
 	result := map[string]any{
-		"id":                tsID,
-		"projectId":         projectID,
-		"startTime":         startTime.Format(time.RFC3339),
-		"endTime":           endTime.Format(time.RFC3339),
-		"isPicked":          isPicked,
-		"isConfirmed":       confirmed,
-		"conferenceHash":    nullStr(confHash),
+		"id":                 tsID,
+		"projectId":          projectID,
+		"startTime":          startTime.Format(time.RFC3339),
+		"endTime":            endTime.Format(time.RFC3339),
+		"isPicked":           isPicked,
+		"isConfirmed":        confirmed,
+		"conferenceHash":     nullStr(confHash),
 		"promisedHonorarium": nullFloat(promisedHonorarium),
-		"stopPayment":       stopPayment,
-		"honorariumPaid":    honorariumPaid,
-		"paymentStoppedBy":  nullInt(paymentStoppedBy),
-		"completed":         completed,
-		"noShow":            noShow,
-		"duration":          duration,
-		"intervieweeId":     nullInt(intervieweeID),
-		"statusModifiedBy":  nullInt(statusModifiedBy),
-		"statusId":          statusID,
-		"isInvalid":         isInvalid,
-		"meetingId":         nullStr(meetingID),
-		"chimeMeetingId":    nullStr(chimeMeetingID),
-		"projectName":       projectName,
-		"surveyId":          nullInt(surveyID),
-		"surveyNamePublic":  nullStr(namePublic),
-		"surveyNamePrivate": nullStr(namePrivate),
+		"stopPayment":        stopPayment,
+		"honorariumPaid":     honorariumPaid,
+		"paymentStoppedBy":   nullInt(paymentStoppedBy),
+		"completed":          completed,
+		"noShow":             noShow,
+		"duration":           duration,
+		"intervieweeId":      nullInt(intervieweeID),
+		"statusModifiedBy":   nullInt(statusModifiedBy),
+		"statusId":           statusID,
+		"isInvalid":          isInvalid,
+		"meetingId":          nullStr(meetingID),
+		"chimeMeetingId":     nullStr(chimeMeetingID),
+		"projectName":        projectName,
+		"surveyId":           nullInt(surveyID),
+		"surveyNamePublic":   nullStr(namePublic),
+		"surveyNamePrivate":  nullStr(namePrivate),
 	}
 	return result, nil
 }
@@ -3299,4 +3300,3 @@ func (r *SurveyRepo) GetSubscriptionCompanyByID(ctx context.Context, subscriptio
 	}
 	return company, nil
 }
-

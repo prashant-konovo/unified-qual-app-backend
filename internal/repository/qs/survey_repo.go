@@ -28,7 +28,7 @@ type SurveyRow struct {
 	ProjectID   sql.NullInt64  `json:"projectId"`
 	ProjectName sql.NullString `json:"projectName"`
 	Title       string         `json:"title"`
-	Status      string         `json:"status"` // draft, published
+	Status      string         `json:"status"`    // draft, published
 	Questions   string         `json:"questions"` // JSON
 	Rules       string         `json:"rules"`     // JSON
 	CreatedOn   time.Time      `json:"createdOn"`

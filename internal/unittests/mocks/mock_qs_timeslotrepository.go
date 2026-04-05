@@ -5,8 +5,9 @@ package mocks
 import (
 	context "context"
 
-	qs "github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	mock "github.com/stretchr/testify/mock"
+
+	qs "github.com/InCrowd/unified-qual-api/internal/repository/qs"
 
 	sql "database/sql"
 

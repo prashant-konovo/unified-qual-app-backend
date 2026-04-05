@@ -9,8 +9,8 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/service"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 )
 
 // InterviewHandler handles timeslot and interview scheduling endpoints.

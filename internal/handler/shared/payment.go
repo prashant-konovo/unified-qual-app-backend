@@ -1,9 +1,9 @@
 package shared
 
 import (
-	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"net/http"
 
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 )
 
 // ──────────────────────────────────────────────

@@ -5,8 +5,9 @@ package mocks
 import (
 	context "context"
 
-	iris "github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	mock "github.com/stretchr/testify/mock"
+
+	iris "github.com/InCrowd/unified-qual-api/internal/repository/iris"
 
 	time "time"
 )

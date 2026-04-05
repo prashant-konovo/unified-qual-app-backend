@@ -5,8 +5,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/InCrowd/unified-qual-api/internal/middleware"
 )
 
 // okHandler is a simple handler that writes 200 OK when reached.

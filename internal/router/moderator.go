@@ -1,8 +1,9 @@
 package router
 
 import (
-	"github.com/InCrowd/unified-qual-api/internal/handler"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/InCrowd/unified-qual-api/internal/handler"
 )
 
 // ══════════════════════════════════════════════════════════════

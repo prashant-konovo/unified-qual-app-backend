@@ -3,7 +3,6 @@ package ls
 import (
 	"net/http"
 
-
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/utilities"
 )

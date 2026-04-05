@@ -22,27 +22,27 @@ var _ ProjectRepository = (*ProjectRepo)(nil)
 
 // Project maps to the IRIS `project` table (21 columns verified).
 type Project struct {
-	ID                         int64          `json:"id"`
-	Name                       string         `json:"name"`
-	Description                sql.NullString `json:"description"`
-	SubscriptionID             int64          `json:"subscriptionId"`
-	CreatedOn                  time.Time      `json:"createdOn"`
-	Budget                     sql.NullString `json:"budget"`
-	CreatedBy                  sql.NullInt64  `json:"createdBy"`
-	IsPrivate                  bool           `json:"isPrivate"`
-	QualModeratorID            sql.NullInt64  `json:"qualModeratorId"`
-	ModifiedOn                 sql.NullTime   `json:"modifiedOn"`
-	ModifiedBy                 sql.NullInt64  `json:"modifiedBy"`
-	ProjectTypeID              int            `json:"projectTypeId"`
-	SalesforceProjectID        sql.NullString `json:"salesforceProjectId"`
-	SalesforceSurveyFolderID   sql.NullString `json:"salesforceSurveyFolderId"`
-	CompletedOn                sql.NullTime   `json:"completedOn"`
-	ProjectStatusID            int            `json:"projectStatusId"`
-	FinalizedOn                sql.NullTime   `json:"finalizedOn"`
-	IsArchived                 bool           `json:"isArchived"`
-	ArchivedOn                 sql.NullTime   `json:"archivedOn"`
-	ArchivedBy                 sql.NullInt64  `json:"archivedBy"`
-	IsSalesforceProjectModified bool          `json:"isSalesforceProjectModified"`
+	ID                          int64          `json:"id"`
+	Name                        string         `json:"name"`
+	Description                 sql.NullString `json:"description"`
+	SubscriptionID              int64          `json:"subscriptionId"`
+	CreatedOn                   time.Time      `json:"createdOn"`
+	Budget                      sql.NullString `json:"budget"`
+	CreatedBy                   sql.NullInt64  `json:"createdBy"`
+	IsPrivate                   bool           `json:"isPrivate"`
+	QualModeratorID             sql.NullInt64  `json:"qualModeratorId"`
+	ModifiedOn                  sql.NullTime   `json:"modifiedOn"`
+	ModifiedBy                  sql.NullInt64  `json:"modifiedBy"`
+	ProjectTypeID               int            `json:"projectTypeId"`
+	SalesforceProjectID         sql.NullString `json:"salesforceProjectId"`
+	SalesforceSurveyFolderID    sql.NullString `json:"salesforceSurveyFolderId"`
+	CompletedOn                 sql.NullTime   `json:"completedOn"`
+	ProjectStatusID             int            `json:"projectStatusId"`
+	FinalizedOn                 sql.NullTime   `json:"finalizedOn"`
+	IsArchived                  bool           `json:"isArchived"`
+	ArchivedOn                  sql.NullTime   `json:"archivedOn"`
+	ArchivedBy                  sql.NullInt64  `json:"archivedBy"`
+	IsSalesforceProjectModified bool           `json:"isSalesforceProjectModified"`
 }
 
 // ProjectListRow is a flattened row for list queries that JOINs status and subscription.

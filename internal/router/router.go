@@ -1,12 +1,13 @@
 package router
 
 import (
-	"github.com/InCrowd/unified-qual-api/internal/handler"
-	"github.com/InCrowd/unified-qual-api/internal/logger"
-	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+
+	"github.com/InCrowd/unified-qual-api/internal/handler"
+	"github.com/InCrowd/unified-qual-api/internal/logger"
+	"github.com/InCrowd/unified-qual-api/internal/middleware"
 )
 
 // Role presets — reusable middleware closures

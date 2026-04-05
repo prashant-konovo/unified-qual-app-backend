@@ -67,31 +67,31 @@ var _ TimeSlotRepository = (*TimeSlotRepo)(nil)
 
 // TimeSlot maps to the QS `time_slot` table (25 columns verified).
 type TimeSlot struct {
-	ID                       int64          `json:"id"`
-	ProjectID                int64          `json:"projectId"`
-	StartTime                time.Time      `json:"startTime"`
-	EndTime                  time.Time      `json:"endTime"`
-	Confirmed                bool           `json:"confirmed"`
-	ConferenceHash           sql.NullString `json:"conferenceHash"`
-	ParticipantHash          sql.NullString `json:"participantHash"`
-	StatusID                 int            `json:"statusId"`
-	StatusModifiedBy         sql.NullInt64  `json:"statusModifiedBy"`
-	Duration                 int            `json:"duration"`
-	IsInvalid                int            `json:"isInvalid"`
-	ModifiedOn               time.Time      `json:"modifiedOn"`
-	RespondentModifiedBy     sql.NullInt64  `json:"respondentModifiedBy"`
-	QsPath                   sql.NullInt64  `json:"qsPath"`
-	ReminderSent30           sql.NullBool   `json:"reminderSent30"`
-	ReminderSent24           sql.NullBool   `json:"reminderSent24"`
-	UpdatedOn                sql.NullTime   `json:"updatedOn"`
-	HasImportedOverlap       sql.NullBool   `json:"hasImportedOverlap"`
-	IsInvalidatedInterview   bool           `json:"isInvalidatedInterview"`
-	IsInvalidateEmailSent    bool           `json:"isInvalidateEmailSent"`
-	InvalidationReasonCode   sql.NullString `json:"invalidationReasonCode"`
-	InvalidationReasonText   sql.NullString `json:"invalidationReasonText"`
-	InvalidatedByUserID      sql.NullInt64  `json:"invalidatedByUserId"`
-	IsPreviousNoShow         bool           `json:"isPreviousNoShow"`
-	IsIneligibleMailSent     bool           `json:"isIneligibleMailSent"`
+	ID                     int64          `json:"id"`
+	ProjectID              int64          `json:"projectId"`
+	StartTime              time.Time      `json:"startTime"`
+	EndTime                time.Time      `json:"endTime"`
+	Confirmed              bool           `json:"confirmed"`
+	ConferenceHash         sql.NullString `json:"conferenceHash"`
+	ParticipantHash        sql.NullString `json:"participantHash"`
+	StatusID               int            `json:"statusId"`
+	StatusModifiedBy       sql.NullInt64  `json:"statusModifiedBy"`
+	Duration               int            `json:"duration"`
+	IsInvalid              int            `json:"isInvalid"`
+	ModifiedOn             time.Time      `json:"modifiedOn"`
+	RespondentModifiedBy   sql.NullInt64  `json:"respondentModifiedBy"`
+	QsPath                 sql.NullInt64  `json:"qsPath"`
+	ReminderSent30         sql.NullBool   `json:"reminderSent30"`
+	ReminderSent24         sql.NullBool   `json:"reminderSent24"`
+	UpdatedOn              sql.NullTime   `json:"updatedOn"`
+	HasImportedOverlap     sql.NullBool   `json:"hasImportedOverlap"`
+	IsInvalidatedInterview bool           `json:"isInvalidatedInterview"`
+	IsInvalidateEmailSent  bool           `json:"isInvalidateEmailSent"`
+	InvalidationReasonCode sql.NullString `json:"invalidationReasonCode"`
+	InvalidationReasonText sql.NullString `json:"invalidationReasonText"`
+	InvalidatedByUserID    sql.NullInt64  `json:"invalidatedByUserId"`
+	IsPreviousNoShow       bool           `json:"isPreviousNoShow"`
+	IsIneligibleMailSent   bool           `json:"isIneligibleMailSent"`
 }
 
 // TimeSlotListRow is a flattened row for list queries with JOINs.
@@ -125,11 +125,11 @@ type TimeSlotStatus struct {
 
 // ModeratorTimeSlot maps to the QS `moderator_time_slot` junction table.
 type ModeratorTimeSlot struct {
-	ID           int64     `json:"id"`
-	ModeratorID  int64     `json:"moderatorId"`
-	TimeSlotID   int64     `json:"timeSlotId"`
-	IsHost       bool      `json:"isHost"`
-	ModifiedOn   time.Time `json:"modifiedOn"`
+	ID          int64     `json:"id"`
+	ModeratorID int64     `json:"moderatorId"`
+	TimeSlotID  int64     `json:"timeSlotId"`
+	IsHost      bool      `json:"isHost"`
+	ModifiedOn  time.Time `json:"modifiedOn"`
 }
 
 // TimeSlotRepo handles QS time_slot CRUD.
@@ -547,7 +547,7 @@ func (repo *TimeSlotRepo) GetPendingTimeslotByProjectAndResponderMRA(ctx context
 
 // GetModeratorTimeSlotsMRA returns moderator timeslots matching legacy getModeratorTimeSlotsByModeratorId.
 func (r *TimeSlotRepo) GetModeratorTimeSlotsMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error) {
-q := `SELECT t.id AS timeSlotId, t.start_time AS startTime, t.end_time AS endTime,
+	q := `SELECT t.id AS timeSlotId, t.start_time AS startTime, t.end_time AS endTime,
 t.status_id AS completed, t.duration,
 t.is_invalidated_interview AS isInvalidatedInterview,
 t.is_invalidate_email_sent AS isInvalidateEmailSent,
@@ -563,52 +563,52 @@ LEFT JOIN topics ON p.id = topics.project_id AND topics.language_id = 1
 INNER JOIN answer_details ad ON ad.time_slot_id = t.id
 WHERE t.id IN (SELECT time_slot_id FROM moderator_time_slot WHERE moderator_id = ?)
 AND t.status_id IN (2, 7, 8, 9) AND p.client_id = ?`
-rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
-if err != nil {
-return nil, fmt.Errorf("get moderator timeslots mra: %w", err)
-}
-defer rows.Close()
-var records []map[string]any
-for rows.Next() {
-var tsID, projectID, intervieweeID int64
-var completed, duration int
-var isInvalidatedInterview, isInvalidateEmailSent, paymentStatus bool
-var importedOverLap, topicName, projectName, startTime, endTime string
-if err := rows.Scan(&tsID, &startTime, &endTime, &completed, &duration,
-&isInvalidatedInterview, &isInvalidateEmailSent, &paymentStatus,
-&importedOverLap, &intervieweeID, &projectID, &topicName, &projectName); err != nil {
-return nil, fmt.Errorf("scan moderator timeslot mra: %w", err)
-}
-records = append(records, map[string]any{
-"timeSlotId": tsID, "startTime": startTime, "endTime": endTime,
-"completed": completed, "duration": duration,
-"isInvalidatedInterview": isInvalidatedInterview,
-"isInvalidateEmailSent": isInvalidateEmailSent,
-"paymentStatus": paymentStatus, "importedOverLap": importedOverLap,
-"intervieweeId": intervieweeID, "projectId": projectID,
-"topicName": topicName, "projectName": projectName,
-})
-}
-if records == nil {
-records = []map[string]any{}
-}
-return records, rows.Err()
+	rows, err := r.db.QueryContext(ctx, q, moderatorID, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("get moderator timeslots mra: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var tsID, projectID, intervieweeID int64
+		var completed, duration int
+		var isInvalidatedInterview, isInvalidateEmailSent, paymentStatus bool
+		var importedOverLap, topicName, projectName, startTime, endTime string
+		if err := rows.Scan(&tsID, &startTime, &endTime, &completed, &duration,
+			&isInvalidatedInterview, &isInvalidateEmailSent, &paymentStatus,
+			&importedOverLap, &intervieweeID, &projectID, &topicName, &projectName); err != nil {
+			return nil, fmt.Errorf("scan moderator timeslot mra: %w", err)
+		}
+		records = append(records, map[string]any{
+			"timeSlotId": tsID, "startTime": startTime, "endTime": endTime,
+			"completed": completed, "duration": duration,
+			"isInvalidatedInterview": isInvalidatedInterview,
+			"isInvalidateEmailSent":  isInvalidateEmailSent,
+			"paymentStatus":          paymentStatus, "importedOverLap": importedOverLap,
+			"intervieweeId": intervieweeID, "projectId": projectID,
+			"topicName": topicName, "projectName": projectName,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
 }
 
 // GetModeratorTimeSlotsWithFilterMRA returns moderator timeslots with project exclusion filter.
 func (r *TimeSlotRepo) GetModeratorTimeSlotsWithFilterMRA(ctx context.Context, moderatorID, clientID int64, excludeProjectIDs []int64) ([]map[string]any, error) {
-if len(excludeProjectIDs) == 0 {
-return r.GetModeratorTimeSlotsMRA(ctx, moderatorID, clientID)
-}
-placeholders := make([]string, len(excludeProjectIDs))
-args := []any{moderatorID}
-for i, pid := range excludeProjectIDs {
-placeholders[i] = "?"
-args = append(args, pid)
-}
-args = append(args, clientID)
+	if len(excludeProjectIDs) == 0 {
+		return r.GetModeratorTimeSlotsMRA(ctx, moderatorID, clientID)
+	}
+	placeholders := make([]string, len(excludeProjectIDs))
+	args := []any{moderatorID}
+	for i, pid := range excludeProjectIDs {
+		placeholders[i] = "?"
+		args = append(args, pid)
+	}
+	args = append(args, clientID)
 
-q := fmt.Sprintf(`SELECT t.id AS timeSlotId, t.start_time AS startTime, t.end_time AS endTime,
+	q := fmt.Sprintf(`SELECT t.id AS timeSlotId, t.start_time AS startTime, t.end_time AS endTime,
 t.status_id AS completed, t.duration,
 (CASE WHEN t.has_imported_overlap IS NULL THEN '0' ELSE t.has_imported_overlap END) AS importedOverLap,
 ad.responder_id AS intervieweeId,
@@ -623,38 +623,38 @@ WHERE t.id IN (SELECT time_slot_id FROM moderator_time_slot WHERE moderator_id =
 AND t.status_id IN (2, 7, 8, 9)
 AND t.project_id NOT IN (%s)
 AND p.client_id = ?`, strings.Join(placeholders, ","))
-rows, err := r.db.QueryContext(ctx, q, args...)
-if err != nil {
-return nil, fmt.Errorf("get moderator timeslots with filter mra: %w", err)
-}
-defer rows.Close()
-var records []map[string]any
-for rows.Next() {
-var tsID, projectID, intervieweeID int64
-var completed, duration int
-var importedOverLap, topicName, projectName, startTime, endTime string
-if err := rows.Scan(&tsID, &startTime, &endTime, &completed, &duration,
-&importedOverLap, &intervieweeID, &projectID, &projectName, &topicName); err != nil {
-return nil, fmt.Errorf("scan moderator timeslot with filter mra: %w", err)
-}
-records = append(records, map[string]any{
-"timeSlotId": tsID, "startTime": startTime, "endTime": endTime,
-"completed": completed, "duration": duration,
-"importedOverLap": importedOverLap,
-"intervieweeId": intervieweeID, "projectId": projectID,
-"projectName": projectName, "topicName": topicName,
-})
-}
-if records == nil {
-records = []map[string]any{}
-}
-return records, rows.Err()
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get moderator timeslots with filter mra: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var tsID, projectID, intervieweeID int64
+		var completed, duration int
+		var importedOverLap, topicName, projectName, startTime, endTime string
+		if err := rows.Scan(&tsID, &startTime, &endTime, &completed, &duration,
+			&importedOverLap, &intervieweeID, &projectID, &projectName, &topicName); err != nil {
+			return nil, fmt.Errorf("scan moderator timeslot with filter mra: %w", err)
+		}
+		records = append(records, map[string]any{
+			"timeSlotId": tsID, "startTime": startTime, "endTime": endTime,
+			"completed": completed, "duration": duration,
+			"importedOverLap": importedOverLap,
+			"intervieweeId":   intervieweeID, "projectId": projectID,
+			"projectName": projectName, "topicName": topicName,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
 }
 
 // GetAllInterviewsMRA returns all interviews for a moderator matching legacy getAllInterviews query.
 // Supports search, project exclusion, and payment status filtering.
 func (r *TimeSlotRepo) GetAllInterviewsMRA(ctx context.Context, moderatorID int64, search string, excludeProjectIDs []int64, paymentStatusCode string) ([]map[string]any, error) {
-baseSelect := `SELECT project.external_survey_id AS externalSurveyId,
+	baseSelect := `SELECT project.external_survey_id AS externalSurveyId,
 COALESCE(salesforce_account.name, '') AS clientName,
 responder.external_responder_id AS participantId,
 moderator_info.id AS moderatorId,
@@ -685,7 +685,7 @@ WHEN EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_i
 WHEN NOT EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id=time_slot.id AND tsph.payment_status='COMPLETED') AND time_slot.end_time < CURDATE() - INTERVAL 7 DAY THEN 'PAST_DUE'
 ELSE 'NOT_CREDITED' END) AS paymentStatus`
 
-baseFrom := `
+	baseFrom := `
 FROM responder
 INNER JOIN answer_details ON responder.id = answer_details.responder_id
 INNER JOIN time_slot ON time_slot.id = answer_details.time_slot_id
@@ -710,163 +710,163 @@ JOIN responder r ON r.id = tse.responder_id JOIN honorarium_amount ha ON ha.sess
 GROUP BY ts.id) defaultHonorarium ON defaultHonorarium.timeSlotId = time_slot.id
 LEFT JOIN time_slot_custom_honorarium customHonorarium ON customHonorarium.time_slot_id = time_slot.id`
 
-where := " WHERE moderator_info.id = ? AND time_slot.status_id IN (2, 7, 8, 9)"
-args := []any{moderatorID}
+	where := " WHERE moderator_info.id = ? AND time_slot.status_id IN (2, 7, 8, 9)"
+	args := []any{moderatorID}
 
-if search != "" {
-where += " AND (project.name LIKE ? OR project.salesforce_job_number LIKE ? OR moderator_info.first_name LIKE ? OR moderator_info.last_name LIKE ?)"
-likeVal := "%" + search + "%"
-args = append(args, likeVal, likeVal, likeVal, likeVal)
-}
+	if search != "" {
+		where += " AND (project.name LIKE ? OR project.salesforce_job_number LIKE ? OR moderator_info.first_name LIKE ? OR moderator_info.last_name LIKE ?)"
+		likeVal := "%" + search + "%"
+		args = append(args, likeVal, likeVal, likeVal, likeVal)
+	}
 
-if len(excludeProjectIDs) > 0 {
-ph := make([]string, len(excludeProjectIDs))
-for i, pid := range excludeProjectIDs {
-ph[i] = "?"
-args = append(args, pid)
-}
-where += " AND project.id NOT IN (" + strings.Join(ph, ",") + ")"
-}
+	if len(excludeProjectIDs) > 0 {
+		ph := make([]string, len(excludeProjectIDs))
+		for i, pid := range excludeProjectIDs {
+			ph[i] = "?"
+			args = append(args, pid)
+		}
+		where += " AND project.id NOT IN (" + strings.Join(ph, ",") + ")"
+	}
 
-switch paymentStatusCode {
-case "CREDITED":
-where += " AND EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id=time_slot.id AND tsph.payment_status='COMPLETED')"
-case "NOT_CREDITED":
-where += " AND NOT EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id=time_slot.id AND tsph.payment_status='COMPLETED')"
-case "PAST_DUE":
-where += " AND NOT EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id=time_slot.id AND tsph.payment_status='COMPLETED') AND time_slot.end_time < CURDATE() - INTERVAL 7 DAY"
-}
+	switch paymentStatusCode {
+	case "CREDITED":
+		where += " AND EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id=time_slot.id AND tsph.payment_status='COMPLETED')"
+	case "NOT_CREDITED":
+		where += " AND NOT EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id=time_slot.id AND tsph.payment_status='COMPLETED')"
+	case "PAST_DUE":
+		where += " AND NOT EXISTS (SELECT 1 FROM time_slot_payment_history tsph WHERE tsph.time_slot_id=time_slot.id AND tsph.payment_status='COMPLETED') AND time_slot.end_time < CURDATE() - INTERVAL 7 DAY"
+	}
 
-q := baseSelect + baseFrom + where + " ORDER BY time_slot.start_time ASC"
-rows, err := r.db.QueryContext(ctx, q, args...)
-if err != nil {
-return nil, fmt.Errorf("get all interviews mra: %w", err)
-}
-defer rows.Close()
-var records []map[string]any
-for rows.Next() {
-var (
-externalSurveyID, clientName, importedOverLap, startTime, endTime                                          string
-conferenceHash, firstName, lastName, projectName, topicName, conferenceLink, salesforceJobNumber            string
-defaultHonorariumCurrency, paymentDate, paymentSource, paymentCurrency, participantFirstName, participantLastName string
-paymentStatus                                                                                               string
-participantID                                                                                               string
-moderatorIDResult, duration, timeSlotID, projectID                                                          int64
-defaultHonorariumAmount, customHonorariumAmount, totalAmount                                                float64
-)
-if err := rows.Scan(
-&externalSurveyID, &clientName, &participantID, &moderatorIDResult, &duration,
-&importedOverLap, &startTime, &endTime, &timeSlotID, &conferenceHash,
-&firstName, &lastName, &projectName, &projectID, &topicName, &conferenceLink,
-&salesforceJobNumber, &defaultHonorariumAmount, &defaultHonorariumCurrency,
-&customHonorariumAmount, &totalAmount, &paymentDate, &paymentSource, &paymentCurrency,
-&participantFirstName, &participantLastName, &paymentStatus,
-); err != nil {
-return nil, fmt.Errorf("scan interview mra: %w", err)
-}
-records = append(records, map[string]any{
-"externalSurveyId": externalSurveyID, "clientName": clientName,
-"participantId": participantID, "moderatorId": moderatorIDResult,
-"duration": duration, "importedOverLap": importedOverLap,
-"startTime": startTime, "endTime": endTime,
-"timeSlotId": timeSlotID, "conferenceHash": conferenceHash,
-"firstName": firstName, "lastName": lastName,
-"projectName": projectName, "projectId": projectID,
-"topicName": topicName, "conferenceLink": conferenceLink,
-"salesforceJobNumber": salesforceJobNumber,
-"defaultHonorariumAmount": defaultHonorariumAmount,
-"defaultHonorariumCurrency": defaultHonorariumCurrency,
-"customHonorariumAmount": customHonorariumAmount,
-"totalAmount": totalAmount, "paymentDate": paymentDate,
-"source": paymentSource, "currency": paymentCurrency,
-"participantFirstName": participantFirstName,
-"participantLastName": participantLastName,
-"paymentStatus": paymentStatus,
-})
-}
-if records == nil {
-records = []map[string]any{}
-}
-return records, rows.Err()
+	q := baseSelect + baseFrom + where + " ORDER BY time_slot.start_time ASC"
+	rows, err := r.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get all interviews mra: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var (
+			externalSurveyID, clientName, importedOverLap, startTime, endTime                                                 string
+			conferenceHash, firstName, lastName, projectName, topicName, conferenceLink, salesforceJobNumber                  string
+			defaultHonorariumCurrency, paymentDate, paymentSource, paymentCurrency, participantFirstName, participantLastName string
+			paymentStatus                                                                                                     string
+			participantID                                                                                                     string
+			moderatorIDResult, duration, timeSlotID, projectID                                                                int64
+			defaultHonorariumAmount, customHonorariumAmount, totalAmount                                                      float64
+		)
+		if err := rows.Scan(
+			&externalSurveyID, &clientName, &participantID, &moderatorIDResult, &duration,
+			&importedOverLap, &startTime, &endTime, &timeSlotID, &conferenceHash,
+			&firstName, &lastName, &projectName, &projectID, &topicName, &conferenceLink,
+			&salesforceJobNumber, &defaultHonorariumAmount, &defaultHonorariumCurrency,
+			&customHonorariumAmount, &totalAmount, &paymentDate, &paymentSource, &paymentCurrency,
+			&participantFirstName, &participantLastName, &paymentStatus,
+		); err != nil {
+			return nil, fmt.Errorf("scan interview mra: %w", err)
+		}
+		records = append(records, map[string]any{
+			"externalSurveyId": externalSurveyID, "clientName": clientName,
+			"participantId": participantID, "moderatorId": moderatorIDResult,
+			"duration": duration, "importedOverLap": importedOverLap,
+			"startTime": startTime, "endTime": endTime,
+			"timeSlotId": timeSlotID, "conferenceHash": conferenceHash,
+			"firstName": firstName, "lastName": lastName,
+			"projectName": projectName, "projectId": projectID,
+			"topicName": topicName, "conferenceLink": conferenceLink,
+			"salesforceJobNumber":       salesforceJobNumber,
+			"defaultHonorariumAmount":   defaultHonorariumAmount,
+			"defaultHonorariumCurrency": defaultHonorariumCurrency,
+			"customHonorariumAmount":    customHonorariumAmount,
+			"totalAmount":               totalAmount, "paymentDate": paymentDate,
+			"source": paymentSource, "currency": paymentCurrency,
+			"participantFirstName": participantFirstName,
+			"participantLastName":  participantLastName,
+			"paymentStatus":        paymentStatus,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
 }
 
 // GetModeratorsForTimeSlotMRA returns moderators for a timeslot matching legacy camelCase fields.
 func (r *TimeSlotRepo) GetModeratorsForTimeSlotMRA(ctx context.Context, timeslotID int64) ([]map[string]any, error) {
-q := `SELECT time_slot.id AS timeSlotId,
+	q := `SELECT time_slot.id AS timeSlotId,
 moderator_time_slot.moderator_id AS moderatorId,
 moderator_time_slot.is_host AS isHost
 FROM time_slot
 INNER JOIN project ON time_slot.project_id = project.id
 INNER JOIN moderator_time_slot ON moderator_time_slot.time_slot_id = time_slot.id
 WHERE time_slot.id = ?`
-rows, err := r.db.QueryContext(ctx, q, timeslotID)
-if err != nil {
-return nil, fmt.Errorf("get moderators for timeslot mra: %w", err)
-}
-defer rows.Close()
-var records []map[string]any
-for rows.Next() {
-var timeSlotID, moderatorID int64
-var isHost bool
-if err := rows.Scan(&timeSlotID, &moderatorID, &isHost); err != nil {
-return nil, err
-}
-records = append(records, map[string]any{
-"timeSlotId":  timeSlotID,
-"moderatorId": moderatorID,
-"isHost":      isHost,
-})
-}
-if records == nil {
-records = []map[string]any{}
-}
-return records, rows.Err()
+	rows, err := r.db.QueryContext(ctx, q, timeslotID)
+	if err != nil {
+		return nil, fmt.Errorf("get moderators for timeslot mra: %w", err)
+	}
+	defer rows.Close()
+	var records []map[string]any
+	for rows.Next() {
+		var timeSlotID, moderatorID int64
+		var isHost bool
+		if err := rows.Scan(&timeSlotID, &moderatorID, &isHost); err != nil {
+			return nil, err
+		}
+		records = append(records, map[string]any{
+			"timeSlotId":  timeSlotID,
+			"moderatorId": moderatorID,
+			"isHost":      isHost,
+		})
+	}
+	if records == nil {
+		records = []map[string]any{}
+	}
+	return records, rows.Err()
 }
 
 // GetStartEndTimeBySlotIdMRA returns start_time and end_time for a timeslot.
 func (r *TimeSlotRepo) GetStartEndTimeBySlotIdMRA(ctx context.Context, timeslotID int64) (string, string, error) {
-q := `SELECT start_time, end_time FROM time_slot WHERE id = ?`
-var startTime, endTime string
-err := r.db.QueryRowContext(ctx, q, timeslotID).Scan(&startTime, &endTime)
-if err != nil {
-return "", "", fmt.Errorf("get start end time by slot id mra: %w", err)
-}
-return startTime, endTime, nil
+	q := `SELECT start_time, end_time FROM time_slot WHERE id = ?`
+	var startTime, endTime string
+	err := r.db.QueryRowContext(ctx, q, timeslotID).Scan(&startTime, &endTime)
+	if err != nil {
+		return "", "", fmt.Errorf("get start end time by slot id mra: %w", err)
+	}
+	return startTime, endTime, nil
 }
 
 // ModeratorInfoForSlotMRA holds moderator info for a timeslot.
 type ModeratorInfoForSlotMRA struct {
-ID              int64
-IsHost          bool
-FirstName       string
-LastName        string
+	ID        int64
+	IsHost    bool
+	FirstName string
+	LastName  string
 }
 
 // GetModeratorsInfoForSlotMRA returns moderator info for a timeslot.
 func (r *TimeSlotRepo) GetModeratorsInfoForSlotMRA(ctx context.Context, timeslotID int64) ([]ModeratorInfoForSlotMRA, error) {
-q := `SELECT moderator_id, is_host, first_name, last_name
+	q := `SELECT moderator_id, is_host, first_name, last_name
 FROM moderator_time_slot
 INNER JOIN user ON user.id = moderator_time_slot.moderator_id
 WHERE time_slot_id = ?`
-rows, err := r.db.QueryContext(ctx, q, timeslotID)
-if err != nil {
-return nil, fmt.Errorf("get moderators info for slot mra: %w", err)
-}
-defer rows.Close()
-var results []ModeratorInfoForSlotMRA
-for rows.Next() {
-var m ModeratorInfoForSlotMRA
-if err := rows.Scan(&m.ID, &m.IsHost, &m.FirstName, &m.LastName); err != nil {
-return nil, err
-}
-results = append(results, m)
-}
-return results, rows.Err()
+	rows, err := r.db.QueryContext(ctx, q, timeslotID)
+	if err != nil {
+		return nil, fmt.Errorf("get moderators info for slot mra: %w", err)
+	}
+	defer rows.Close()
+	var results []ModeratorInfoForSlotMRA
+	for rows.Next() {
+		var m ModeratorInfoForSlotMRA
+		if err := rows.Scan(&m.ID, &m.IsHost, &m.FirstName, &m.LastName); err != nil {
+			return nil, err
+		}
+		results = append(results, m)
+	}
+	return results, rows.Err()
 }
 
 // GetModeratorConflictForSlotMRA checks if a moderator has a conflict with a timeslot.
 func (r *TimeSlotRepo) GetModeratorConflictForSlotMRA(ctx context.Context, moderatorID int64, startTime, endTime string, timeslotID int64) (int, error) {
-q := `SELECT COUNT(time_slot.id) AS hasConflict
+	q := `SELECT COUNT(time_slot.id) AS hasConflict
 FROM time_slot
 INNER JOIN moderator_time_slot ON time_slot.id = moderator_time_slot.time_slot_id
 WHERE moderator_time_slot.moderator_id = ?
@@ -877,12 +877,12 @@ AND (
 (time_slot.start_time >= ? AND time_slot.start_time < ?)
 OR (time_slot.end_time > ? AND time_slot.end_time <= ?)
 )`
-var hasConflict int
-err := r.db.QueryRowContext(ctx, q, moderatorID, timeslotID, startTime, endTime, startTime, endTime).Scan(&hasConflict)
-if err != nil {
-return 0, fmt.Errorf("get moderator conflict for slot mra: %w", err)
-}
-return hasConflict, nil
+	var hasConflict int
+	err := r.db.QueryRowContext(ctx, q, moderatorID, timeslotID, startTime, endTime, startTime, endTime).Scan(&hasConflict)
+	if err != nil {
+		return 0, fmt.Errorf("get moderator conflict for slot mra: %w", err)
+	}
+	return hasConflict, nil
 }
 
 // ──────────────────────────────────────────────
@@ -923,7 +923,7 @@ func (repo *TimeSlotRepo) scanPMTimeSlotRows(rows *sql.Rows) ([]map[string]any, 
 			"completed": completed, "duration": duration,
 			"isInvalidatedInterview": isInvalidatedInterview,
 			"isInvalidateEmailSent":  isInvalidateEmailSent,
-			"paymentStatus": paymentStatus, "importedOverLap": importedOverLap,
+			"paymentStatus":          paymentStatus, "importedOverLap": importedOverLap,
 			"intervieweeId": intervieweeID, "projectId": projectID,
 			"projectName": projectName, "topicName": topicName,
 			"moderatorId": moderatorID,
@@ -1033,31 +1033,31 @@ AND mt.moderator_id IN (SELECT moderator_id FROM projects_users WHERE project_id
 // UpsertEligibilityStatusMRA inserts or updates participant eligibility status.
 // Contract-identical with legacy qualEligibility upsert.
 func (repo *TimeSlotRepo) UpsertEligibilityStatusMRA(ctx context.Context, participantID string, isEligible bool, reason, updatedBy string) error {
-const q = `INSERT INTO participant_eligibility_status (participant_id, is_eligible, reason, updated_by, eligibility_updated_at)
+	const q = `INSERT INTO participant_eligibility_status (participant_id, is_eligible, reason, updated_by, eligibility_updated_at)
 VALUES (?, ?, ?, ?, NOW())
 ON DUPLICATE KEY UPDATE is_eligible = ?, reason = ?, updated_by = ?, eligibility_updated_at = NOW()`
-_, err := repo.db.ExecContext(ctx, q, participantID, isEligible, reason, updatedBy, isEligible, reason, updatedBy)
-if err != nil {
-return fmt.Errorf("upsert eligibility status mra: %w", err)
-}
-return nil
+	_, err := repo.db.ExecContext(ctx, q, participantID, isEligible, reason, updatedBy, isEligible, reason, updatedBy)
+	if err != nil {
+		return fmt.Errorf("upsert eligibility status mra: %w", err)
+	}
+	return nil
 }
 
 // ResetIneligibleMailSentMRA resets the is_ineligible_mail_sent flag for a participant.
 // Contract-identical with legacy resetIneligibleMailSent.
 func (repo *TimeSlotRepo) ResetIneligibleMailSentMRA(ctx context.Context, externalResponderID string) error {
-const q = `UPDATE time_slot t
+	const q = `UPDATE time_slot t
 INNER JOIN answer_details ad ON ad.time_slot_id = t.id
 INNER JOIN responder r ON r.id = ad.responder_id
 SET t.is_ineligible_mail_sent = false
 WHERE r.external_responder_id = ?
 AND t.status_id IN (2, 7, 8, 9)
 AND t.is_invalidated_interview = 0`
-_, err := repo.db.ExecContext(ctx, q, externalResponderID)
-if err != nil {
-return fmt.Errorf("reset ineligible mail sent mra: %w", err)
-}
-return nil
+	_, err := repo.db.ExecContext(ctx, q, externalResponderID)
+	if err != nil {
+		return fmt.Errorf("reset ineligible mail sent mra: %w", err)
+	}
+	return nil
 }
 
 // ──────────────────────────────────────────────
@@ -1065,16 +1065,16 @@ return nil
 // ──────────────────────────────────────────────
 
 func (repo *TimeSlotRepo) GetPaymentInfoByTimeSlotIdsMRA(ctx context.Context, timeSlotIDs []int64) ([]map[string]any, error) {
-if len(timeSlotIDs) == 0 {
-return []map[string]any{}, nil
-}
-placeholders := make([]string, len(timeSlotIDs))
-args := make([]any, len(timeSlotIDs))
-for i, id := range timeSlotIDs {
-placeholders[i] = "?"
-args[i] = id
-}
-q := fmt.Sprintf(`SELECT time_slot.id AS timeSlotId,
+	if len(timeSlotIDs) == 0 {
+		return []map[string]any{}, nil
+	}
+	placeholders := make([]string, len(timeSlotIDs))
+	args := make([]any, len(timeSlotIDs))
+	for i, id := range timeSlotIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	q := fmt.Sprintf(`SELECT time_slot.id AS timeSlotId,
 defaultHonorarium.amount AS defaultHonorariumAmount,
 defaultHonorarium.currency AS defaultHonorariumCurrency,
 customHonorarium.new_value AS customHonorariumAmount,
@@ -1105,90 +1105,90 @@ GROUP BY ts.id
 ) defaultHonorarium ON defaultHonorarium.timeSlotId = time_slot.id
 LEFT JOIN time_slot_custom_honorarium customHonorarium ON customHonorarium.time_slot_id = time_slot.id
 WHERE time_slot.id IN (%s)`, strings.Join(placeholders, ","))
-rows, err := repo.db.QueryContext(ctx, q, args...)
-if err != nil {
-return nil, fmt.Errorf("get payment info by time slot ids mra: %w", err)
-}
-defer rows.Close()
-var result []map[string]any
-for rows.Next() {
-var tsID int64
-var defAmount, defCurrency, custAmount sql.NullString
-var extUserSurveyID, extUserID, extCreditOrderID, extProjectID, extCountryID sql.NullString
-if err := rows.Scan(&tsID, &defAmount, &defCurrency, &custAmount,
-&extUserSurveyID, &extUserID, &extCreditOrderID, &extProjectID, &extCountryID); err != nil {
-return nil, err
-}
-row := map[string]any{"timeSlotId": tsID}
-if defAmount.Valid {
-row["defaultHonorariumAmount"] = defAmount.String
-}
-if defCurrency.Valid {
-row["defaultHonorariumCurrency"] = defCurrency.String
-}
-if custAmount.Valid {
-row["customHonorariumAmount"] = custAmount.String
-}
-if extUserSurveyID.Valid {
-row["externalUserSurveyId"] = extUserSurveyID.String
-}
-if extUserID.Valid {
-row["externalUserId"] = extUserID.String
-}
-if extCreditOrderID.Valid {
-row["externalCreditOrderId"] = extCreditOrderID.String
-}
-if extProjectID.Valid {
-row["externalProjectId"] = extProjectID.String
-}
-if extCountryID.Valid {
-row["externalCountryId"] = extCountryID.String
-}
-result = append(result, row)
-}
-if result == nil {
-result = []map[string]any{}
-}
-return result, rows.Err()
+	rows, err := repo.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get payment info by time slot ids mra: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var tsID int64
+		var defAmount, defCurrency, custAmount sql.NullString
+		var extUserSurveyID, extUserID, extCreditOrderID, extProjectID, extCountryID sql.NullString
+		if err := rows.Scan(&tsID, &defAmount, &defCurrency, &custAmount,
+			&extUserSurveyID, &extUserID, &extCreditOrderID, &extProjectID, &extCountryID); err != nil {
+			return nil, err
+		}
+		row := map[string]any{"timeSlotId": tsID}
+		if defAmount.Valid {
+			row["defaultHonorariumAmount"] = defAmount.String
+		}
+		if defCurrency.Valid {
+			row["defaultHonorariumCurrency"] = defCurrency.String
+		}
+		if custAmount.Valid {
+			row["customHonorariumAmount"] = custAmount.String
+		}
+		if extUserSurveyID.Valid {
+			row["externalUserSurveyId"] = extUserSurveyID.String
+		}
+		if extUserID.Valid {
+			row["externalUserId"] = extUserID.String
+		}
+		if extCreditOrderID.Valid {
+			row["externalCreditOrderId"] = extCreditOrderID.String
+		}
+		if extProjectID.Valid {
+			row["externalProjectId"] = extProjectID.String
+		}
+		if extCountryID.Valid {
+			row["externalCountryId"] = extCountryID.String
+		}
+		result = append(result, row)
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result, rows.Err()
 }
 
 func (repo *TimeSlotRepo) GetTimeSlotPaymentTypeListMRA(ctx context.Context) ([]map[string]any, error) {
-const q = `SELECT id, code, display FROM time_slot_payment_type`
-rows, err := repo.db.QueryContext(ctx, q)
-if err != nil {
-return nil, fmt.Errorf("get time slot payment type list mra: %w", err)
-}
-defer rows.Close()
-var result []map[string]any
-for rows.Next() {
-var id int64
-var code, display string
-if err := rows.Scan(&id, &code, &display); err != nil {
-return nil, err
-}
-result = append(result, map[string]any{"id": id, "code": code, "display": display})
-}
-if result == nil {
-result = []map[string]any{}
-}
-return result, rows.Err()
+	const q = `SELECT id, code, display FROM time_slot_payment_type`
+	rows, err := repo.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("get time slot payment type list mra: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id int64
+		var code, display string
+		if err := rows.Scan(&id, &code, &display); err != nil {
+			return nil, err
+		}
+		result = append(result, map[string]any{"id": id, "code": code, "display": display})
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result, rows.Err()
 }
 
 func (repo *TimeSlotRepo) AddQSTimeSlotPaymentsMRA(ctx context.Context, payments []map[string]any) error {
-if len(payments) == 0 {
-return nil
-}
-for _, p := range payments {
-_, err := repo.db.ExecContext(ctx,
-`INSERT INTO time_slot_payment_history (time_slot_id, amount, currency, source, payment_date, payment_user_id, payment_type_id, payment_status)
+	if len(payments) == 0 {
+		return nil
+	}
+	for _, p := range payments {
+		_, err := repo.db.ExecContext(ctx,
+			`INSERT INTO time_slot_payment_history (time_slot_id, amount, currency, source, payment_date, payment_user_id, payment_type_id, payment_status)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-p["timeSlotId"], p["amount"], p["currency"], p["source"],
-p["paymentDate"], p["paymentUserId"], p["paymentTypeId"], p["paymentStatus"])
-if err != nil {
-return fmt.Errorf("add qs time slot payment mra: %w", err)
-}
-}
-return nil
+			p["timeSlotId"], p["amount"], p["currency"], p["source"],
+			p["paymentDate"], p["paymentUserId"], p["paymentTypeId"], p["paymentStatus"])
+		if err != nil {
+			return fmt.Errorf("add qs time slot payment mra: %w", err)
+		}
+	}
+	return nil
 }
 
 // ──────────────────────────────────────────────
@@ -1196,29 +1196,29 @@ return nil
 // ──────────────────────────────────────────────
 
 func (repo *TimeSlotRepo) AddExternalTimeSlotPaymentsMRA(ctx context.Context, payments []map[string]any) error {
-if len(payments) == 0 {
-return nil
-}
-for _, p := range payments {
-_, err := repo.db.ExecContext(ctx,
-`INSERT INTO time_slot_payment_history (amount, currency, source, payment_date, payment_user_id, external_user_survey_id, external_credit_order_id, payment_type_id)
+	if len(payments) == 0 {
+		return nil
+	}
+	for _, p := range payments {
+		_, err := repo.db.ExecContext(ctx,
+			`INSERT INTO time_slot_payment_history (amount, currency, source, payment_date, payment_user_id, external_user_survey_id, external_credit_order_id, payment_type_id)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-p["amount"], p["currency"], p["source"], p["paymentDate"],
-p["paymentUserId"], p["externalUserSurveyId"], p["externalCreditOrderId"], p["paymentTypeId"])
-if err != nil {
-return fmt.Errorf("add external time slot payment mra: %w", err)
-}
-}
-return nil
+			p["amount"], p["currency"], p["source"], p["paymentDate"],
+			p["paymentUserId"], p["externalUserSurveyId"], p["externalCreditOrderId"], p["paymentTypeId"])
+		if err != nil {
+			return fmt.Errorf("add external time slot payment mra: %w", err)
+		}
+	}
+	return nil
 }
 
 func (repo *TimeSlotRepo) GetUserByEmailMRA(ctx context.Context, email string) (int64, error) {
-var userID int64
-err := repo.db.QueryRowContext(ctx, `SELECT id FROM user WHERE email = ?`, email).Scan(&userID)
-if err != nil {
-return 0, fmt.Errorf("get user by email mra: %w", err)
-}
-return userID, nil
+	var userID int64
+	err := repo.db.QueryRowContext(ctx, `SELECT id FROM user WHERE email = ?`, email).Scan(&userID)
+	if err != nil {
+		return 0, fmt.Errorf("get user by email mra: %w", err)
+	}
+	return userID, nil
 }
 
 // ──────────────────────────────────────────────
@@ -1226,32 +1226,32 @@ return userID, nil
 // ──────────────────────────────────────────────
 
 func (repo *TimeSlotRepo) AddTimeSlotCustomHonorariumMRA(ctx context.Context, timeSlotID int64, oldValue, newValue float64, reasonID, createdBy int64) error {
-const q = `INSERT INTO time_slot_custom_honorarium (time_slot_id, old_value, new_value, reason_id, created_by)
+	const q = `INSERT INTO time_slot_custom_honorarium (time_slot_id, old_value, new_value, reason_id, created_by)
 VALUES (?, ?, ?, ?, ?)
 ON DUPLICATE KEY UPDATE old_value = ?, new_value = ?, reason_id = ?, created_by = ?`
-_, err := repo.db.ExecContext(ctx, q, timeSlotID, oldValue, newValue, reasonID, createdBy,
-oldValue, newValue, reasonID, createdBy)
-if err != nil {
-return fmt.Errorf("add time slot custom honorarium mra: %w", err)
-}
-return nil
+	_, err := repo.db.ExecContext(ctx, q, timeSlotID, oldValue, newValue, reasonID, createdBy,
+		oldValue, newValue, reasonID, createdBy)
+	if err != nil {
+		return fmt.Errorf("add time slot custom honorarium mra: %w", err)
+	}
+	return nil
 }
 
 func (repo *TimeSlotRepo) GetExternalSurveyIdByTimeSlotIdMRA(ctx context.Context, timeSlotID int64) (string, error) {
-const q = `SELECT ha.external_user_survey_id FROM time_slot ts
+	const q = `SELECT ha.external_user_survey_id FROM time_slot ts
 JOIN time_slot_event tse ON tse.time_slot_id = ts.id
 JOIN responder r ON r.id = tse.responder_id
 JOIN honorarium_amount ha ON ha.sessKey = r.sess_key
 WHERE ts.id = ?`
-var extUserSurveyID sql.NullString
-err := repo.db.QueryRowContext(ctx, q, timeSlotID).Scan(&extUserSurveyID)
-if err != nil {
-return "", fmt.Errorf("get external survey id by time slot id mra: %w", err)
-}
-if extUserSurveyID.Valid {
-return extUserSurveyID.String, nil
-}
-return "", nil
+	var extUserSurveyID sql.NullString
+	err := repo.db.QueryRowContext(ctx, q, timeSlotID).Scan(&extUserSurveyID)
+	if err != nil {
+		return "", fmt.Errorf("get external survey id by time slot id mra: %w", err)
+	}
+	if extUserSurveyID.Valid {
+		return extUserSurveyID.String, nil
+	}
+	return "", nil
 }
 
 // ──────────────────────────────────────────────
@@ -1259,25 +1259,25 @@ return "", nil
 // ──────────────────────────────────────────────
 
 func (repo *TimeSlotRepo) GetTimeSlotPaymentStatusListMRA(ctx context.Context) ([]map[string]any, error) {
-const q = `SELECT id, code, display FROM time_slot_payment_status`
-rows, err := repo.db.QueryContext(ctx, q)
-if err != nil {
-return nil, fmt.Errorf("get time slot payment status list mra: %w", err)
-}
-defer rows.Close()
-var result []map[string]any
-for rows.Next() {
-var id int64
-var code, display string
-if err := rows.Scan(&id, &code, &display); err != nil {
-return nil, err
-}
-result = append(result, map[string]any{"id": id, "code": code, "display": display})
-}
-if result == nil {
-result = []map[string]any{}
-}
-return result, rows.Err()
+	const q = `SELECT id, code, display FROM time_slot_payment_status`
+	rows, err := repo.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("get time slot payment status list mra: %w", err)
+	}
+	defer rows.Close()
+	var result []map[string]any
+	for rows.Next() {
+		var id int64
+		var code, display string
+		if err := rows.Scan(&id, &code, &display); err != nil {
+			return nil, err
+		}
+		result = append(result, map[string]any{"id": id, "code": code, "display": display})
+	}
+	if result == nil {
+		result = []map[string]any{}
+	}
+	return result, rows.Err()
 }
 
 // ──────────────────────────────────────────────
@@ -1285,97 +1285,97 @@ return result, rows.Err()
 // ──────────────────────────────────────────────
 
 func (repo *TimeSlotRepo) GetProjectModeratorsIdsMRA(ctx context.Context, projectID int64) ([]int64, error) {
-const q = `SELECT user_id AS id FROM projects_users WHERE project_id = ?`
-rows, err := repo.db.QueryContext(ctx, q, projectID)
-if err != nil {
-return nil, fmt.Errorf("get project moderators ids mra: %w", err)
-}
-defer rows.Close()
-var result []int64
-for rows.Next() {
-var id int64
-if err := rows.Scan(&id); err != nil {
-return nil, err
-}
-result = append(result, id)
-}
-return result, rows.Err()
+	const q = `SELECT user_id AS id FROM projects_users WHERE project_id = ?`
+	rows, err := repo.db.QueryContext(ctx, q, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("get project moderators ids mra: %w", err)
+	}
+	defer rows.Close()
+	var result []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		result = append(result, id)
+	}
+	return result, rows.Err()
 }
 
 func (repo *TimeSlotRepo) ResetProjectModeratorsMRA(ctx context.Context, projectID int64, newModIDs, existingModIDs []int64) error {
-newSet := make(map[int64]bool)
-for _, id := range newModIDs {
-newSet[id] = true
-}
-existSet := make(map[int64]bool)
-for _, id := range existingModIDs {
-existSet[id] = true
-}
+	newSet := make(map[int64]bool)
+	for _, id := range newModIDs {
+		newSet[id] = true
+	}
+	existSet := make(map[int64]bool)
+	for _, id := range existingModIDs {
+		existSet[id] = true
+	}
 
-var modsToAdd, modsToRemove []int64
-for _, id := range existingModIDs {
-if !newSet[id] {
-modsToRemove = append(modsToRemove, id)
-}
-}
-for _, id := range newModIDs {
-if !existSet[id] {
-modsToAdd = append(modsToAdd, id)
-}
-}
+	var modsToAdd, modsToRemove []int64
+	for _, id := range existingModIDs {
+		if !newSet[id] {
+			modsToRemove = append(modsToRemove, id)
+		}
+	}
+	for _, id := range newModIDs {
+		if !existSet[id] {
+			modsToAdd = append(modsToAdd, id)
+		}
+	}
 
-if len(newModIDs) == 0 {
-_, err := repo.db.ExecContext(ctx, `DELETE FROM projects_users WHERE project_id = ?`, projectID)
-if err != nil {
-return fmt.Errorf("reset project moderators mra delete all: %w", err)
-}
-_, err = repo.db.ExecContext(ctx, `DELETE FROM moderator_time_range WHERE project_id = ?`, projectID)
-if err != nil {
-return fmt.Errorf("reset project moderators mra delete ranges: %w", err)
-}
-return nil
-}
+	if len(newModIDs) == 0 {
+		_, err := repo.db.ExecContext(ctx, `DELETE FROM projects_users WHERE project_id = ?`, projectID)
+		if err != nil {
+			return fmt.Errorf("reset project moderators mra delete all: %w", err)
+		}
+		_, err = repo.db.ExecContext(ctx, `DELETE FROM moderator_time_range WHERE project_id = ?`, projectID)
+		if err != nil {
+			return fmt.Errorf("reset project moderators mra delete ranges: %w", err)
+		}
+		return nil
+	}
 
-for _, id := range modsToAdd {
-_, err := repo.db.ExecContext(ctx,
-`INSERT INTO projects_users (project_id, user_id) VALUES (?, ?)`, projectID, id)
-if err != nil {
-return fmt.Errorf("reset project moderators mra insert: %w", err)
-}
-}
+	for _, id := range modsToAdd {
+		_, err := repo.db.ExecContext(ctx,
+			`INSERT INTO projects_users (project_id, user_id) VALUES (?, ?)`, projectID, id)
+		if err != nil {
+			return fmt.Errorf("reset project moderators mra insert: %w", err)
+		}
+	}
 
-for _, id := range modsToRemove {
-_, err := repo.db.ExecContext(ctx,
-`DELETE FROM projects_users WHERE project_id = ? AND user_id = ?`, projectID, id)
-if err != nil {
-return fmt.Errorf("reset project moderators mra delete: %w", err)
-}
-}
+	for _, id := range modsToRemove {
+		_, err := repo.db.ExecContext(ctx,
+			`DELETE FROM projects_users WHERE project_id = ? AND user_id = ?`, projectID, id)
+		if err != nil {
+			return fmt.Errorf("reset project moderators mra delete: %w", err)
+		}
+	}
 
-if len(modsToRemove) > 0 {
-_, err := repo.db.ExecContext(ctx,
-`DELETE FROM moderator_time_range WHERE moderator_id NOT IN (SELECT user_id FROM projects_users WHERE project_id = ?) AND project_id = ?`,
-projectID, projectID)
-if err != nil {
-return fmt.Errorf("reset project moderators mra cleanup ranges: %w", err)
-}
-}
+	if len(modsToRemove) > 0 {
+		_, err := repo.db.ExecContext(ctx,
+			`DELETE FROM moderator_time_range WHERE moderator_id NOT IN (SELECT user_id FROM projects_users WHERE project_id = ?) AND project_id = ?`,
+			projectID, projectID)
+		if err != nil {
+			return fmt.Errorf("reset project moderators mra cleanup ranges: %w", err)
+		}
+	}
 
-return nil
+	return nil
 }
 
 func (repo *TimeSlotRepo) UnassignModeratorFromProjectMRA(ctx context.Context, moderatorID, projectID int64) error {
-_, err := repo.db.ExecContext(ctx,
-`DELETE FROM projects_users WHERE user_id = ? AND project_id = ?`, moderatorID, projectID)
-if err != nil {
-return fmt.Errorf("unassign moderator from project mra: %w", err)
-}
-_, err = repo.db.ExecContext(ctx,
-`DELETE FROM moderator_time_range WHERE project_id = ? AND moderator_id = ?`, projectID, moderatorID)
-if err != nil {
-return fmt.Errorf("unassign moderator time range mra: %w", err)
-}
-return nil
+	_, err := repo.db.ExecContext(ctx,
+		`DELETE FROM projects_users WHERE user_id = ? AND project_id = ?`, moderatorID, projectID)
+	if err != nil {
+		return fmt.Errorf("unassign moderator from project mra: %w", err)
+	}
+	_, err = repo.db.ExecContext(ctx,
+		`DELETE FROM moderator_time_range WHERE project_id = ? AND moderator_id = ?`, projectID, moderatorID)
+	if err != nil {
+		return fmt.Errorf("unassign moderator time range mra: %w", err)
+	}
+	return nil
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -1384,23 +1384,23 @@ return nil
 
 // PendingPaymentRecord holds a pending payment row for processing.
 type PendingPaymentRecord struct {
-ID         int64 `json:"id"`
-TimeSlotID int64 `json:"timeSlotId"`
+	ID         int64 `json:"id"`
+	TimeSlotID int64 `json:"timeSlotId"`
 }
 
 // GetPendingPaymentsMRA fetches pending payment history records that have no
 // corresponding COMPLETED record for the same time slot (mimics legacy SELECT … FOR UPDATE).
 func (r *TimeSlotRepo) GetPendingPaymentsMRA(ctx context.Context, tx *sql.Tx, timeSlotIDs []int64) ([]PendingPaymentRecord, error) {
-if len(timeSlotIDs) == 0 {
-return nil, nil
-}
-placeholders := make([]string, len(timeSlotIDs))
-args := make([]any, len(timeSlotIDs))
-for i, id := range timeSlotIDs {
-placeholders[i] = "?"
-args[i] = id
-}
-query := fmt.Sprintf(`
+	if len(timeSlotIDs) == 0 {
+		return nil, nil
+	}
+	placeholders := make([]string, len(timeSlotIDs))
+	args := make([]any, len(timeSlotIDs))
+	for i, id := range timeSlotIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := fmt.Sprintf(`
 SELECT tsph.id, tsph.time_slot_id
 FROM time_slot_payment_history tsph
 WHERE tsph.time_slot_id IN (%s)
@@ -1413,109 +1413,109 @@ AND completed.payment_status = 'COMPLETED'
 ORDER BY tsph.time_slot_id
 FOR UPDATE`, strings.Join(placeholders, ","))
 
-rows, err := tx.QueryContext(ctx, query, args...)
-if err != nil {
-return nil, fmt.Errorf("get pending payments mra: %w", err)
-}
-defer rows.Close()
-var records []PendingPaymentRecord
-for rows.Next() {
-var rec PendingPaymentRecord
-if err := rows.Scan(&rec.ID, &rec.TimeSlotID); err != nil {
-return nil, fmt.Errorf("scan pending payment mra: %w", err)
-}
-records = append(records, rec)
-}
-return records, rows.Err()
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get pending payments mra: %w", err)
+	}
+	defer rows.Close()
+	var records []PendingPaymentRecord
+	for rows.Next() {
+		var rec PendingPaymentRecord
+		if err := rows.Scan(&rec.ID, &rec.TimeSlotID); err != nil {
+			return nil, fmt.Errorf("scan pending payment mra: %w", err)
+		}
+		records = append(records, rec)
+	}
+	return records, rows.Err()
 }
 
 // UpdateCompletedPaymentHistoryMRA marks selected pending records as COMPLETED.
 func (r *TimeSlotRepo) UpdateCompletedPaymentHistoryMRA(ctx context.Context, tx *sql.Tx, timeSlotIDs []int64, paymentHistoryIDs []int64) error {
-if len(timeSlotIDs) == 0 || len(paymentHistoryIDs) == 0 {
-return nil
-}
-tsPlaceholders := make([]string, len(timeSlotIDs))
-args := make([]any, 0, len(timeSlotIDs)+len(paymentHistoryIDs))
-for i, id := range timeSlotIDs {
-tsPlaceholders[i] = "?"
-args = append(args, id)
-}
-phPlaceholders := make([]string, len(paymentHistoryIDs))
-for i, id := range paymentHistoryIDs {
-phPlaceholders[i] = "?"
-args = append(args, id)
-}
-query := fmt.Sprintf(`
+	if len(timeSlotIDs) == 0 || len(paymentHistoryIDs) == 0 {
+		return nil
+	}
+	tsPlaceholders := make([]string, len(timeSlotIDs))
+	args := make([]any, 0, len(timeSlotIDs)+len(paymentHistoryIDs))
+	for i, id := range timeSlotIDs {
+		tsPlaceholders[i] = "?"
+		args = append(args, id)
+	}
+	phPlaceholders := make([]string, len(paymentHistoryIDs))
+	for i, id := range paymentHistoryIDs {
+		phPlaceholders[i] = "?"
+		args = append(args, id)
+	}
+	query := fmt.Sprintf(`
 UPDATE time_slot_payment_history
 SET payment_status = 'COMPLETED'
 WHERE time_slot_id IN (%s)
 AND id IN (%s)`,
-strings.Join(tsPlaceholders, ","),
-strings.Join(phPlaceholders, ","))
+		strings.Join(tsPlaceholders, ","),
+		strings.Join(phPlaceholders, ","))
 
-_, err := tx.ExecContext(ctx, query, args...)
-if err != nil {
-return fmt.Errorf("update completed payment history mra: %w", err)
-}
-return nil
+	_, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("update completed payment history mra: %w", err)
+	}
+	return nil
 }
 
 // UpdateCanceledPaymentHistoryMRA cancels remaining PENDING records for the same timeslots
 // that are NOT in the paymentHistoryIDs list.
 func (r *TimeSlotRepo) UpdateCanceledPaymentHistoryMRA(ctx context.Context, tx *sql.Tx, timeSlotIDs []int64, paymentHistoryIDs []int64) error {
-if len(timeSlotIDs) == 0 || len(paymentHistoryIDs) == 0 {
-return nil
-}
-tsPlaceholders := make([]string, len(timeSlotIDs))
-args := make([]any, 0, len(timeSlotIDs)+len(paymentHistoryIDs))
-for i, id := range timeSlotIDs {
-tsPlaceholders[i] = "?"
-args = append(args, id)
-}
-phPlaceholders := make([]string, len(paymentHistoryIDs))
-for i, id := range paymentHistoryIDs {
-phPlaceholders[i] = "?"
-args = append(args, id)
-}
-query := fmt.Sprintf(`
+	if len(timeSlotIDs) == 0 || len(paymentHistoryIDs) == 0 {
+		return nil
+	}
+	tsPlaceholders := make([]string, len(timeSlotIDs))
+	args := make([]any, 0, len(timeSlotIDs)+len(paymentHistoryIDs))
+	for i, id := range timeSlotIDs {
+		tsPlaceholders[i] = "?"
+		args = append(args, id)
+	}
+	phPlaceholders := make([]string, len(paymentHistoryIDs))
+	for i, id := range paymentHistoryIDs {
+		phPlaceholders[i] = "?"
+		args = append(args, id)
+	}
+	query := fmt.Sprintf(`
 UPDATE time_slot_payment_history
 SET payment_status = 'CANCELED'
 WHERE time_slot_id IN (%s)
 AND id NOT IN (%s)
 AND payment_status = 'PENDING'`,
-strings.Join(tsPlaceholders, ","),
-strings.Join(phPlaceholders, ","))
+		strings.Join(tsPlaceholders, ","),
+		strings.Join(phPlaceholders, ","))
 
-_, err := tx.ExecContext(ctx, query, args...)
-if err != nil {
-return fmt.Errorf("update canceled payment history mra: %w", err)
-}
-return nil
+	_, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("update canceled payment history mra: %w", err)
+	}
+	return nil
 }
 
 // UpdateFailedPaymentHistoryMRA marks all PENDING records for given timeslots as FAILED (used on error rollback).
 func (r *TimeSlotRepo) UpdateFailedPaymentHistoryMRA(ctx context.Context, timeSlotIDs []int64) error {
-if len(timeSlotIDs) == 0 {
-return nil
-}
-placeholders := make([]string, len(timeSlotIDs))
-args := make([]any, len(timeSlotIDs))
-for i, id := range timeSlotIDs {
-placeholders[i] = "?"
-args[i] = id
-}
-query := fmt.Sprintf(`
+	if len(timeSlotIDs) == 0 {
+		return nil
+	}
+	placeholders := make([]string, len(timeSlotIDs))
+	args := make([]any, len(timeSlotIDs))
+	for i, id := range timeSlotIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+	query := fmt.Sprintf(`
 UPDATE time_slot_payment_history
 SET payment_status = 'FAILED'
 WHERE payment_status = 'PENDING'
 AND time_slot_id IN (%s)`,
-strings.Join(placeholders, ","))
+		strings.Join(placeholders, ","))
 
-_, err := r.db.ExecContext(ctx, query, args...)
-if err != nil {
-return fmt.Errorf("update failed payment history mra: %w", err)
-}
-return nil
+	_, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("update failed payment history mra: %w", err)
+	}
+	return nil
 }
 
 // BeginTx starts a database transaction on the QS database.

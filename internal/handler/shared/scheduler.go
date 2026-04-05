@@ -6,9 +6,8 @@ import (
 	"net/http"
 	"time"
 
-
-	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/utilities"
 )
 

@@ -6,12 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/integration"
-	"github.com/InCrowd/unified-qual-api/internal/config"
-	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
-	mocks "github.com/InCrowd/unified-qual-api/internal/unittests/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/InCrowd/unified-qual-api/internal/config"
+	"github.com/InCrowd/unified-qual-api/internal/integration"
+	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
+	mocks "github.com/InCrowd/unified-qual-api/internal/unittests/mocks"
 )
 
 func testScheduler(jobsRepo *mocks.MockIrisJobsRepository) *Scheduler {

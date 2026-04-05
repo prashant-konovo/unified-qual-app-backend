@@ -8,8 +8,9 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/utilities"
 
-	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 )
 
 // ──────────────────────────────────────────────

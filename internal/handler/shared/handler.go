@@ -1,10 +1,11 @@
 package shared
 
 import (
-	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"context"
 	"net/http"
 	"time"
+
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 
 	"github.com/InCrowd/unified-qual-api/internal/service"
 )

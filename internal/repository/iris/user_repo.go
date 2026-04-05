@@ -45,7 +45,7 @@ type ICUserListRow struct {
 	TimeZone         sql.NullString `json:"timeZone"`
 	ModifiedOn       sql.NullTime   `json:"modifiedOn"`
 	LastLogin        sql.NullTime   `json:"lastLogin"`
-	RoleIDs          string         `json:"roleIds"` // comma-separated security_role IDs
+	RoleIDs          string         `json:"roleIds"`   // comma-separated security_role IDs
 	RoleNames        string         `json:"roleNames"` // comma-separated role names
 }
 

@@ -1,12 +1,12 @@
 package ls
 
 import (
-	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 
 	"github.com/go-chi/chi/v5"
 )

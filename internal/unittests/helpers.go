@@ -8,11 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/database"
-	"github.com/InCrowd/unified-qual-api/internal/service"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
-	"github.com/stretchr/testify/assert"
+	"github.com/InCrowd/unified-qual-api/internal/service"
 )
 
 // TestConfig returns a minimal config suitable for handler tests.
@@ -21,13 +22,13 @@ func TestConfig() *config.Config {
 		Environment: "test",
 		Port:        "8080",
 		Cognito: config.CognitoConfig{
-			UserPoolID: "us-east-1_test",
-			AllClientIDs: []string{"test-client-id"},
-			SSOClientID:    "test-sso-client",
+			UserPoolID:      "us-east-1_test",
+			AllClientIDs:    []string{"test-client-id"},
+			SSOClientID:     "test-sso-client",
 			SSOClientSecret: "test-sso-secret",
-			SSORedirectURI: "http://localhost:3000/login/sso-callback",
-			Domain:         "test-auth.example.com",
-			Region:         "us-east-1",
+			SSORedirectURI:  "http://localhost:3000/login/sso-callback",
+			Domain:          "test-auth.example.com",
+			Region:          "us-east-1",
 		},
 		AuthAPIURL: "http://mock-auth-api",
 		AuthAPIKey: "test-api-key",
