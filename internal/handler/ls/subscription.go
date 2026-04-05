@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
@@ -27,13 +28,13 @@ import (
 
 func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 	if !h.SubscriptionService.Available() {
-		dto.WriteJSON(w, http.StatusOK, []map[string]any{})
+		httpkit.WriteJSON(w, http.StatusOK, []map[string]any{})
 		return
 	}
 	rows, err := h.SubscriptionService.ListSubscriptionsForQual(r.Context())
 	if err != nil {
 		slog.Error("list subscriptions", "err", err)
-		dto.WriteJSON(w, http.StatusOK, []map[string]any{})
+		httpkit.WriteJSON(w, http.StatusOK, []map[string]any{})
 		return
 	}
 
@@ -45,34 +46,34 @@ func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 			"plan":    "enterprise",
 		})
 	}
-	dto.WriteJSON(w, http.StatusOK, subs)
+	httpkit.WriteJSON(w, http.StatusOK, subs)
 }
 
 func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
-	dto.WriteJSON(w, http.StatusCreated, map[string]any{"message": "subscription creation not yet implemented"})
+	httpkit.WriteJSON(w, http.StatusCreated, map[string]any{"message": "subscription creation not yet implemented"})
 }
 
 func (h *Handler) GetSubscription(w http.ResponseWriter, r *http.Request) {
 	sid := chi.URLParam(r, "id")
 	sidInt, _ := strconv.ParseInt(sid, 10, 64)
 	if !h.SubscriptionService.Available() {
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"id": sid, "company": "Unknown"})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"id": sid, "company": "Unknown"})
 		return
 	}
 	company, err := h.SubscriptionService.GetSubscriptionCompanyByID(r.Context(), sidInt)
 	if err != nil {
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"id": sid, "company": "Unknown"})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"id": sid, "company": "Unknown"})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"id": sid, "company": company, "plan": "enterprise"})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"id": sid, "company": company, "plan": "enterprise"})
 }
 
 func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"message": "subscription update not yet implemented"})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"message": "subscription update not yet implemented"})
 }
 
 func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 // ──────────────────────────────────────────────
@@ -82,9 +83,9 @@ func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 // GetSubscriptionInterviews returns interviews for a subscription.
 // Legacy contract: response wrapped as {"interviews": [...]} with 16-field interview objects.
 func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Request) {
-	subID, err := dto.ParseIDParam(r, "id")
+	subID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -92,13 +93,13 @@ func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Reque
 		interviews, err := h.SubscriptionService.GetSubscriptionInterviews(r.Context(), subID)
 		if err != nil {
 			slog.Error("subscription interviews failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if interviews == nil {
 			interviews = []map[string]any{}
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"interviews": interviews})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"interviews": interviews})
 		return
 	}
 	if h.InterviewService.TimeSlotAvailable() {
@@ -112,24 +113,24 @@ func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Reque
 				"statusId":  ts.StatusID,
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"interviews": interviews})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"interviews": interviews})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"interviews": []map[string]any{}})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"interviews": []map[string]any{}})
 }
 
 // GetSubscriptionCrowds returns crowds for a subscription.
 // Legacy contract: response wrapped as {"crowds": [...], "limit": N, "offset": N, "totalCount": N}
 // Supports ?limit, ?offset, ?includeExclusionLists, ?jsonType=basic|admin (default admin).
 func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) {
-	subID, err := dto.ParseIDParam(r, "id")
+	subID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if !h.SubscriptionService.Available() {
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"crowds": []map[string]any{}, "limit": 20, "offset": 0, "totalCount": 0})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"crowds": []map[string]any{}, "limit": 20, "offset": 0, "totalCount": 0})
 		return
 	}
 
@@ -160,7 +161,7 @@ func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) 
 	crowds, total, err := h.SubscriptionService.ListCrowdsForSubscription(r.Context(), subID, filter)
 	if err != nil {
 		slog.Error("subscription crowds failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 
@@ -170,7 +171,7 @@ func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) 
 		result = append(result, h.buildCrowdBasicJSON(ctx, c))
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"crowds":     result,
 		"limit":      limit,
 		"offset":     offset,
@@ -254,7 +255,7 @@ func (h *Handler) buildCrowdBasicJSON(ctx context.Context, c iris.ICCrowd) map[s
 		"typeDescription":                typeDesc,
 		"name":                           c.Name,
 		"descriptiveName":                descriptiveName,
-		"description":                    dto.NullStr(c.Description),
+		"description":                    httpkit.NullStr(c.Description),
 		"subscriptionId":                 c.SubscriptionID,
 		"accountId":                      accountID,
 		"createdBy":                      c.CreatedBy,
@@ -266,16 +267,16 @@ func (h *Handler) buildCrowdBasicJSON(ctx context.Context, c iris.ICCrowd) map[s
 		"countryName":                    countryName,
 		"countryLanguage":                countryLanguage,
 		"deleted":                        c.Deleted,
-		"andOr":                          dto.NullInt64(c.AndOr),
-		"deletedOn":                      dto.NullTime(c.DeletedOn),
-		"deletedBy":                      dto.NullInt64(c.DeletedBy),
+		"andOr":                          httpkit.NullInt64(c.AndOr),
+		"deletedOn":                      httpkit.NullTime(c.DeletedOn),
+		"deletedBy":                      httpkit.NullInt64(c.DeletedBy),
 		"createdOn":                      c.CreatedOn.Format(time.RFC3339),
 		"isArchived":                     c.IsArchived,
-		"createdFromSampleTemplateId":    dto.NullInt64(c.CreatedFromSampleTemplateID),
+		"createdFromSampleTemplateId":    httpkit.NullInt64(c.CreatedFromSampleTemplateID),
 		"isNewbie":                       c.IsNewbie,
 		"createdViaListMatch":            createdViaListMatch,
-		"incrowdTPA":                     dto.NullStr(c.IncrowdTPA),
-		"doximityTPA":                    dto.NullStr(c.DoximityTPA),
+		"incrowdTPA":                     httpkit.NullStr(c.IncrowdTPA),
+		"doximityTPA":                    httpkit.NullStr(c.DoximityTPA),
 		"canShareWithDoximity":           c.CanShareWithDoximity,
 		"crowdSpecialtyValues":           specialtyValues,
 		"expectedCompletesRate":          expectedCompletesRate,
@@ -290,14 +291,14 @@ func (h *Handler) GetSubscriptionQuestionTypes(w http.ResponseWriter, r *http.Re
 	_ = chi.URLParam(r, "id") // subId validated but not used for filtering (legacy returns all types)
 
 	if !h.SubscriptionService.Available() {
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"totalCount": 0, "limit": nil, "offset": nil, "questionTypes": []map[string]any{}})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"totalCount": 0, "limit": nil, "offset": nil, "questionTypes": []map[string]any{}})
 		return
 	}
 
 	allTypes, err := h.SubscriptionService.GetAllQuestionTypes(r.Context())
 	if err != nil {
 		slog.Error("question types failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 	if allTypes == nil {
@@ -323,7 +324,7 @@ func (h *Handler) GetSubscriptionQuestionTypes(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"totalCount":    totalCount,
 		"limit":         limitVal,
 		"offset":        offsetVal,
@@ -334,14 +335,14 @@ func (h *Handler) GetSubscriptionQuestionTypes(w http.ResponseWriter, r *http.Re
 // GetSubscriptionInquiries returns inquiries for a subscription.
 // Legacy contract: returns [{"inquiry": {...adminJson}, "project": {...listJson}}]
 func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Request) {
-	subID, err := dto.ParseIDParam(r, "subId")
+	subID, err := httpkit.ParseIDParam(r, "subId")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if !h.SubscriptionService.Available() {
-		dto.WriteJSON(w, http.StatusOK, []map[string]any{})
+		httpkit.WriteJSON(w, http.StatusOK, []map[string]any{})
 		return
 	}
 
@@ -364,7 +365,7 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 	inquiries, err := h.SubscriptionService.ListProjectInquiries(r.Context(), subID, filter)
 	if err != nil {
 		slog.Error("inquiries list failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 
@@ -375,12 +376,12 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 		inquiryJSON := map[string]any{
 			"id":                     pi.ID,
 			"description":            pi.Description,
-			"notes":                  dto.NullStr(pi.Notes),
+			"notes":                  httpkit.NullStr(pi.Notes),
 			"subscriptionId":         pi.SubscriptionID,
 			"inquiryTypeId":          pi.InquiryTypeID,
 			"inquiryType":            h.SubscriptionService.GetInquiryTypeName(ctx, pi.InquiryTypeID),
 			"interviewLength":        pi.InterviewLength,
-			"requiredCompletionDate": dto.NullTime(pi.RequiredCompletionDate),
+			"requiredCompletionDate": httpkit.NullTime(pi.RequiredCompletionDate),
 			"projectId":              pi.ProjectID,
 			"createdOn":              pi.CreatedOn.Format(time.RFC3339),
 			"createdBy":              pi.CreatedBy,
@@ -399,22 +400,22 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 				projectJSON = map[string]any{
 					"id":                  p.ID,
 					"name":                p.Name,
-					"description":         dto.NullStr(p.Description),
+					"description":         httpkit.NullStr(p.Description),
 					"subscriptionId":      p.SubscriptionID,
 					"createdOn":           p.CreatedOn.Format(time.RFC3339),
-					"createdBy":           dto.NullInt64(p.CreatedBy),
-					"modifiedOn":          dto.NullTime(p.ModifiedOn),
-					"budget":              dto.NullStr(p.Budget),
+					"createdBy":           httpkit.NullInt64(p.CreatedBy),
+					"modifiedOn":          httpkit.NullTime(p.ModifiedOn),
+					"budget":              httpkit.NullStr(p.Budget),
 					"isPrivate":           p.IsPrivate,
-					"qualModeratorId":     dto.NullInt64(p.QualModeratorID),
+					"qualModeratorId":     httpkit.NullInt64(p.QualModeratorID),
 					"projectStatusId":     p.ProjectStatusID,
 					"projectTypeId":       p.ProjectTypeID,
-					"salesforceProjectId": dto.NullStr(p.SalesforceProjectID),
-					"completedOn":         dto.NullTime(p.CompletedOn),
+					"salesforceProjectId": httpkit.NullStr(p.SalesforceProjectID),
+					"completedOn":         httpkit.NullTime(p.CompletedOn),
 					"isArchived":          p.IsArchived,
-					"archivedBy":          dto.NullInt64(p.ArchivedBy),
-					"archivedOn":          dto.NullTime(p.ArchivedOn),
-					"finalizedOn":         dto.NullTime(p.FinalizedOn),
+					"archivedBy":          httpkit.NullInt64(p.ArchivedBy),
+					"archivedOn":          httpkit.NullTime(p.ArchivedOn),
+					"finalizedOn":         httpkit.NullTime(p.FinalizedOn),
 				}
 			}
 		}
@@ -425,18 +426,18 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 		})
 	}
 
-	dto.WriteJSON(w, http.StatusOK, result)
+	httpkit.WriteJSON(w, http.StatusOK, result)
 }
 
 // GetSubscriptionProjectInquiry returns a specific inquiry for a subscription/project.
 // Contract-identical with legacy InCrowdAPI: GET /v1/subscription/:subscriptionId/project/:projectId/inquiry
 // Response: SavedProposal {project, crowds, proposal, costs} + isHardStop
 func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.Request) {
-	subID, _ := dto.ParseIDParam(r, "subId")
-	projectID, _ := dto.ParseIDParam(r, "pid")
+	subID, _ := httpkit.ParseIDParam(r, "subId")
+	projectID, _ := httpkit.ParseIDParam(r, "pid")
 
 	if !h.SubscriptionService.Available() {
-		dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
+		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
 		return
 	}
 
@@ -444,18 +445,18 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 	pi, err := h.SubscriptionService.GetProjectInquiry(r.Context(), subID, projectID)
 	if err != nil {
 		slog.Error("get inquiry failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 	if pi == nil {
-		dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
+		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
 		return
 	}
 
 	// 2. Get project
 	project, err := h.SubscriptionService.GetProjectForInquiry(r.Context(), projectID)
 	if err != nil || project == nil {
-		dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "project not found"})
+		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "project not found"})
 		return
 	}
 
@@ -483,7 +484,7 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 		"name":                 project["name"],
 		"salesforceProjectId":  sfProjectID,
 		"completionDate":       completionDate,
-		"notes":                dto.NullStr(pi.Notes),
+		"notes":                httpkit.NullStr(pi.Notes),
 		"crowds":               standardCrowds,
 		"customCrowds":         customCrowds,
 		"projectId":            projectID,
@@ -538,7 +539,7 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"project":    project,
 		"crowds":     crowdObjects,
 		"proposal":   proposal,
@@ -551,14 +552,14 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:subId/project_surveys
 // Response: { "projects": { "<projectId>": { "name", "projectStatusId", "surveys": [...] } } }
 func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.Request) {
-	subID, err := dto.ParseIDParam(r, "subId")
+	subID, err := httpkit.ParseIDParam(r, "subId")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if !h.SubscriptionService.Available() {
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"projects": map[string]any{}})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"projects": map[string]any{}})
 		return
 	}
 
@@ -576,7 +577,7 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 	projects, err := h.SubscriptionService.ListProjectsForSubscription(r.Context(), subID)
 	if err != nil {
 		slog.Error("subscription projects failed", "error", err)
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"projects": map[string]any{}})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"projects": map[string]any{}})
 		return
 	}
 
@@ -627,7 +628,7 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 			surveyList = append(surveyList, map[string]any{
 				"id":                s.ID,
 				"namePublic":        s.NamePublic,
-				"namePrivate":       dto.NullStr(s.NamePrivate),
+				"namePrivate":       httpkit.NullStr(s.NamePrivate),
 				"favorite":          favorite,
 				"status":            statusObj,
 				"qualCrowdName":     qualCrowdName,
@@ -645,7 +646,7 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"projects": projectsMap})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"projects": projectsMap})
 }
 
 // ──────────────────────────────────────────────
@@ -657,13 +658,13 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	subID, _ := strconv.ParseInt(subStr, 10, 64)
 
 	var proposal dto.IPProposal
-	if errs := dto.DecodeAndValidate(r, &proposal); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &proposal); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
 	if !h.SubscriptionService.Available() {
-		dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+		httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 		return
 	}
 
@@ -673,7 +674,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	allProducts, err := h.SubscriptionService.GetQualProducts(ctx)
 	if err != nil {
 		slog.Error("get qual products failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get products"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get products"})
 		return
 	}
 
@@ -839,7 +840,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 		IsHardStop: isHardStop,
 	}
 
-	dto.WriteJSON(w, http.StatusOK, resp)
+	httpkit.WriteJSON(w, http.StatusOK, resp)
 }
 
 // assessCrowdDifficulty calculates the feasibility score for a crowd and matches it to an assessment.
@@ -896,7 +897,7 @@ func (h *Handler) assessCrowdDifficulty(ctx context.Context, crowd *dto.IPCrowdS
 func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Request) {
 	// Legacy error helper: wraps in {"error": {"userMessage":..., "developerMessage":..., "status":"BAD REQUEST", "code":400}}
 	badRequest := func(reason string) {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": map[string]any{
 				"userMessage":      "Something sent doesn't make sense, please check your request",
 				"developerMessage": reason,
@@ -1052,5 +1053,5 @@ func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Contract-identical: legacy returns empty JSON object
-	dto.WriteJSON(w, http.StatusOK, map[string]any{})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{})
 }

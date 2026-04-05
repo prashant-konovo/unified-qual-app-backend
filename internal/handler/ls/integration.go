@@ -6,6 +6,7 @@ import (
 
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 )
 
 // ──────────────────────────────────────────────
@@ -18,8 +19,8 @@ import (
 
 func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 	var req map[string]any
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
@@ -30,12 +31,12 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("decipher respondent data failed", "surveyId", surveyID, "error", err)
 		} else {
 			slog.Info("decipher data retrieved", "surveyId", surveyID, "records", len(data))
-			dto.WriteJSON(w, http.StatusOK, map[string]any{
+			httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 				"accepted":    true,
 				"source":      "decipher",
 				"surveyId":    surveyID,
 				"recordCount": len(data),
-				"timestamp":   dto.Now(),
+				"timestamp":   httpkit.Now(),
 			})
 			return
 		}
@@ -47,7 +48,7 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("third-party integration received", "payload_keys", len(req))
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"accepted": true, "timestamp": dto.Now()})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"accepted": true, "timestamp": httpkit.Now()})
 }
 
 // ──────────────────────────────────────────────
@@ -56,8 +57,8 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) CheckQualEligibility(w http.ResponseWriter, r *http.Request) {
 	var req dto.LsCheckQualEligibilityRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
@@ -65,20 +66,20 @@ func (h *Handler) CheckQualEligibility(w http.ResponseWriter, r *http.Request) {
 		result, err := h.TranslationService.GetParticipantEligibility(r.Context(), req.ResponderID, req.ProjectID)
 		if err != nil {
 			slog.Error("eligibility check failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
 			return
 		}
 		if result == nil {
-			dto.WriteJSON(w, http.StatusOK, map[string]any{
+			httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 				"eligible": true, "responderId": req.ResponderID,
 				"projectId": req.ProjectID, "source": "qs",
 			})
 			return
 		}
 		result["source"] = "qs"
-		dto.WriteJSON(w, http.StatusOK, result)
+		httpkit.WriteJSON(w, http.StatusOK, result)
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"eligible": true, "responderId": req.ResponderID, "projectId": req.ProjectID})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"eligible": true, "responderId": req.ResponderID, "projectId": req.ProjectID})
 }

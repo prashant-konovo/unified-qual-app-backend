@@ -1,7 +1,7 @@
 package shared
 
 import (
-	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 	"context"
 	"net/http"
 	"time"
@@ -33,7 +33,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	dto.WriteJSON(w, httpCode, map[string]any{
+	httpkit.WriteJSON(w, httpCode, map[string]any{
 		"status":      status,
 		"version":     "1.2.0",
 		"environment": h.Cfg.Environment,

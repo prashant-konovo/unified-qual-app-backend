@@ -1,7 +1,7 @@
 package ls
 
 import (
-	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -25,7 +25,7 @@ func (h *Handler) GetLocalesReal(w http.ResponseWriter, r *http.Request) {
 		locales, err := h.TranslationService.ListLocales(r.Context())
 		if err != nil {
 			slog.Error("list locales failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(locales))
@@ -34,10 +34,10 @@ func (h *Handler) GetLocalesReal(w http.ResponseWriter, r *http.Request) {
 				"id": l.ID, "languageCode": l.LanguageCode, "languageName": l.LanguageName,
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, result)
+		httpkit.WriteJSON(w, http.StatusOK, result)
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, []any{})
+	httpkit.WriteJSON(w, http.StatusOK, []any{})
 }
 
 // ──────────────────────────────────────────────
@@ -51,7 +51,7 @@ func (h *Handler) DeleteTopicTranslation(w http.ResponseWriter, r *http.Request)
 
 	parts := strings.SplitN(translationKey, "_", 2)
 	if len(parts) < 2 {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid translation key format: topicId_langCode"})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid translation key format: topicId_langCode"})
 		return
 	}
 	topicID, _ := strconv.ParseInt(parts[0], 10, 64)
@@ -60,13 +60,13 @@ func (h *Handler) DeleteTopicTranslation(w http.ResponseWriter, r *http.Request)
 	if h.TranslationService.AnswerRepoAvailable() {
 		if err := h.TranslationService.DeleteTopicTranslation(r.Context(), topicID, langCode); err != nil {
 			slog.Error("delete topic translation failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "projectId": projectID, "topicId": topicID, "languageCode": langCode})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "projectId": projectID, "topicId": topicID, "languageCode": langCode})
 		return
 	}
-	dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 func (h *Handler) DeleteTranslation(w http.ResponseWriter, r *http.Request) {
@@ -77,11 +77,11 @@ func (h *Handler) DeleteTranslation(w http.ResponseWriter, r *http.Request) {
 	if h.TranslationService.AnswerRepoAvailable() {
 		if err := h.TranslationService.DeleteTranslation(r.Context(), projectID, langCode); err != nil {
 			slog.Error("delete translation failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "projectId": projectID, "languageCode": langCode})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "projectId": projectID, "languageCode": langCode})
 		return
 	}
-	dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/service"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -22,33 +23,33 @@ type SurveyHandler struct{ *service.Deps }
 func (h *SurveyHandler) ListSurveys(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.SurveyService.QsAvailable() {
-		dto.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
+		httpkit.WriteJSON(w, http.StatusServiceUnavailable, httpkit.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	search := r.URL.Query().Get("search")
 	rows, err := h.SurveyService.List(ctx, search)
 	if err != nil {
 		slog.Error("list surveys", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to list surveys"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "failed to list surveys"})
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, dto.SurveyFromRow(&row))
 	}
-	dto.WriteJSON(w, http.StatusOK, out)
+	httpkit.WriteJSON(w, http.StatusOK, out)
 }
 
 
 func (h *SurveyHandler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.SurveyService.QsAvailable() {
-		dto.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
+		httpkit.WriteJSON(w, http.StatusServiceUnavailable, httpkit.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	var req dto.CreateSurveyRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 	if req.Title == "" {
@@ -66,31 +67,31 @@ func (h *SurveyHandler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
 	newID, err := h.SurveyService.Create(ctx, req.ProjectID, req.Title, req.Status, req.Questions, req.Rules)
 	if err != nil {
 		slog.Error("create survey", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create survey"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "failed to create survey"})
 		return
 	}
 	row, err := h.SurveyService.GetByID(ctx, newID)
 	if err != nil || row == nil {
-		dto.WriteJSON(w, http.StatusCreated, map[string]any{"id": fmt.Sprintf("%d", newID)})
+		httpkit.WriteJSON(w, http.StatusCreated, map[string]any{"id": fmt.Sprintf("%d", newID)})
 		return
 	}
-	dto.WriteJSON(w, http.StatusCreated, dto.SurveyFromRow(row))
+	httpkit.WriteJSON(w, http.StatusCreated, dto.SurveyFromRow(row))
 }
 
 func (h *SurveyHandler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.SurveyService.QsAvailable() {
-		dto.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
+		httpkit.WriteJSON(w, http.StatusServiceUnavailable, httpkit.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
-	surveyID, err := dto.ParseIDParam(r, "id")
+	surveyID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, httpkit.ErrorBody{Error: err.Error()})
 		return
 	}
 	var req dto.CreateSurveyRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 	if req.Questions == nil {
@@ -101,58 +102,58 @@ func (h *SurveyHandler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.SurveyService.Update(ctx, surveyID, req.Title, req.Status, req.Questions, req.Rules); err != nil {
 		slog.Error("update survey", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to update survey"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "failed to update survey"})
 		return
 	}
 	row, err := h.SurveyService.GetByID(ctx, surveyID)
 	if err != nil || row == nil {
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"id": fmt.Sprintf("%d", surveyID), "updatedAt": dto.Now()})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"id": fmt.Sprintf("%d", surveyID), "updatedAt": httpkit.Now()})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, dto.SurveyFromRow(row))
+	httpkit.WriteJSON(w, http.StatusOK, dto.SurveyFromRow(row))
 }
 
 func (h *SurveyHandler) DeleteSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.SurveyService.QsAvailable() {
-		dto.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
+		httpkit.WriteJSON(w, http.StatusServiceUnavailable, httpkit.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
-	surveyID, err := dto.ParseIDParam(r, "id")
+	surveyID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, httpkit.ErrorBody{Error: err.Error()})
 		return
 	}
 	if err := h.SurveyService.Delete(ctx, surveyID); err != nil {
 		slog.Error("delete survey", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to delete survey"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "failed to delete survey"})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 func (h *SurveyHandler) GetPublicSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.SurveyService.QsAvailable() {
-		dto.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
+		httpkit.WriteJSON(w, http.StatusServiceUnavailable, httpkit.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
-	surveyID, err := dto.ParseIDParam(r, "surveyId")
+	surveyID, err := httpkit.ParseIDParam(r, "surveyId")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, httpkit.ErrorBody{Error: err.Error()})
 		return
 	}
 	row, err := h.SurveyService.GetByID(ctx, surveyID)
 	if err != nil {
 		slog.Error("get public survey", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to get survey"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "failed to get survey"})
 		return
 	}
 	if row == nil {
-		dto.WriteJSON(w, http.StatusNotFound, dto.ErrorBody{Error: "survey not found"})
+		httpkit.WriteJSON(w, http.StatusNotFound, httpkit.ErrorBody{Error: "survey not found"})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, dto.SurveyFromRow(row))
+	httpkit.WriteJSON(w, http.StatusOK, dto.SurveyFromRow(row))
 }
 
 // ──────────────────────────────────────────────
@@ -160,7 +161,7 @@ func (h *SurveyHandler) GetPublicSurvey(w http.ResponseWriter, r *http.Request) 
 // ──────────────────────────────────────────────
 
 func (h *SurveyHandler) GetSurveyResponses(w http.ResponseWriter, r *http.Request) {
-	dto.WriteJSON(w, http.StatusOK, []map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, []map[string]any{
 		{
 			"id": "resp-1", "userId": chi.URLParam(r, "userId"),
 			"projectId": "proj-101", "status": "qualified",
@@ -170,19 +171,19 @@ func (h *SurveyHandler) GetSurveyResponses(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *SurveyHandler) SubmitSurveyResponse(w http.ResponseWriter, r *http.Request) {
-	dto.WriteJSON(w, http.StatusCreated, map[string]any{
-		"id": "resp-" + dto.ID()[:8], "status": "qualified", "submittedAt": dto.Now(),
+	httpkit.WriteJSON(w, http.StatusCreated, map[string]any{
+		"id": "resp-" + httpkit.ID()[:8], "status": "qualified", "submittedAt": httpkit.Now(),
 	})
 }
 
 func (h *SurveyHandler) SubmitParticipantSurvey(w http.ResponseWriter, r *http.Request) {
-	dto.WriteJSON(w, http.StatusCreated, map[string]any{
-		"id": "resp-" + dto.ID()[:8], "status": "qualified", "submittedAt": dto.Now(),
+	httpkit.WriteJSON(w, http.StatusCreated, map[string]any{
+		"id": "resp-" + httpkit.ID()[:8], "status": "qualified", "submittedAt": httpkit.Now(),
 	})
 }
 
 func (h *SurveyHandler) GetParticipantSurveyResponse(w http.ResponseWriter, r *http.Request) {
-	dto.WriteJSON(w, http.StatusOK, []map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, []map[string]any{
 		{"id": "resp-1", "userId": chi.URLParam(r, "userId"),
 			"projectId": "proj-101", "status": "qualified"},
 	})

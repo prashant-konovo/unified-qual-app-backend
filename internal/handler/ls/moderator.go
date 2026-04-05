@@ -13,6 +13,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -28,9 +29,9 @@ import (
 // Contract-identical with legacy InCrowdAPI: GET /v1/moderator/:modId/subscription/:subId/availability
 // Response: flat array of availability objects
 func (h *Handler) GetModeratorAvailabilityBySub(w http.ResponseWriter, r *http.Request) {
-	modID, _ := dto.ParseIDParam(r, "modId")
-	subID, _ := dto.ParseIDParam(r, "subId")
-	source := dto.ResolveSource(r)
+	modID, _ := httpkit.ParseIDParam(r, "modId")
+	subID, _ := httpkit.ParseIDParam(r, "subId")
+	source := httpkit.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		avails, err := h.SurveyService.ListModeratorAvailability(r.Context(), modID, subID)
@@ -46,7 +47,7 @@ func (h *Handler) GetModeratorAvailabilityBySub(w http.ResponseWriter, r *http.R
 				"endTime":        a.EndTime.Format(time.RFC3339),
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, result)
+		httpkit.WriteJSON(w, http.StatusOK, result)
 		return
 	}
 
@@ -64,33 +65,33 @@ func (h *Handler) GetModeratorAvailabilityBySub(w http.ResponseWriter, r *http.R
 				"endTime":   a.EndTime.Format(time.RFC3339),
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, result)
+		httpkit.WriteJSON(w, http.StatusOK, result)
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, []any{})
+	httpkit.WriteJSON(w, http.StatusOK, []any{})
 }
 
 // PostModeratorAvailabilityBySub creates moderator availability for a subscription.
 // Contract-identical with legacy InCrowdAPI: POST /v1/moderator/:modId/subscription/:subId/availability
 // Response: flat array of availability objects (200, not 201)
 func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.Request) {
-	modID, _ := dto.ParseIDParam(r, "modId")
-	subID, _ := dto.ParseIDParam(r, "subId")
+	modID, _ := httpkit.ParseIDParam(r, "modId")
+	subID, _ := httpkit.ParseIDParam(r, "subId")
 
 	var req dto.LsModeratorAvailabilityTimeRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 	startTime, _ := time.Parse(time.RFC3339, req.StartTime)
 	endTime, _ := time.Parse(time.RFC3339, req.EndTime)
-	source := dto.ResolveSource(r)
+	source := httpkit.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		_, err := h.SurveyService.CreateModeratorAvailability(r.Context(), modID, subID, startTime, endTime)
 		if err != nil {
 			slog.Error("create iris avail failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
 		// Return updated availability list (legacy returns array)
@@ -107,7 +108,7 @@ func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.
 				"endTime":        a.EndTime.Format(time.RFC3339),
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, result)
+		httpkit.WriteJSON(w, http.StatusOK, result)
 		return
 	}
 
@@ -115,7 +116,7 @@ func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.
 		_, err := h.ModeratorService.CreateModeratorAvailability(r.Context(), modID, subID, startTime, endTime)
 		if err != nil {
 			slog.Error("create qs avail failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
 		// Return updated availability list (legacy returns array)
@@ -131,74 +132,74 @@ func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.
 				"endTime":   a.EndTime.Format(time.RFC3339),
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, result)
+		httpkit.WriteJSON(w, http.StatusOK, result)
 		return
 	}
-	dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 // UpdateModeratorAvailabilityExt updates a moderator availability slot.
 // Contract-identical with legacy InCrowdAPI: PUT /v1/moderator_availability/:maId
 // Response: flat array of availability objects
 func (h *Handler) UpdateModeratorAvailabilityExt(w http.ResponseWriter, r *http.Request) {
-	maID, _ := dto.ParseIDParam(r, "maId")
+	maID, _ := httpkit.ParseIDParam(r, "maId")
 
 	var req dto.LsModeratorAvailabilityTimeRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 	startTime, _ := time.Parse(time.RFC3339, req.StartTime)
 	endTime, _ := time.Parse(time.RFC3339, req.EndTime)
-	source := dto.ResolveSource(r)
+	source := httpkit.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		if err := h.SurveyService.UpdateModeratorAvailability(r.Context(), maID, startTime, endTime); err != nil {
 			slog.Error("update iris avail failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": maID})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": maID})
 		return
 	}
 	if h.ModeratorService.QsUserAvailable() {
 		if err := h.ModeratorService.UpdateModeratorAvailability(r.Context(), maID, startTime, endTime); err != nil {
 			slog.Error("update qs avail failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": maID})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": maID})
 		return
 	}
-	dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
+	httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
 }
 
 // DeleteModeratorAvailabilityExt deletes a moderator availability slot.
 // Contract-identical with legacy InCrowdAPI: DELETE /v1/moderator_availability/:maId
 // Response: flat array of availability objects
 func (h *Handler) DeleteModeratorAvailabilityExt(w http.ResponseWriter, r *http.Request) {
-	maID, _ := dto.ParseIDParam(r, "maId")
-	source := dto.ResolveSource(r)
+	maID, _ := httpkit.ParseIDParam(r, "maId")
+	source := httpkit.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		if err := h.SurveyService.DeleteModeratorAvailability(r.Context(), maID); err != nil {
 			slog.Error("delete iris avail failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": maID})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": maID})
 		return
 	}
 	if h.ModeratorService.QsUserAvailable() {
 		if err := h.ModeratorService.DeleteModeratorAvailability(r.Context(), maID); err != nil {
 			slog.Error("delete qs avail failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": maID})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": maID})
 		return
 	}
-	dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
+	httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
 }
 
 // ──────────────────────────────────────────────
@@ -218,26 +219,26 @@ func (h *Handler) GetNoShowCheck(w http.ResponseWriter, r *http.Request) {
 		data, err := h.SurveyService.GetNoShowCheck(r.Context())
 		if err != nil {
 			slog.Error("noshow check failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, data)
+		httpkit.WriteJSON(w, http.StatusOK, data)
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"timeSlot": nil, "interviewee": nil})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"timeSlot": nil, "interviewee": nil})
 }
 
 // MarkNoShow marks a timeslot as no-show.
 // Contract-identical with legacy InCrowdAPI: PUT /v1/selfservice/project/:pid/timeslot/:tid
 // Response: full updated TimeSlot adminJson
 func (h *Handler) MarkNoShow(w http.ResponseWriter, r *http.Request) {
-	projectID, _ := dto.ParseIDParam(r, "pid")
-	timeSlotID, _ := dto.ParseIDParam(r, "tid")
+	projectID, _ := httpkit.ParseIDParam(r, "pid")
+	timeSlotID, _ := httpkit.ParseIDParam(r, "tid")
 
 	if h.SurveyService.IrisAvailable() {
 		if err := h.SurveyService.MarkNoShow(r.Context(), projectID, timeSlotID); err != nil {
 			slog.Error("mark noshow failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "mark failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "mark failed"})
 			return
 		}
 		// Hook: TimeSlot.afterUpdateHooks — assignConferenceHashAndPin
@@ -257,12 +258,12 @@ func (h *Handler) MarkNoShow(w http.ResponseWriter, r *http.Request) {
 	if h.SurveyService.IrisAvailable() {
 		ts, err := h.SurveyService.GetTimeSlotAdminJSON(r.Context(), timeSlotID)
 		if err == nil && ts != nil {
-			dto.WriteJSON(w, http.StatusOK, ts)
+			httpkit.WriteJSON(w, http.StatusOK, ts)
 			return
 		}
 	}
 	// Fallback: minimal timeslot shape
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"id": timeSlotID, "projectId": projectID, "statusId": 10,
 		"stopPayment": true,
 	})
@@ -286,9 +287,9 @@ func (h *Handler) StartModeratorImport(w http.ResponseWriter, r *http.Request) {
 		events, err := h.ModeratorService.ListGoogleCalEvents(r.Context(), "", now, now.AddDate(0, 3, 0))
 		if err != nil {
 			slog.Warn("google calendar list events failed", "moderatorId", moderatorID, "error", err)
-			dto.WriteJSON(w, http.StatusOK, map[string]any{
+			httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 				"moderatorId": moderatorID,
-				"importId":    dto.ID()[:8],
+				"importId":    httpkit.ID()[:8],
 				"status":      "error",
 				"message":     fmt.Sprintf("Google Calendar import failed: %v", err),
 			})
@@ -296,9 +297,9 @@ func (h *Handler) StartModeratorImport(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Info("google calendar events fetched for import",
 			"moderatorId", moderatorID, "eventCount", len(events))
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"moderatorId": moderatorID,
-			"importId":    dto.ID()[:8],
+			"importId":    httpkit.ID()[:8],
 			"status":      "completed",
 			"eventsFound": len(events),
 			"message":     "Calendar events imported successfully.",
@@ -306,9 +307,9 @@ func (h *Handler) StartModeratorImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"moderatorId": moderatorID,
-		"importId":    dto.ID()[:8],
+		"importId":    httpkit.ID()[:8],
 		"status":      "not_configured",
 		"message":     "External calendar import requires Google Calendar API credentials.",
 	})
@@ -334,7 +335,7 @@ func (h *Handler) GetImportedAvailability(w http.ResponseWriter, r *http.Request
 					"source":      "google_calendar",
 				})
 			}
-			dto.WriteJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": result, "importSource": "google_calendar"})
+			httpkit.WriteJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": result, "importSource": "google_calendar"})
 			return
 		}
 	}
@@ -351,10 +352,10 @@ func (h *Handler) GetImportedAvailability(w http.ResponseWriter, r *http.Request
 				"source":    "database",
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": result, "importSource": "database"})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": result, "importSource": "database"})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": []any{}, "importSource": "none"})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": []any{}, "importSource": "none"})
 }
 
 func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
@@ -362,7 +363,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 	moderatorID, _ := strconv.ParseInt(modStr, 10, 64)
 
 	if h.ModeratorService.GoogleCalConfigured() {
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"moderatorId": moderatorID,
 			"status":      "configured",
 			"message":     "Google Calendar integration is configured and active.",
@@ -370,7 +371,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"moderatorId": moderatorID,
 		"status":      "not_configured",
 		"message":     "Google Calendar import not yet configured. Use manual availability entry.",
@@ -385,13 +386,13 @@ func (h *Handler) UnlinkImportedModerator(w http.ResponseWriter, r *http.Request
 		_ = h.UserService.DeleteGoogleCalendarImport(r.Context(), moderatorID)
 	}
 
-	dto.WriteJSON(w, http.StatusOK, "Imported Moderator calendar has been unlinked")
+	httpkit.WriteJSON(w, http.StatusOK, "Imported Moderator calendar has been unlinked")
 }
 
 func (h *Handler) UpdateGoogleSheetFirstDate(w http.ResponseWriter, r *http.Request) {
 	var req dto.LsUpdateGoogleSheetRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
@@ -404,17 +405,17 @@ func (h *Handler) UpdateGoogleSheetFirstDate(w http.ResponseWriter, r *http.Requ
 		}
 		if err := h.ModeratorService.UpdateGoogleSheetFirstDate(r.Context(), req.SheetName, req.CellRange, req.Value); err != nil {
 			slog.Warn("google sheets update failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "google sheets update failed: " + err.Error()})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "google sheets update failed: " + err.Error()})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"updated": true,
 			"message": "Google Sheets first date updated successfully.",
 		})
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"updated": false,
 		"message": "Google Sheets integration not configured.",
 	})

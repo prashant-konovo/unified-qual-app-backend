@@ -9,6 +9,7 @@ import (
 
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -22,20 +23,20 @@ import (
 // Response: {clientId, data: records}.
 func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 	cidStr := chi.URLParam(r, "client_id")
-	clientID, err := dto.ParseIDParam(r, "client_id")
+	clientID, err := httpkit.ParseIDParam(r, "client_id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if !h.InterviewService.InterviewsAvailable() {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
 		return
 	}
 
 	var body dto.MraGetAllInterviewsRequest
-	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &body); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
@@ -47,7 +48,7 @@ func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		slog.Error("get all interviews failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 	if data == nil {
@@ -82,7 +83,7 @@ func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"clientId": cidStr,
 		"data":     data,
 	})
@@ -96,7 +97,7 @@ func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 // require separate service migration.
 func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.InterviewService.TimeSlotAvailable() || !h.ProjectService.QsProjectAvailable() {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while scheduling the interview",
 		})
@@ -104,14 +105,14 @@ func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body dto.MraScheduleInterviewRequest
-	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &body); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
 	// Validate survey exists
 	if body.SurveyID == 0 {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"errorMessage": "No survey found for this responder",
 		})
 		return
@@ -120,7 +121,7 @@ func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
 	// If no slot selected, this is a "no timeslot convenient" flow
 	if body.Slot == nil {
 		// Legacy: handleNonTimeSlotConvenientService — stores answer with no_timeslot_selected=1
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"noTimeslotSelected": true,
 		})
 		return
@@ -128,7 +129,7 @@ func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
 
 	// Validate availability buffer
 	if body.Slot.StartTime == "" || body.Slot.EndTime == "" {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"errorMessage": "TIME_SLOT_NOT_WITHIN_BUFFER",
 		})
 		return
@@ -136,7 +137,7 @@ func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
 
 	// Legacy returns the full transaction result as parsedJson
 	// The response body is JSON.stringify(parsedJson) which is the multi-query result array
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"scheduled": true,
 		"slot": map[string]any{
 			"startTime": body.Slot.StartTime,
@@ -153,7 +154,7 @@ func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
 // or {message} for invalidateReschedule mode.
 func (h *Handler) RespondentRescheduleMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.InterviewService.TimeSlotAvailable() {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "an error occurred in respondent reschedule",
 		})
@@ -161,13 +162,13 @@ func (h *Handler) RespondentRescheduleMRA(w http.ResponseWriter, r *http.Request
 	}
 
 	var body dto.MraRespondentRescheduleRequest
-	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &body); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
 	if body.TimeSlotID == 0 {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "TIMESLOT_NOT_FOUND",
 			"errorMessage": "an error occurred in respondent reschedule",
 		})
@@ -184,7 +185,7 @@ func (h *Handler) RespondentRescheduleMRA(w http.ResponseWriter, r *http.Request
 	}
 
 	if invalidate {
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"message": "Rescheduled successfully!, no cancellation of previous interview done.",
 		})
 		return
@@ -193,7 +194,7 @@ func (h *Handler) RespondentRescheduleMRA(w http.ResponseWriter, r *http.Request
 	// Normal reschedule: schedule new + cancel old
 	// Legacy invokes handle-schedule-interview Lambda then cancel-resch-interview Lambda
 	// This is a contract scaffold — full Lambda orchestration requires separate migration
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"handleScheduleInterviewResp": "{}",
 		"hanldeCancelRescheduleResp":  "{}",
 	})
@@ -205,15 +206,15 @@ func (h *Handler) RespondentRescheduleMRA(w http.ResponseWriter, r *http.Request
 // Response: {status:"SUCCESS", message:"Interview invalidated successfully"}.
 func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.InterviewService.TimeSlotAvailable() || !h.ProjectService.QsProjectAvailable() {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "An error occurred while invalidating the interview",
 		})
 		return
 	}
 
 	var body dto.MraInvalidateInterviewRequest
-	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &body); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
@@ -266,21 +267,21 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 	}
 
 	if len(validationErrors) > 0 {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": validationErrors})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": validationErrors})
 		return
 	}
 
 	// Check timeslot exists and not already invalidated
 	ts, err := h.InterviewService.GetByID(r.Context(), timeSlotID)
 	if err != nil || ts == nil {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "An error occurred while invalidating the interview",
 		})
 		return
 	}
 
 	if ts.IsInvalidatedInterview {
-		dto.WriteJSON(w, http.StatusConflict, map[string]any{
+		httpkit.WriteJSON(w, http.StatusConflict, map[string]any{
 			"error": "Interview already invalidated!",
 		})
 		return
@@ -290,13 +291,13 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 	hasPaid, err := h.InterviewService.HasCompletedPaymentMRA(r.Context(), timeSlotID)
 	if err != nil {
 		slog.Error("check payment status failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "An error occurred while invalidating the interview",
 		})
 		return
 	}
 	if hasPaid {
-		dto.WriteJSON(w, http.StatusConflict, map[string]any{
+		httpkit.WriteJSON(w, http.StatusConflict, map[string]any{
 			"error": "Interview cannot be invalidated because payment is already completed",
 		})
 		return
@@ -305,7 +306,7 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 	// Invalidate
 	if err := h.InterviewService.InvalidateInterviewMRA(r.Context(), timeSlotID, body.InvalidationReasonCode, reasonText, invalidatedByUserID); err != nil {
 		slog.Error("invalidate interview failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "An error occurred while invalidating the interview",
 		})
 		return
@@ -314,7 +315,7 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 	// Update project status to InProgress (2)
 	_ = h.ProjectService.UpdateQsProject(r.Context(), ts.ProjectID, map[string]any{"project_status_id": 2})
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":  "SUCCESS",
 		"message": "Interview invalidated successfully",
 	})
@@ -325,15 +326,15 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 // Full email orchestration (SES, template rendering, PM notification) requires separate migration.
 func (h *Handler) SendInvalidateRescheduleMailMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.InterviewService.TimeSlotAvailable() {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Failed to send reschedule email",
 		})
 		return
 	}
 
 	var body dto.MraSendInvalidateRescheduleMailRequest
-	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &body); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
@@ -352,14 +353,14 @@ func (h *Handler) SendInvalidateRescheduleMailMRA(w http.ResponseWriter, r *http
 			}
 		}
 		if len(participantIDs) == 0 {
-			dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "participantId is required"})
+			httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "participantId is required"})
 			return
 		}
 
 		// PARTIAL: Full implementation requires fetching upcoming timeslots per participant,
 		// PM details, communication preferences, email template rendering, and SES sending.
 		slog.Info("SendInvalidateRescheduleMailMRA: ineligible mail flow (PARTIAL)", "participantIDs", participantIDs)
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"success":       true,
 			"processed_ids": participantIDs,
 			"failed_ids":    []int64{},
@@ -376,24 +377,24 @@ func (h *Handler) SendInvalidateRescheduleMailMRA(w http.ResponseWriter, r *http
 		timeSlotID, _ = strconv.ParseInt(strings.TrimSpace(v), 10, 64)
 	}
 	if timeSlotID == 0 {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "timeSlotId is required"})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "timeSlotId is required"})
 		return
 	}
 
 	// Fetch timeslot and validate state
 	ts, err := h.InterviewService.GetByID(r.Context(), timeSlotID)
 	if err != nil || ts == nil {
-		dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "Timeslot not found"})
+		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "Timeslot not found"})
 		return
 	}
 
 	if !ts.IsInvalidatedInterview {
-		dto.WriteJSON(w, http.StatusConflict, map[string]any{"error": "Interview not invalidated yet!"})
+		httpkit.WriteJSON(w, http.StatusConflict, map[string]any{"error": "Interview not invalidated yet!"})
 		return
 	}
 
 	if ts.IsInvalidateEmailSent {
-		dto.WriteJSON(w, http.StatusConflict, map[string]any{"error": "Invalidate Reschedule Email Already Sent"})
+		httpkit.WriteJSON(w, http.StatusConflict, map[string]any{"error": "Invalidate Reschedule Email Already Sent"})
 		return
 	}
 
@@ -408,7 +409,7 @@ func (h *Handler) SendInvalidateRescheduleMailMRA(w http.ResponseWriter, r *http
 	// - Notify PM (fire-and-forget)
 	slog.Info("SendInvalidateRescheduleMailMRA: reschedule mail flow (PARTIAL)", "timeSlotID", timeSlotID)
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"status": "SUCCESS"})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"status": "SUCCESS"})
 }
 
 // ──────────────────────────────────────────────
@@ -420,15 +421,15 @@ func (h *Handler) SendInvalidateRescheduleMailMRA(w http.ResponseWriter, r *http
 // ──────────────────────────────────────────────
 
 func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request) {
-	action, _ := dto.ParseStringParam(r, "action")
-	tsID, err := dto.ParseIDParam(r, "tsId")
+	action, _ := httpkit.ParseStringParam(r, "action")
+	tsID, err := httpkit.ParseIDParam(r, "tsId")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if !h.InterviewService.TimeSlotAvailable() {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "timeslot repository not available",
 			"errorMessage": "An error occured while rescheduling or canceling the interview",
 		})
@@ -451,7 +452,7 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 	case "respondentCancel":
 		statusID = 6 // RespondentCancel
 	default:
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "action must be cancel, reschedule, pmCancel, pmReschedule, respondentReschedule, or respondentCancel"})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "action must be cancel, reschedule, pmCancel, pmReschedule, respondentReschedule, or respondentCancel"})
 		return
 	}
 
@@ -460,7 +461,7 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 	// Fetch timeslot first (legacy does this before any action)
 	ts, err := h.InterviewService.GetByID(ctx, tsID)
 	if err != nil || ts == nil {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "timeslot not found",
 			"errorMessage": "An error occured while rescheduling or canceling the interview",
 		})
@@ -470,7 +471,7 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 	// Legacy: if timeslot already cancelled/rescheduled (statusId in [3,4,5,6,11,12]), return 200 with timeslot data (no-op)
 	alreadyActioned := map[int]bool{3: true, 4: true, 5: true, 6: true, 11: true, 12: true}
 	if alreadyActioned[ts.StatusID] {
-		dto.WriteJSON(w, http.StatusOK, dto.BuildTimeSlotResponse(ts))
+		httpkit.WriteJSON(w, http.StatusOK, dto.BuildTimeSlotResponse(ts))
 		return
 	}
 
@@ -485,7 +486,7 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 	// Update status_id
 	if err := h.InterviewService.UpdateTimeSlot(ctx, tsID, map[string]any{"status_id": statusID}); err != nil {
 		slog.Error("cancel/reschedule update failed", "tsId", tsID, "action", action, "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while rescheduling or canceling the interview",
 		})
@@ -503,9 +504,9 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 	if err != nil || tsUpdated == nil {
 		// Fallback: update was successful, return original with new statusId
 		ts.StatusID = statusID
-		dto.WriteJSON(w, http.StatusOK, dto.BuildTimeSlotResponse(ts))
+		httpkit.WriteJSON(w, http.StatusOK, dto.BuildTimeSlotResponse(ts))
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, dto.BuildTimeSlotResponse(tsUpdated))
+	httpkit.WriteJSON(w, http.StatusOK, dto.BuildTimeSlotResponse(tsUpdated))
 }

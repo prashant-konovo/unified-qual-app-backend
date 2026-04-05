@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/go-chi/chi/v5"
@@ -23,28 +24,28 @@ import (
 // Contract-identical with legacy QS Tool: GET /user/user-info/{user_id}
 // Response: flat user object with account/client selections
 func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
-	userID, err := dto.ParseIDParam(r, "id")
+	userID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
 		return
 	}
-	source := dto.ResolveSource(r)
+	source := httpkit.ResolveSource(r)
 
 	if source == "iris" && h.UserService.IrisAvailable() {
 		u, err := h.UserService.GetIrisUserByID(r.Context(), userID)
 		if err != nil || u == nil {
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        "An error occured while fetching user info",
 				"errorMessage": "An error occured while fetching user info",
 			})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"id": u.ID, "first_name": u.FirstName, "last_name": u.LastName,
-			"email": dto.NullStr(u.Email), "source": "iris",
+			"email": httpkit.NullStr(u.Email), "source": "iris",
 		})
 		return
 	}
@@ -52,7 +53,7 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	if h.UserService.QsAvailable() {
 		u, err := h.UserService.GetByID(r.Context(), userID)
 		if err != nil || u == nil {
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        "An error occured while fetching user info",
 				"errorMessage": "An error occured while fetching user info",
 			})
@@ -67,14 +68,14 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 
 		resp := map[string]any{
 			"id":                        u.ID,
-			"first_name":                dto.NullStr(u.FirstName),
-			"last_name":                 dto.NullStr(u.LastName),
-			"email":                     dto.NullStr(u.Email),
-			"time_zone":                 dto.NullStr(u.TimeZone),
+			"first_name":                httpkit.NullStr(u.FirstName),
+			"last_name":                 httpkit.NullStr(u.LastName),
+			"email":                     httpkit.NullStr(u.Email),
+			"time_zone":                 httpkit.NullStr(u.TimeZone),
 			"modified_on":               u.ModifiedOn,
 			"roles":                     roles,
-			"moderatorBuffer":           dto.NullInt64(u.ModeratorBuffer),
-			"moderatorBufferModifiedOn": dto.NullTime(u.ModeratorBufferModified),
+			"moderatorBuffer":           httpkit.NullInt64(u.ModeratorBuffer),
+			"moderatorBufferModifiedOn": httpkit.NullTime(u.ModeratorBufferModified),
 		}
 
 		// Fetch clientId from user_client table
@@ -107,10 +108,10 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		dto.WriteJSON(w, http.StatusOK, resp)
+		httpkit.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
-	dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+	httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 		"error":        "An error occured while fetching user info",
 		"errorMessage": "An error occured while fetching user info",
 	})
@@ -120,29 +121,29 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: PUT /v1/user/:id
 // Response: flat user object
 func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	userID, err := dto.ParseIDParam(r, "id")
+	userID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	var req dto.UpdateUserRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
 	if req.Source == "qs" && h.UserService.QsAvailable() {
 		if err := h.UserService.Update(r.Context(), userID, req.FirstName, req.LastName, req.TimeZone); err != nil {
 			slog.Error("update qs user failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": userID, "source": "qs"})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": userID, "source": "qs"})
 		return
 	}
 
 	// IRIS user update not yet supported via this endpoint
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": userID, "source": "iris"})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": userID, "source": "iris"})
 }
 
 // CheckPasswordMatches validates a password hash (stub — real check via Cognito).
@@ -150,7 +151,7 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 // Response: {"passwordMatches": bool}
 func (h *Handler) CheckPasswordMatches(w http.ResponseWriter, r *http.Request) {
 	// Password matching is handled by Cognito, not by direct DB comparison
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"passwordMatch": true})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"passwordMatch": true})
 }
 
 // ──────────────────────────────────────────────
@@ -166,8 +167,8 @@ func (h *Handler) CheckPasswordMatches(w http.ResponseWriter, r *http.Request) {
 // Response: {"message": "Event Logs send successfully"}
 func (h *Handler) CreateEventLog(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateEventLogRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
@@ -192,7 +193,7 @@ func (h *Handler) CreateEventLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("event logged", "type", req.EventType, "userId", req.UserID, "projectId", req.ProjectID)
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"message": "Event Logs send successfully"})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"message": "Event Logs send successfully"})
 }
 
 // ──────────────────────────────────────────────
@@ -218,7 +219,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 	if v := q.Get("accountId"); v != "" {
 		aid, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid accountId"})
+			httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid accountId"})
 			return
 		}
 		filter.AccountID = aid
@@ -242,7 +243,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 	// The route is already behind RequireRoles("admin","manager") so that's covered.
 	// Legacy controller: if no ?id and no ?accountId → return empty.
 	if filter.ID == "" && filter.AccountID == 0 {
-		dto.WriteJSON(w, http.StatusOK, []map[string]any{})
+		httpkit.WriteJSON(w, http.StatusOK, []map[string]any{})
 		return
 	}
 
@@ -252,7 +253,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 		sfProjects, err := h.SurveyService.ListSalesforceProjects(r.Context(), filter)
 		if err != nil {
 			slog.Error("iris sf projects failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		for _, s := range sfProjects {
@@ -266,17 +267,17 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 				"projectId":             s.SalesforceProjectID,
 				"salesforceProjectId":   s.SalesforceProjectID,
 				"name":                  s.Name,
-				"number":                dto.NullStr(s.Number),
-				"salesforceAccountId":   dto.NullStr(s.SalesforceAccountID),
+				"number":                httpkit.NullStr(s.Number),
+				"salesforceAccountId":   httpkit.NullStr(s.SalesforceAccountID),
 				"isProjectPricing":      s.IsProjectPricing,
 				"lastModifiedDate":      s.LastModifiedDate.Format("2006-01-02T15:04:05.000Z"),
-				"clientProjectName":     dto.NullStr(s.ClientProjectName),
-				"clientProjectNumber":   dto.NullStr(s.ClientProjectNumber),
+				"clientProjectName":     httpkit.NullStr(s.ClientProjectName),
+				"clientProjectNumber":   httpkit.NullStr(s.ClientProjectNumber),
 				"brandTypeId":           s.BrandTypeID,
 				"salesforceProjectType": s.SalesforceProjectType,
-				"ownerName":             dto.NullStr(s.OwnerName),
-				"projectManagerName":    dto.NullStr(s.ProjectManagerName),
-				"projectReconciled":     dto.NullStr(s.ProjectReconciled),
+				"ownerName":             httpkit.NullStr(s.OwnerName),
+				"projectManagerName":    httpkit.NullStr(s.ProjectManagerName),
+				"projectReconciled":     httpkit.NullStr(s.ProjectReconciled),
 				"monoProjectId":         monoProjectID,
 			})
 		}
@@ -285,7 +286,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 	if result == nil {
 		result = []map[string]any{}
 	}
-	dto.WriteJSON(w, http.StatusOK, result)
+	httpkit.WriteJSON(w, http.StatusOK, result)
 }
 
 // ──────────────────────────────────────────────
@@ -302,7 +303,7 @@ func (h *Handler) GetUserEmail(w http.ResponseWriter, r *http.Request) {
 	cognitoID := chi.URLParam(r, "id")
 
 	if !h.UserService.QsAvailable() {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "no database available",
 		})
@@ -311,14 +312,14 @@ func (h *Handler) GetUserEmail(w http.ResponseWriter, r *http.Request) {
 
 	email, err := h.UserService.GetEmailByCognitoID(r.Context(), cognitoID)
 	if err != nil {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"email": email,
 	})
 }
@@ -337,13 +338,13 @@ func (h *Handler) GetUserEmail(w http.ResponseWriter, r *http.Request) {
 // Response: {} (legacy UPDATE returns no records)
 func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 	var req dto.UpsertUserTimeZoneRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
 	if !h.UserService.QsAvailable() {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "An error occured while creating a new user",
 		})
@@ -351,7 +352,7 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.UserService.UpdateTimeZone(r.Context(), req.UserID, req.UserSelectedTimeZone); err != nil {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while creating a new user",
 		})
@@ -359,5 +360,5 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy returns {data: result["records"]} but UPDATE has no records → empty object
-	dto.WriteJSON(w, http.StatusOK, map[string]any{})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{})
 }

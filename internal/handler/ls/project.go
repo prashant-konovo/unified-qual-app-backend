@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 
 )
 
@@ -24,18 +24,18 @@ import (
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:id/surveys
 // Response: {"surveys": [...], "limit": N, "offset": N, "totalCount": N}
 func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "id")
+	projectID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := dto.ResolveSource(r)
+	source := httpkit.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		surveys, err := h.SurveyService.ListSurveysForProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris project surveys failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(surveys))
@@ -46,7 +46,7 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 				"createdOn": s.CreatedOn.Format(time.RFC3339), "source": "iris",
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"surveys": result, "limit": len(result), "offset": 0, "totalCount": len(result),
 		})
 		return
@@ -57,7 +57,7 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 		surveys, err := h.TranslationService.ListNativeSurveysByProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs project surveys failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(surveys))
@@ -67,12 +67,12 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 				"createdOn": s.CreatedOn.Format(time.RFC3339), "source": "qs",
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"surveys": result, "limit": len(result), "offset": 0, "totalCount": len(result),
 		})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"surveys": []any{}, "limit": 0, "offset": 0, "totalCount": 0,
 	})
 }
@@ -81,9 +81,9 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:id/time_slots
 // Response: {"timeSlots": [...]}
 func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "id")
+	projectID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -91,7 +91,7 @@ func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
 		slots, _, err := h.InterviewService.ListTimeSlots(r.Context(), 1, 500, &projectID, nil, nil, nil, nil)
 		if err != nil {
 			slog.Error("project timeslots failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(slots))
@@ -102,33 +102,33 @@ func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
 				"statusId": s.StatusID, "statusName": s.StatusName,
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"timeSlots": result,
 		})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"timeSlots": []any{}})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"timeSlots": []any{}})
 }
 
 // GetProjectUsers returns users assigned to a project.
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:id/users
 // Response: {"users": [...], "offset": N, "limit": N, "totalCount": N}
 func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "id")
+	projectID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := dto.ResolveSource(r)
+	source := httpkit.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		users, err := h.SurveyService.ListUserProjects(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris project users failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"users": users, "offset": 0, "limit": len(users), "totalCount": len(users),
 		})
 		return
@@ -138,15 +138,15 @@ func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
 		users, err := h.TranslationService.ListProjectsUsers(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs project users failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"users": users, "offset": 0, "limit": len(users), "totalCount": len(users),
 		})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"users": []any{}, "offset": 0, "limit": 0, "totalCount": 0,
 	})
 }
@@ -155,9 +155,9 @@ func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:pid/observers
 // Response: {"observers": [...]}
 func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "pid")
+	projectID, err := httpkit.ParseIDParam(r, "pid")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -165,28 +165,28 @@ func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
 		observers, err := h.SurveyService.ListObserversForProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get observers failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(observers))
 		for _, o := range observers {
 			result = append(result, map[string]any{
 				"id": o.ID, "projectId": o.ProjectID, "email": o.Email,
-				"timeSlotId": dto.NullInt64(o.TimeSlotID),
+				"timeSlotId": httpkit.NullInt64(o.TimeSlotID),
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"observers": []any{}})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"observers": []any{}})
 }
 
 // GetProjectQualReschedBody returns the reschedule email template body.
 // Legacy contract: {"html": "<rendered email HTML>"}
 func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "pid")
+	projectID, err := httpkit.ParseIDParam(r, "pid")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -195,7 +195,7 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			slog.Error("get qual resched body failed", "error", err)
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"html": body})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"html": body})
 		return
 	}
 
@@ -203,24 +203,24 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 	if h.TranslationService.AnswerRepoAvailable() {
 		t, _ := h.TranslationService.GetCommunicationTemplate(r.Context(), "reschedule")
 		if t != nil {
-			dto.WriteJSON(w, http.StatusOK, map[string]any{"html": t.Body})
+			httpkit.WriteJSON(w, http.StatusOK, map[string]any{"html": t.Body})
 			return
 		}
 	}
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"html": ""})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"html": ""})
 }
 
 // GetProjectAvailability returns moderator availability for a project.
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:pid/availability
 // Response: flat array of availability objects
 func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "pid")
+	projectID, err := httpkit.ParseIDParam(r, "pid")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.SurveyService.IrisAvailable() && dto.ResolveSource(r) == "iris" {
+	if h.SurveyService.IrisAvailable() && httpkit.ResolveSource(r) == "iris" {
 		avails, err := h.SurveyService.GetProjectAvailability(r.Context(), projectID)
 		if err != nil {
 			slog.Error("project availability failed", "error", err)
@@ -233,7 +233,7 @@ func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request)
 				"endTime":   a.EndTime.Format(time.RFC3339),
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, result)
+		httpkit.WriteJSON(w, http.StatusOK, result)
 		return
 	}
 
@@ -248,28 +248,28 @@ func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			slog.Error("get qs project avail failed", "error", err)
 		}
-		dto.WriteJSON(w, http.StatusOK, avails)
+		httpkit.WriteJSON(w, http.StatusOK, avails)
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, []any{})
+	httpkit.WriteJSON(w, http.StatusOK, []any{})
 }
 
 // GetProjectSchedulerModerators returns moderators for the project scheduler.
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:pid/scheduler/moderators
 // Response: {"moderatorInfo": {...}}
 func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "pid")
+	projectID, err := httpkit.ParseIDParam(r, "pid")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.SurveyService.IrisAvailable() && dto.ResolveSource(r) == "iris" {
+	if h.SurveyService.IrisAvailable() && httpkit.ResolveSource(r) == "iris" {
 		mods, err := h.SurveyService.GetSchedulerModerators(r.Context(), projectID)
 		if err != nil {
 			slog.Error("scheduler mods failed", "error", err)
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"moderatorInfo": mods})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"moderatorInfo": mods})
 		return
 	}
 
@@ -291,10 +291,10 @@ func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.R
 		for _, v := range modMap {
 			result = append(result, v)
 		}
-		dto.WriteJSON(w, http.StatusOK, result)
+		httpkit.WriteJSON(w, http.StatusOK, result)
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, []map[string]any{})
+	httpkit.WriteJSON(w, http.StatusOK, []map[string]any{})
 }
 
 // GetProjectDashboard returns combined availability and timeslot data for dashboard.
@@ -302,9 +302,9 @@ func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.R
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/dashboard/availability_and_time_slots
 // Response: {"scheduled": N, "completed": N, "moderatorInfo": {"<modId>": {id, firstName, lastName, interviewCount}}}
 func (h *Handler) GetProjectDashboard(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "pid")
+	projectID, err := httpkit.ParseIDParam(r, "pid")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -312,31 +312,31 @@ func (h *Handler) GetProjectDashboard(w http.ResponseWriter, r *http.Request) {
 		data, err := h.SurveyService.GetProjectDashboardInfo(r.Context(), projectID)
 		if err != nil {
 			slog.Error("project dashboard failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, data)
+		httpkit.WriteJSON(w, http.StatusOK, data)
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"scheduled": 0, "completed": 0, "moderatorInfo": map[string]any{}})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"scheduled": 0, "completed": 0, "moderatorInfo": map[string]any{}})
 }
 
 func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "projectId")
+	projectID, err := httpkit.ParseIDParam(r, "projectId")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := dto.ResolveSource(r)
+	source := httpkit.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		count, err := h.SurveyService.ResetProjectModerators(r.Context(), projectID)
 		if err != nil {
 			slog.Error("reset project mods failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": count, "source": "iris"})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": count, "source": "iris"})
 		return
 	}
 
@@ -344,13 +344,13 @@ func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request)
 		n, err := h.InterviewService.DeleteModeratorTimeSlotsByProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs reset mods failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": n, "source": "qs"})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "removedAssignments": n, "source": "qs"})
 		return
 	}
-	dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 // ──────────────────────────────────────────────
@@ -358,14 +358,14 @@ func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request)
 // ──────────────────────────────────────────────
 
 func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "projectId")
+	projectID, err := httpkit.ParseIDParam(r, "projectId")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	format := r.URL.Query().Get("format")
-	source := dto.ResolveSource(r)
+	source := httpkit.ResolveSource(r)
 
 	var data []map[string]any
 
@@ -373,22 +373,22 @@ func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 		data, err = h.SurveyService.ExportProjectData(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris export failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
 			return
 		}
 	} else if h.InterviewService.TimeSlotAvailable() {
 		slots, _, err := h.InterviewService.ListTimeSlots(r.Context(), 1, 10000, &projectID, nil, nil, nil, nil)
 		if err != nil {
 			slog.Error("qs export failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
 			return
 		}
 		for _, s := range slots {
 			data = append(data, map[string]any{
 				"timeSlotId": s.ID, "startTime": s.StartTime.Format(time.RFC3339),
 				"endTime": s.EndTime.Format(time.RFC3339), "statusId": s.StatusID,
-				"status": s.StatusName, "moderator": dto.NullStr(s.ModeratorName),
-				"respondent": dto.NullStr(s.ResponderName),
+				"status": s.StatusName, "moderator": httpkit.NullStr(s.ModeratorName),
+				"respondent": httpkit.NullStr(s.ResponderName),
 			})
 		}
 	}
@@ -409,7 +409,7 @@ func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "rows": data, "count": len(data)})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "rows": data, "count": len(data)})
 }
 
 // ──────────────────────────────────────────────
@@ -417,49 +417,49 @@ func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) GetAvailableModeratorsCount(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "projectId")
+	projectID, err := httpkit.ParseIDParam(r, "projectId")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := dto.ResolveSource(r)
+	source := httpkit.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		count, err := h.SurveyService.GetAvailableModeratorsCount(r.Context(), projectID)
 		if err != nil {
 			slog.Error("count mods failed", "error", err)
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "iris"})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "iris"})
 		return
 	}
 
 	if h.InterviewService.TimeSlotAvailable() {
 		count, _ := h.InterviewService.GetAvailableModeratorsCountByProject(r.Context(), projectID)
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "qs"})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": count, "source": "qs"})
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": 0})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "availableCount": 0})
 }
 
 func (h *Handler) GetUnavailableModerators(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "projectId")
+	projectID, err := httpkit.ParseIDParam(r, "projectId")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := dto.ResolveSource(r)
+	source := httpkit.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		mods, err := h.SurveyService.GetUnavailableModerators(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get unavail mods failed", "error", err)
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"moderators": mods, "source": "iris"})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"moderators": mods, "source": "iris"})
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"moderators": []any{}, "source": "qs"})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"moderators": []any{}, "source": "qs"})
 }
 
 // ──────────────────────────────────────────────
@@ -467,16 +467,16 @@ func (h *Handler) GetUnavailableModerators(w http.ResponseWriter, r *http.Reques
 // ──────────────────────────────────────────────
 
 func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
-	pg := dto.ParsePagination(r, 20, 100)
+	pg := httpkit.ParsePagination(r, 20, 100)
 	page, pageSize := pg.Page, pg.PageSize
-	source := dto.ResolveSource(r)
+	source := httpkit.ResolveSource(r)
 
 	if (source == "" || source == "qs") && h.AdminService.QsAvailable() {
 		managerRoleID := 2
 		users, total, err := h.AdminService.ListQsUsers(r.Context(), page, pageSize, &managerRoleID, "")
 		if err != nil {
 			slog.Error("list PMs failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
 			return
 		}
 		result := make([]map[string]any, 0, len(users))
@@ -487,7 +487,7 @@ func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
 				"source": "qs", "serviceCategory": "MRA",
 			})
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"success": true, "data": result, "meta": map[string]any{"totalCount": total},
 		})
 		return
@@ -507,11 +507,11 @@ func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"success": true, "data": result, "meta": map[string]any{"totalCount": total},
 		})
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, []any{})
+	httpkit.WriteJSON(w, http.StatusOK, []any{})
 }

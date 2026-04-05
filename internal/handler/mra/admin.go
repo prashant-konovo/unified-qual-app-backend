@@ -2,6 +2,7 @@ package mra
 
 import (
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -25,7 +26,7 @@ import (
 // Response: flat array of user rows (result.records from data-api-client)
 func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.AdminService.QsAvailable() {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "Error while getting all users",
 		})
@@ -37,7 +38,7 @@ func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
 	records, err := h.AdminService.GetAllUsersAdmin(r.Context(), cognitoUserID)
 	if err != nil {
 		slog.Error("get all users admin failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "Error while getting all users",
 		})
@@ -45,7 +46,7 @@ func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy returns result.records (flat array)
-	dto.WriteJSON(w, http.StatusOK, records)
+	httpkit.WriteJSON(w, http.StatusOK, records)
 }
 
 // GetAllProjectManagersMRA handles GET /project_manager/client/{client_id} (MRA).
@@ -53,18 +54,18 @@ func (h *Handler) ListAdminUsersMRA(w http.ResponseWriter, r *http.Request) {
 // Note: Legacy SQL has client_id=1 hardcoded, ignoring the path parameter.
 func (h *Handler) GetAllProjectManagersMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.AdminService.QsAvailable() {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
 	records, err := h.AdminService.GetAllProjectManagersListMRA(r.Context())
 	if err != nil {
 		slog.Error("get all project managers mra failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, records)
+	httpkit.WriteJSON(w, http.StatusOK, records)
 }
 
 // ──────────────────────────────────────────────
@@ -82,7 +83,7 @@ func (h *Handler) GetPMTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
 	clientID, _ := strconv.ParseInt(clientIDStr, 10, 64)
 
 	if !h.AdminService.TimeSlotAvailable() {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
@@ -97,7 +98,7 @@ func (h *Handler) GetPMTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
 		records, err := h.AdminService.GetAllPendingInterviewsPerProjectMRA(ctx, body.ProjectID, clientID)
 		if err != nil {
 			slog.Error("get pending interviews per project mra failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 			return
 		}
 		// Group by moderatorId
@@ -110,7 +111,7 @@ func (h *Handler) GetPMTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
 			}
 			grouped[modID] = append(arr, rec)
 		}
-		dto.WriteJSON(w, http.StatusOK, grouped)
+		httpkit.WriteJSON(w, http.StatusOK, grouped)
 		return
 	}
 
@@ -125,11 +126,11 @@ func (h *Handler) GetPMTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		slog.Error("get pm timeslots mra failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, records)
+	httpkit.WriteJSON(w, http.StatusOK, records)
 }
 
 // GetAvailabilitiesForPMMRA handles POST /project_manager/get/availabilities/client/{client_id} (MRA).
@@ -139,7 +140,7 @@ func (h *Handler) GetAvailabilitiesForPMMRA(w http.ResponseWriter, r *http.Reque
 	clientID, _ := strconv.ParseInt(clientIDStr, 10, 64)
 
 	if !h.AdminService.QsAvailable() {
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
@@ -161,9 +162,9 @@ func (h *Handler) GetAvailabilitiesForPMMRA(w http.ResponseWriter, r *http.Reque
 	}
 	if err != nil {
 		slog.Error("get availabilities for pm mra failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
-	dto.WriteJSON(w, http.StatusOK, records)
+	httpkit.WriteJSON(w, http.StatusOK, records)
 }

@@ -6,6 +6,7 @@ import (
 
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 )
 
 // ──────────────────────────────────────────────
@@ -19,8 +20,8 @@ import (
 // CreatePaymentReal creates a real payment record.
 func (h *Handler) CreatePaymentReal(w http.ResponseWriter, r *http.Request) {
 	var req dto.LsCreatePaymentRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
@@ -28,20 +29,20 @@ func (h *Handler) CreatePaymentReal(w http.ResponseWriter, r *http.Request) {
 		id, err := h.PaymentService.CreatePaymentRecord(r.Context(), req.TimeSlotID, req.Amount, req.PaymentType, "pending")
 		if err != nil {
 			slog.Error("create payment failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusCreated, map[string]any{"id": id, "timeSlotId": req.TimeSlotID})
+		httpkit.WriteJSON(w, http.StatusCreated, map[string]any{"id": id, "timeSlotId": req.TimeSlotID})
 		return
 	}
-	dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 // CreateCustomHonorariumReal creates a custom honorarium.
 func (h *Handler) CreateCustomHonorariumReal(w http.ResponseWriter, r *http.Request) {
 	var req dto.LsCreateCustomHonorariumRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
@@ -49,13 +50,13 @@ func (h *Handler) CreateCustomHonorariumReal(w http.ResponseWriter, r *http.Requ
 		id, err := h.PaymentService.CreateCustomHonorarium(r.Context(), req.TimeSlotID, req.Amount, req.Reason)
 		if err != nil {
 			slog.Error("create custom honorarium failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusCreated, map[string]any{"id": id, "timeSlotId": req.TimeSlotID})
+		httpkit.WriteJSON(w, http.StatusCreated, map[string]any{"id": id, "timeSlotId": req.TimeSlotID})
 		return
 	}
-	dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 // GetPaymentStatusListReal returns payment statuses from real DB.
@@ -67,7 +68,7 @@ func (h *Handler) GetPaymentStatusListReal(w http.ResponseWriter, r *http.Reques
 		{"id": 4, "name": "Failed"},
 		{"id": 5, "name": "Cancelled"},
 	}
-	dto.WriteJSON(w, http.StatusOK, statuses)
+	httpkit.WriteJSON(w, http.StatusOK, statuses)
 }
 
 // ──────────────────────────────────────────────
@@ -80,8 +81,8 @@ func (h *Handler) GetPaymentStatusListReal(w http.ResponseWriter, r *http.Reques
 
 func (h *Handler) CreateExternalPayment(w http.ResponseWriter, r *http.Request) {
 	var req dto.LsCreateExternalPaymentRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
@@ -89,13 +90,13 @@ func (h *Handler) CreateExternalPayment(w http.ResponseWriter, r *http.Request) 
 		payID, err := h.PaymentService.CreateExternalPayment(r.Context(), req.TimeSlotID, req.Amount, req.PaymentType, "pending", req.ExternalRef)
 		if err != nil {
 			slog.Error("create external payment failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusCreated, map[string]any{"id": payID, "timeSlotId": req.TimeSlotID, "external": true})
+		httpkit.WriteJSON(w, http.StatusCreated, map[string]any{"id": payID, "timeSlotId": req.TimeSlotID, "external": true})
 		return
 	}
-	dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 func (h *Handler) GetHonorariumReasons(w http.ResponseWriter, r *http.Request) {
@@ -104,10 +105,10 @@ func (h *Handler) GetHonorariumReasons(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			slog.Error("list hono reasons failed", "error", err)
 		}
-		dto.WriteJSON(w, http.StatusOK, reasons)
+		httpkit.WriteJSON(w, http.StatusOK, reasons)
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, []map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, []map[string]any{
 		{"id": 1, "name": "Interview Completed"},
 		{"id": 2, "name": "Partial Completion"},
 		{"id": 3, "name": "No Show Compensation"},
@@ -122,10 +123,10 @@ func (h *Handler) GetInterviewPaymentStatusList(w http.ResponseWriter, r *http.R
 		if err != nil {
 			slog.Error("list payment statuses failed", "error", err)
 		}
-		dto.WriteJSON(w, http.StatusOK, statuses)
+		httpkit.WriteJSON(w, http.StatusOK, statuses)
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, []map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, []map[string]any{
 		{"id": 1, "name": "Pending"}, {"id": 2, "name": "Approved"},
 		{"id": 3, "name": "Paid"}, {"id": 4, "name": "Failed"},
 		{"id": 5, "name": "Cancelled"}, {"id": 6, "name": "On Hold"},

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
@@ -26,28 +27,28 @@ import (
 // Contract-identical with legacy InCrowdAPI: GET /v1/survey/:id
 // Response: flat survey object (not wrapped)
 func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
-	surveyID, err := dto.ParseIDParam(r, "id")
+	surveyID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := dto.ResolveSource(r)
+	source := httpkit.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		s, err := h.SurveyService.GetSurvey(r.Context(), surveyID)
 		if err != nil {
 			slog.Error("iris survey get failed", "id", surveyID, "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if s == nil {
-			dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+			httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
-			"id": s.ID, "subscriptionId": dto.NullInt64(s.SubscriptionID),
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
+			"id": s.ID, "subscriptionId": httpkit.NullInt64(s.SubscriptionID),
 			"surveyTypeId": s.SurveyTypeID, "namePublic": s.NamePublic,
-			"namePrivate": dto.NullStr(s.NamePrivate), "topicName": dto.NullStr(s.TopicName),
+			"namePrivate": httpkit.NullStr(s.NamePrivate), "topicName": httpkit.NullStr(s.TopicName),
 			"projectId": s.ProjectID, "status": s.Status,
 			"completionsNeeded": s.CompletionsNeeded,
 			"createdOn":         s.CreatedOn.Format(time.RFC3339),
@@ -62,15 +63,15 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 		s, err := h.SurveyService.GetByID(r.Context(), surveyID)
 		if err != nil {
 			slog.Error("qs survey get failed", "id", surveyID, "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if s == nil {
-			dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+			httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
-			"id": s.ID, "projectId": dto.NullInt64(s.ProjectID),
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
+			"id": s.ID, "projectId": httpkit.NullInt64(s.ProjectID),
 			"title": s.Title, "status": s.Status,
 			"questions": json.RawMessage(s.Questions), "rules": json.RawMessage(s.Rules),
 			"createdOn": s.CreatedOn.Format(time.RFC3339),
@@ -78,7 +79,7 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+	httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 }
 
 // ValidateSurvey checks if a survey can be fielded.
@@ -87,16 +88,16 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 // Success: 200 {"error":{"message":"ready","developerMessage":"...","warnings":[...],"status":"OK","code":200}}
 // Failure: 422 {"error":{"developerMessage":"...","errors":[...],"warnings":[...],"status":"EXPECTATION FAILED","code":417}}
 func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
-	surveyID, err := dto.ParseIDParam(r, "id")
+	surveyID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.SurveyService.IrisAvailable() && dto.ResolveSource(r) == "iris" {
+	if h.SurveyService.IrisAvailable() && httpkit.ResolveSource(r) == "iris" {
 		errors, err := h.SurveyService.ValidateSurvey(r.Context(), surveyID)
 		if err != nil {
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "validation failed"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "validation failed"})
 			return
 		}
 		warnings := h.SurveyService.ValidateSurveyWarnings(r.Context(), surveyID)
@@ -108,7 +109,7 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if len(errors) == 0 {
-			dto.WriteJSON(w, http.StatusOK, map[string]any{
+			httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 				"error": map[string]any{
 					"message":          "ready",
 					"developerMessage": "This survey is okay to go live",
@@ -118,7 +119,7 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 				},
 			})
 		} else {
-			dto.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			httpkit.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{
 				"error": map[string]any{
 					"developerMessage": "this survey is not ready to go live",
 					"errors":           errors,
@@ -135,10 +136,10 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 	if h.SurveyService.QsAvailable() {
 		s, _ := h.SurveyService.GetByID(r.Context(), surveyID)
 		if s == nil {
-			dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+			httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 			"error": map[string]any{
 				"message":          "ready",
 				"developerMessage": "This survey is okay to go live",
@@ -149,21 +150,21 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+	httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 }
 
 // GetSurveyCrowds returns crowds assigned to a survey.
 // Legacy contract: {"surveyId": id, "surveyCrowds": [adminJson|basicHonoJson|...]}
 // Query params: jsonType (admin|hono|subscriber|minimalJson), survey_detail_crowds (true/false)
 func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
-	surveyID, err := dto.ParseIDParam(r, "id")
+	surveyID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if !h.SurveyService.IrisAvailable() || dto.ResolveSource(r) != "iris" {
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"surveyId": surveyID, "surveyCrowds": []any{}})
+	if !h.SurveyService.IrisAvailable() || httpkit.ResolveSource(r) != "iris" {
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"surveyId": surveyID, "surveyCrowds": []any{}})
 		return
 	}
 
@@ -177,7 +178,7 @@ func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 	surveyCrowds, err := h.SurveyService.GetSurveyCrowds(r.Context(), surveyID)
 	if err != nil {
 		slog.Error("get survey crowds failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 
@@ -205,7 +206,7 @@ func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 		items = append(items, item)
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"surveyId":     surveyID,
 		"surveyCrowds": items,
 	})
@@ -242,14 +243,14 @@ func (h *Handler) buildSurveyCrowdFlatJSON(ctx context.Context, sc iris.ICSurvey
 		"answerTotal":        answerTotal,
 		"slAnswerRequest":    sc.SLAnswerRequest,
 		"slAnswerPercent":    sc.SLAnswerPercent,
-		"qualHonorarium":     dto.NullInt64(sc.QualHonorarium),
+		"qualHonorarium":     httpkit.NullInt64(sc.QualHonorarium),
 		"honorarium":         honorarium,
 		"excluded":           sc.Excluded,
 		"isInvitationPaused": sc.IsInvitationPaused,
 		"isReminderPaused":   sc.IsReminderPaused,
 		"isSampleClosed":     sc.IsSampleClosed,
 		"pausedByQf":         sc.PausedByQf,
-		"afterQfResumedOn":   dto.NullTime(sc.AfterQfResumedOn),
+		"afterQfResumedOn":   httpkit.NullTime(sc.AfterQfResumedOn),
 	}
 }
 
@@ -291,7 +292,7 @@ func (h *Handler) buildSurveyCrowdAdminJSON(ctx context.Context, sc iris.ICSurve
 	var surveyTimeStarted any
 	var surveyStatus any
 	if survey != nil {
-		surveyTimeStarted = dto.NullTime(survey.FieldedOn)
+		surveyTimeStarted = httpkit.NullTime(survey.FieldedOn)
 		surveyStatus = survey.Status
 	}
 
@@ -385,7 +386,7 @@ func (h *Handler) buildSurveyCrowdDetailJSON(ctx context.Context, sc iris.ICSurv
 	var surveyTimeStarted any
 	var surveyStatus any
 	if survey != nil {
-		surveyTimeStarted = dto.NullTime(survey.FieldedOn)
+		surveyTimeStarted = httpkit.NullTime(survey.FieldedOn)
 		surveyStatus = survey.Status
 	}
 
@@ -401,7 +402,7 @@ func (h *Handler) buildSurveyCrowdDetailJSON(ctx context.Context, sc iris.ICSurv
 	flat["isInvitationPaused"] = sc.IsInvitationPaused
 	flat["isReminderPaused"] = sc.IsReminderPaused
 	flat["isSampleClosed"] = sc.IsSampleClosed
-	flat["groupId"] = dto.NullInt64(sc.CrowdGroupID)
+	flat["groupId"] = httpkit.NullInt64(sc.CrowdGroupID)
 
 	return flat
 }
@@ -494,19 +495,19 @@ func (h *Handler) buildCrowdAdminJSONAvailable(ctx context.Context, crowdID, sur
 // Contract-identical with legacy InCrowdAPI: PUT /v1/survey/:id/close
 // Response: flat survey object (survey.refresh.adminJson)
 func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
-	surveyID, err := dto.ParseIDParam(r, "id")
+	surveyID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.SurveyService.IrisAvailable() && dto.ResolveSource(r) == "iris" {
+	if h.SurveyService.IrisAvailable() && httpkit.ResolveSource(r) == "iris" {
 		if err := h.SurveyService.CloseSurvey(r.Context(), surveyID); err != nil {
 			slog.Error("close survey failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"closed": true, "id": surveyID, "source": "iris"})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"closed": true, "id": surveyID, "source": "iris"})
 		return
 	}
 
@@ -514,13 +515,13 @@ func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
 	if h.SurveyService.QsAvailable() {
 		if err := h.SurveyService.Update(r.Context(), surveyID, "", "closed", nil, nil); err != nil {
 			slog.Error("qs close survey failed", "error", err)
-			dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
+			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
 			return
 		}
-		dto.WriteJSON(w, http.StatusOK, map[string]any{"closed": true, "id": surveyID, "source": "qs"})
+		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"closed": true, "id": surveyID, "source": "qs"})
 		return
 	}
-	dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 // ToggleSurveyFavorite toggles favorite status on a survey.
@@ -528,21 +529,21 @@ func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
 // Request: {"favorite": true/false}  (userId derived from JWT)
 // Response: full survey subscriberJson object
 func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
-	surveyID, err := dto.ParseIDParam(r, "id")
+	surveyID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	// Parse request body: legacy format is {"favorite": bool}
 	var req dto.LsToggleSurveyFavoriteRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
 	if !h.SurveyService.IrisAvailable() {
-		dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "database unavailable"})
+		httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "database unavailable"})
 		return
 	}
 
@@ -556,7 +557,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if callerUserID == 0 {
-		dto.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "could not resolve user identity"})
+		httpkit.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "could not resolve user identity"})
 		return
 	}
 
@@ -564,11 +565,11 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	s, err := h.SurveyService.GetSurvey(r.Context(), surveyID)
 	if err != nil {
 		slog.Error("get survey failed", "id", surveyID, "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 	if s == nil {
-		dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": fmt.Sprintf("survey not found: %d", surveyID)})
+		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": fmt.Sprintf("survey not found: %d", surveyID)})
 		return
 	}
 
@@ -585,7 +586,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	if !isAdmin {
 		canRead, _ := h.SurveyService.UserCanReadProject(r.Context(), callerUserID, s.ProjectID)
 		if !canRead {
-			dto.WriteJSON(w, http.StatusForbidden, map[string]any{
+			httpkit.WriteJSON(w, http.StatusForbidden, map[string]any{
 				"error": map[string]any{
 					"userMessage":      "You're not allowed to adjust other peoples favorites",
 					"developerMessage": "Access is denied to users who don't have the correct permissions to perform a task.",
@@ -600,7 +601,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	// Toggle the favorite
 	if err := h.SurveyService.ToggleFavorite(r.Context(), surveyID, callerUserID, req.Favorite); err != nil {
 		slog.Error("toggle favorite failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to toggle favorite"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to toggle favorite"})
 		return
 	}
 
@@ -608,7 +609,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	s, _ = h.SurveyService.GetSurvey(r.Context(), surveyID)
 
 	// Build subscriberJson-equivalent response
-	dto.WriteJSON(w, http.StatusOK, h.buildSubscriberJSON(r, s, callerUserID))
+	httpkit.WriteJSON(w, http.StatusOK, h.buildSubscriberJSON(r, s, callerUserID))
 }
 
 // buildSubscriberJSON builds a legacy-compatible subscriberJson response for a survey.
@@ -701,19 +702,19 @@ func (h *Handler) buildSubscriberJSON(r *http.Request, s *iris.ICSurvey, callerU
 	result := map[string]any{
 		"id":                  s.ID,
 		"projectId":           s.ProjectID,
-		"subscriptionId":      dto.NullInt64(s.SubscriptionID),
+		"subscriptionId":      httpkit.NullInt64(s.SubscriptionID),
 		"subscriptionCompany": subscriptionCompany,
 		"surveyTypeId":        s.SurveyTypeID,
 		"projectTypeId":       projectTypeID,
 		"languageId":          s.LanguageID,
 		"namePublic":          s.NamePublic,
-		"namePrivate":         dto.NullStr(s.NamePrivate),
-		"topicName":           dto.NullStr(s.TopicName),
+		"namePrivate":         httpkit.NullStr(s.NamePrivate),
+		"topicName":           httpkit.NullStr(s.TopicName),
 		"isArchived":          s.IsArchived,
-		"salesforceProjectId": dto.NullStr(s.SalesforceProjectID),
+		"salesforceProjectId": httpkit.NullStr(s.SalesforceProjectID),
 		"createdOn":           s.CreatedOn.Format(time.RFC3339),
 		"createdBy":           s.CreatedBy,
-		"modifiedOn":          dto.NullTime(s.ModifiedOn),
+		"modifiedOn":          httpkit.NullTime(s.ModifiedOn),
 		// listJson fields
 		"numCompletions":    numCompletions,
 		"completionsNeeded": s.CompletionsNeeded,
@@ -726,7 +727,7 @@ func (h *Handler) buildSubscriberJSON(r *http.Request, s *iris.ICSurvey, callerU
 		"favorite":          favorite,
 		"numCrowds":         numCrowds,
 		"qualCrowdName":     qualCrowdName,
-		"lengthOfInterview": dto.NullInt64(s.LengthOfInterview),
+		"lengthOfInterview": httpkit.NullInt64(s.LengthOfInterview),
 		// pricing
 		"surveyPricingTypeId": pricing["surveyPricingTypeId"],
 		"freeScreeners":       pricing["freeScreeners"],

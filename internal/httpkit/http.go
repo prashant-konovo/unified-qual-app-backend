@@ -1,4 +1,4 @@
-package dto
+package httpkit
 
 import (
 "encoding/json"

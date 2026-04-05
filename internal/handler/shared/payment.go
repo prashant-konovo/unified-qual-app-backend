@@ -1,7 +1,7 @@
 package shared
 
 import (
-	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 	"net/http"
 
 )
@@ -15,15 +15,15 @@ import (
 // ──────────────────────────────────────────────
 
 func (h *Handler) CreatePayment(w http.ResponseWriter, r *http.Request) {
-	dto.WriteJSON(w, http.StatusCreated, map[string]any{"paymentId": 7001, "status": "PENDING"})
+	httpkit.WriteJSON(w, http.StatusCreated, map[string]any{"paymentId": 7001, "status": "PENDING"})
 }
 
 func (h *Handler) CreateCustomHonorarium(w http.ResponseWriter, r *http.Request) {
-	dto.WriteJSON(w, http.StatusOK, map[string]any{"timeSlotId": 301, "honorarium": 200.00, "reasonId": 2})
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"timeSlotId": 301, "honorarium": 200.00, "reasonId": 2})
 }
 
 func (h *Handler) GetPaymentStatusList(w http.ResponseWriter, r *http.Request) {
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"payments": []map[string]any{
 			{"timeSlotId": 301, "respondentName": "Alice Johnson", "amount": 150.00,
 				"currency": "USD", "status": "PENDING", "source": "QS",

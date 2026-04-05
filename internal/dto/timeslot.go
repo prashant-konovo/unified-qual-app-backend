@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 	"time"
 
 	qs "github.com/InCrowd/unified-qual-api/internal/repository/qs"
@@ -119,7 +120,7 @@ return map[string]any{
 "projectId":              ts.ProjectID,
 "isInvalidatedInterview": ts.IsInvalidatedInterview,
 "isInvalidateEmailSent":  ts.IsInvalidateEmailSent,
-"invalidationReasonCode": NullStr(ts.InvalidationReasonCode),
+"invalidationReasonCode": httpkit.NullStr(ts.InvalidationReasonCode),
 "startTime":              ts.StartTime,
 "endTime":                ts.EndTime,
 "statusId":               ts.StatusID,

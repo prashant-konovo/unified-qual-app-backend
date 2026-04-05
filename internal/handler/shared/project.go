@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 	"github.com/InCrowd/unified-qual-api/internal/service"
 )
 
@@ -13,7 +14,7 @@ import (
 type ProjectHandler struct{ *service.Deps }
 
 func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
-	pg := dto.ParsePagination(r, 20, 100)
+	pg := httpkit.ParsePagination(r, 20, 100)
 	search := strings.TrimSpace(r.URL.Query().Get("search"))
 	source := service.ResolveSource(
 		r.URL.Query().Get("source"),
@@ -28,77 +29,77 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := h.ProjectService.ListProjects(r.Context(), pg.Page, pg.PageSize, source, search, statusID)
-	dto.WriteJSON(w, http.StatusOK, dto.NewPaginated(result.Projects, pg.Page, pg.PageSize, result.Total))
+	httpkit.WriteJSON(w, http.StatusOK, httpkit.NewPaginated(result.Projects, pg.Page, pg.PageSize, result.Total))
 }
 
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateProjectRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
 	result, err := h.ProjectService.CreateProject(r.Context(), req)
 	if err != nil {
-		dto.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create project"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "failed to create project"})
 		return
 	}
-	dto.WriteJSON(w, http.StatusCreated, dto.MutationResult{
+	httpkit.WriteJSON(w, http.StatusCreated, httpkit.MutationResult{
 		ID: result.ID, Source: result.Source, ServiceCategory: result.ServiceCategory,
 	})
 }
 
 func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "id")
+	projectID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, httpkit.ErrorBody{Error: err.Error()})
 		return
 	}
 
 	result, err := h.ProjectService.GetProject(r.Context(), projectID, r.URL.Query().Get("source"))
 	if err != nil {
-		dto.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "database error"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "database error"})
 		return
 	}
 	if !result.Found {
-		dto.WriteJSON(w, http.StatusNotFound, dto.ErrorBody{Error: "project not found"})
+		httpkit.WriteJSON(w, http.StatusNotFound, httpkit.ErrorBody{Error: "project not found"})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, result.Project)
+	httpkit.WriteJSON(w, http.StatusOK, result.Project)
 }
 
 func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "id")
+	projectID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, httpkit.ErrorBody{Error: err.Error()})
 		return
 	}
 
 	var req dto.UpdateProjectRequest
-	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
 	result, err := h.ProjectService.UpdateProject(r.Context(), projectID, req)
 	if err != nil {
-		dto.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "update failed"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "update failed"})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, result)
+	httpkit.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
-	projectID, err := dto.ParseIDParam(r, "id")
+	projectID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, httpkit.ErrorBody{Error: err.Error()})
 		return
 	}
 
 	result, err := h.ProjectService.DeleteProject(r.Context(), projectID, r.URL.Query().Get("source"))
 	if err != nil {
-		dto.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "archive failed"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "archive failed"})
 		return
 	}
-	dto.WriteJSON(w, http.StatusOK, result)
+	httpkit.WriteJSON(w, http.StatusOK, result)
 }

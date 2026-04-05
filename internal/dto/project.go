@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
@@ -16,16 +17,16 @@ func ProjectFromIRISList(p iris.ProjectListRow) map[string]any {
 	return map[string]any{
 		"id":                  p.ID,
 		"name":                p.Name,
-		"description":         NullStrPtr(p.Description),
+		"description":         httpkit.NullStrPtr(p.Description),
 		"subscriptionId":      p.SubscriptionID,
-		"subscriptionCompany": NullStrPtr(p.SubscriptionCompany),
+		"subscriptionCompany": httpkit.NullStrPtr(p.SubscriptionCompany),
 		"statusId":            p.ProjectStatusID,
 		"status":              p.ProjectStatusName,
 		"projectTypeId":       p.ProjectTypeID,
-		"salesforceProjectId": NullStrPtr(p.SalesforceProjectID),
+		"salesforceProjectId": httpkit.NullStrPtr(p.SalesforceProjectID),
 		"isArchived":          p.IsArchived,
 		"createdAt":           p.CreatedOn.Format(time.RFC3339),
-		"modifiedAt":          NullTimeStr(p.ModifiedOn),
+		"modifiedAt":          httpkit.NullTimeStr(p.ModifiedOn),
 		"source":              "iris",
 		"serviceCategory":     "LS",
 	}
@@ -36,17 +37,17 @@ func ProjectFromQSList(p qs.ProjectListRow) map[string]any {
 	return map[string]any{
 		"id":                  p.ID,
 		"name":                p.Name,
-		"salesforceJobNumber": NullStrPtr(p.SalesforceJobNumber),
-		"clientId":            NullInt64Ptr(p.ClientID),
-		"clientCompany":       NullStrPtr(p.ClientCompany),
-		"sampleSize":          NullInt64Ptr(p.SampleSize),
-		"interviewLength":     NullInt64Ptr(p.InterviewLength),
+		"salesforceJobNumber": httpkit.NullStrPtr(p.SalesforceJobNumber),
+		"clientId":            httpkit.NullInt64Ptr(p.ClientID),
+		"clientCompany":       httpkit.NullStrPtr(p.ClientCompany),
+		"sampleSize":          httpkit.NullInt64Ptr(p.SampleSize),
+		"interviewLength":     httpkit.NullInt64Ptr(p.InterviewLength),
 		"statusId":            p.ProjectStatusID,
 		"status":              p.ProjectStatusName,
 		"scheduledCount":      p.ScheduledCount,
 		"completedCount":      p.CompletedCount,
 		"createdAt":           p.CreatedOn.Format(time.RFC3339),
-		"modifiedAt":          NullTimeStr(p.ModifiedOn),
+		"modifiedAt":          httpkit.NullTimeStr(p.ModifiedOn),
 		"source":              "qs",
 		"serviceCategory":     "MRA",
 	}
@@ -57,16 +58,16 @@ func ProjectDetailFromIRIS(p *iris.Project, statusName string) map[string]any {
 	return map[string]any{
 		"id":                  p.ID,
 		"name":                p.Name,
-		"description":         NullStrPtr(p.Description),
+		"description":         httpkit.NullStrPtr(p.Description),
 		"subscriptionId":      p.SubscriptionID,
 		"statusId":            p.ProjectStatusID,
 		"status":              statusName,
 		"projectTypeId":       p.ProjectTypeID,
-		"salesforceProjectId": NullStrPtr(p.SalesforceProjectID),
+		"salesforceProjectId": httpkit.NullStrPtr(p.SalesforceProjectID),
 		"isPrivate":           p.IsPrivate,
 		"isArchived":          p.IsArchived,
 		"createdAt":           p.CreatedOn.Format(time.RFC3339),
-		"modifiedAt":          NullTimeStr(p.ModifiedOn),
+		"modifiedAt":          httpkit.NullTimeStr(p.ModifiedOn),
 		"source":              "iris",
 		"serviceCategory":     "LS",
 	}
@@ -77,20 +78,20 @@ func ProjectDetailFromQS(p *qs.Project, scheduled, completed int, topicNames []s
 	return map[string]any{
 		"id":                 p.ID,
 		"name":               p.Name,
-		"externalSurveyId":   NullStrPtr(p.ExternalSurveyID),
-		"salesforceJobNumber": NullStrPtr(p.SalesforceJobNumber),
-		"clientId":           NullInt64Ptr(p.ClientID),
-		"sampleSize":         NullInt64Ptr(p.SampleSize),
-		"interviewLength":    NullInt64Ptr(p.InterviewLength),
+		"externalSurveyId":   httpkit.NullStrPtr(p.ExternalSurveyID),
+		"salesforceJobNumber": httpkit.NullStrPtr(p.SalesforceJobNumber),
+		"clientId":           httpkit.NullInt64Ptr(p.ClientID),
+		"sampleSize":         httpkit.NullInt64Ptr(p.SampleSize),
+		"interviewLength":    httpkit.NullInt64Ptr(p.InterviewLength),
 		"statusId":           p.ProjectStatusID,
 		"schedulerGenerated": p.SchedulerGenerated,
-		"postScreeninBuffer": NullStrPtr(p.PostScreeninBuffer),
-		"moderatorBuffer":    NullStrPtr(p.ModeratorBuffer),
+		"postScreeninBuffer": httpkit.NullStrPtr(p.PostScreeninBuffer),
+		"moderatorBuffer":    httpkit.NullStrPtr(p.ModeratorBuffer),
 		"topics":             topicNames,
 		"scheduledCount":     scheduled,
 		"completedCount":     completed,
 		"createdAt":          p.CreatedOn.Format(time.RFC3339),
-		"modifiedAt":         NullTimeStr(p.ModifiedOn),
+		"modifiedAt":         httpkit.NullTimeStr(p.ModifiedOn),
 		"source":             "qs",
 		"serviceCategory":    "MRA",
 	}

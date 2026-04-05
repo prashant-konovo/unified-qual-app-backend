@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
+	"github.com/InCrowd/unified-qual-api/internal/httpkit"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
@@ -23,7 +24,7 @@ import (
 func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.ParticipantService.Available() {
-		dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
@@ -40,7 +41,7 @@ func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 	respondents, total, err := h.ParticipantService.List(ctx, page, pageSize, search)
 	if err != nil {
 		slog.ErrorContext(ctx, "list participants failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list participants"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list participants"})
 		return
 	}
 
@@ -73,7 +74,7 @@ func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 		result = append(result, item)
 	}
 
-	dto.WriteJSON(w, http.StatusOK, map[string]any{
+	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    result,
 		"meta": map[string]any{
@@ -87,28 +88,28 @@ func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.ParticipantService.Available() {
-		dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	var body dto.CreateParticipantRequest
-	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
-		dto.WriteError(w, errs)
+	if errs := httpkit.DecodeAndValidate(r, &body); errs != nil {
+		httpkit.WriteError(w, errs)
 		return
 	}
 
 	resp := &qs.Respondent{
 		FirstName:           body.FirstName,
 		LastName:            body.LastName,
-		Title:               dto.ToNullStr(body.Title),
-		ExternalResponderID: dto.ToNullStr(body.ExternalResponderID),
-		TimeZone:            dto.ToNullStr(body.TimeZone),
+		Title:               httpkit.ToNullStr(body.Title),
+		ExternalResponderID: httpkit.ToNullStr(body.ExternalResponderID),
+		TimeZone:            httpkit.ToNullStr(body.TimeZone),
 	}
 
 	respID, err := h.ParticipantService.Create(ctx, resp)
 	if err != nil {
 		slog.ErrorContext(ctx, "create participant failed", "error", err)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create participant"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create participant"})
 		return
 	}
 
@@ -125,30 +126,30 @@ func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	dto.WriteJSON(w, http.StatusCreated, map[string]any{"id": respID, "source": "qs"})
+	httpkit.WriteJSON(w, http.StatusCreated, map[string]any{"id": respID, "source": "qs"})
 }
 
 func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.ParticipantService.Available() {
-		dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
-	respID, err := dto.ParseIDParam(r, "id")
+	respID, err := httpkit.ParseIDParam(r, "id")
 	if err != nil {
-		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	resp, err := h.ParticipantService.GetByID(ctx, respID)
 	if err != nil {
 		slog.ErrorContext(ctx, "get participant failed", "error", err, "id", respID)
-		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 	if resp == nil {
-		dto.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "participant not found"})
+		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "participant not found"})
 		return
 	}
 
@@ -199,5 +200,5 @@ func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
 		result["contacts"] = contacts
 	}
 
-	dto.WriteJSON(w, http.StatusOK, result)
+	httpkit.WriteJSON(w, http.StatusOK, result)
 }

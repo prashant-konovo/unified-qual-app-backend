@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// listResponse mirrors dto.PaginatedResponse for test decoding.
+// listResponse mirrors httpkit.PaginatedResponse for test decoding.
 type listResponse struct {
 	Success bool             `json:"success"`
 	Data    []map[string]any `json:"data"`
