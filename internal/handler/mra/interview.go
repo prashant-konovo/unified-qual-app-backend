@@ -65,7 +65,7 @@ func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Side effect: save user selection (non-fatal)
-	if h.QsProjectRepo != nil && body.UserID != nil && body.ProjectAccountID != nil {
+	if h.ProjectService.QsProjectAvailable() && body.UserID != nil && body.ProjectAccountID != nil {
 		var userID int64
 		switch v := body.UserID.(type) {
 		case float64:
@@ -88,7 +88,7 @@ func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 					clientIDs = append(clientIDs, c)
 				}
 			}
-			_ = h.QsProjectRepo.SaveUserSelection(r.Context(), userID, accountIDs, clientIDs)
+			_ = h.ProjectService.SaveUserSelection(r.Context(), userID, accountIDs, clientIDs)
 		}
 	}
 
@@ -105,7 +105,7 @@ func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 // core DB operations and request/response contract. External integrations (Decipher, email)
 // require separate service migration.
 func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
-	if !h.InterviewService.TimeSlotAvailable() || h.QsProjectRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() || !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while scheduling the interview",
@@ -255,7 +255,7 @@ func (h *Handler) RespondentRescheduleMRA(w http.ResponseWriter, r *http.Request
 // sets is_invalidated_interview=1 with reason, updates project status.
 // Response: {status:"SUCCESS", message:"Interview invalidated successfully"}.
 func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request) {
-	if !h.InterviewService.TimeSlotAvailable() || h.QsProjectRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() || !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "An error occurred while invalidating the interview",
 		})
@@ -369,7 +369,7 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Update project status to InProgress (2)
-	_ = h.QsProjectRepo.Update(r.Context(), ts.ProjectID, map[string]any{"project_status_id": 2})
+	_ = h.ProjectService.UpdateQsProject(r.Context(), ts.ProjectID, map[string]any{"project_status_id": 2})
 
 	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":  "SUCCESS",

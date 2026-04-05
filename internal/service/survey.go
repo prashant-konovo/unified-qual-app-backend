@@ -333,3 +333,55 @@ func (s *SurveyService) GetNoShowCheck(ctx context.Context) (map[string]any, err
 func (s *SurveyService) MarkNoShow(ctx context.Context, projectID, timeSlotID int64) error {
 	return s.irisRepo.MarkNoShow(ctx, projectID, timeSlotID)
 }
+
+// --- Project-level IrisSurveyRepo methods (used in ls/project.go) ---
+
+func (s *SurveyService) ListSurveysForProject(ctx context.Context, projectID int64) ([]iris.ICSurvey, error) {
+	return s.irisRepo.ListSurveysForProject(ctx, projectID)
+}
+
+func (s *SurveyService) ListUserProjects(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	return s.irisRepo.ListUserProjects(ctx, projectID)
+}
+
+func (s *SurveyService) ListObserversForProject(ctx context.Context, projectID int64) ([]iris.ICObserver, error) {
+	return s.irisRepo.ListObserversForProject(ctx, projectID)
+}
+
+func (s *SurveyService) GetQualRescheduleBody(ctx context.Context, projectID int64) (string, error) {
+	return s.irisRepo.GetQualRescheduleBody(ctx, projectID)
+}
+
+func (s *SurveyService) GetProjectAvailability(ctx context.Context, projectID int64) ([]iris.ICModeratorAvailability, error) {
+	return s.irisRepo.GetProjectAvailability(ctx, projectID)
+}
+
+func (s *SurveyService) GetSchedulerModerators(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	return s.irisRepo.GetSchedulerModerators(ctx, projectID)
+}
+
+func (s *SurveyService) GetProjectDashboardInfo(ctx context.Context, projectID int64) (map[string]any, error) {
+	return s.irisRepo.GetProjectDashboardInfo(ctx, projectID)
+}
+
+func (s *SurveyService) ResetProjectModerators(ctx context.Context, projectID int64) (int64, error) {
+	return s.irisRepo.ResetProjectModerators(ctx, projectID)
+}
+
+func (s *SurveyService) ExportProjectData(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	return s.irisRepo.ExportProjectData(ctx, projectID)
+}
+
+func (s *SurveyService) GetAvailableModeratorsCount(ctx context.Context, projectID int64) (int, error) {
+	return s.irisRepo.GetAvailableModeratorsCount(ctx, projectID)
+}
+
+func (s *SurveyService) GetUnavailableModerators(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	return s.irisRepo.GetUnavailableModerators(ctx, projectID)
+}
+
+// --- QsSurveyRepo MRA method (used in mra/moderator.go) ---
+
+func (s *SurveyService) GetSurveyByIdMRA(ctx context.Context, surveyID int64) (map[string]any, error) {
+	return s.qsRepo.GetSurveyByIdMRA(ctx, surveyID)
+}

@@ -65,8 +65,8 @@ func (h *Handler) CheckQualEligibility(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsAnswerRepo != nil {
-		result, err := h.QsAnswerRepo.GetParticipantEligibility(r.Context(), req.ResponderID, req.ProjectID)
+	if h.TranslationService.AnswerRepoAvailable() {
+		result, err := h.TranslationService.GetParticipantEligibility(r.Context(), req.ResponderID, req.ProjectID)
 		if err != nil {
 			slog.Error("eligibility check failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})

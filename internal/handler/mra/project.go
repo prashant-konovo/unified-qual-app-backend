@@ -33,7 +33,7 @@ func (h *Handler) CreateProjectMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
 		return
 	}
@@ -42,14 +42,14 @@ func (h *Handler) CreateProjectMRA(w http.ResponseWriter, r *http.Request) {
 	// but repo.CreateProjectFull expects the camelCase keys from the request body.
 	// Look up SalesForceJobNumberText from salesforce_project table.
 	sfJobNumber, _ := body["salesForceJobNumber"].(string)
-	sfJobNumberText, err := h.QsProjectRepo.GetSalesForceJobNumberText(r.Context(), sfJobNumber)
+	sfJobNumberText, err := h.ProjectService.GetSalesForceJobNumberText(r.Context(), sfJobNumber)
 	if err != nil {
 		slog.Error("sf job number text lookup failed", "error", err)
 		// Legacy continues with empty string on failure
 	}
 	body["SalesForceJobNumberText"] = sfJobNumberText
 
-	record, err := h.QsProjectRepo.CreateProjectFull(r.Context(), body)
+	record, err := h.ProjectService.CreateProjectFull(r.Context(), body)
 	if err != nil {
 		slog.Error("create project failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -69,12 +69,12 @@ func (h *Handler) GetProjectMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
 		return
 	}
 
-	record, err := h.QsProjectRepo.GetProjectDetailsMRA(r.Context(), projectID)
+	record, err := h.ProjectService.GetProjectDetailsMRA(r.Context(), projectID)
 	if err != nil {
 		slog.Error("get project details failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -97,7 +97,7 @@ func (h *Handler) GetProjectMRA(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListProjectsMRA(w http.ResponseWriter, r *http.Request) {
 	clientIDStr := chi.URLParam(r, "client_id")
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
 		return
 	}
@@ -152,7 +152,7 @@ func (h *Handler) ListProjectsMRA(w http.ResponseWriter, r *http.Request) {
 			externalIDs = []string{""}
 		}
 
-		records, err = h.QsProjectRepo.GetProjectsMRA(r.Context(), creatorID, status, sort, search, externalIDs)
+		records, err = h.ProjectService.GetProjectsMRA(r.Context(), creatorID, status, sort, search, externalIDs)
 		if err != nil {
 			slog.Error("get projects mra failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -178,7 +178,7 @@ func (h *Handler) ListProjectsMRA(w http.ResponseWriter, r *http.Request) {
 						accountIDs = append(accountIDs, part)
 					}
 				}
-				if saveErr := h.QsProjectRepo.SaveUserSelection(r.Context(), userID, accountIDs, externalIDs); saveErr != nil {
+				if saveErr := h.ProjectService.SaveUserSelection(r.Context(), userID, accountIDs, externalIDs); saveErr != nil {
 					slog.Error("save user selection failed", "error", saveErr)
 				}
 			}
@@ -186,7 +186,7 @@ func (h *Handler) ListProjectsMRA(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Path 2: empty body → getProjectsForMods
 		clientID, _ := strconv.ParseInt(clientIDStr, 10, 64)
-		records, err = h.QsProjectRepo.GetProjectsForModsMRA(r.Context(), clientID)
+		records, err = h.ProjectService.GetProjectsForModsMRA(r.Context(), clientID)
 		if err != nil {
 			slog.Error("get projects for mods mra failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -214,7 +214,7 @@ func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while updating project details",
@@ -243,11 +243,11 @@ func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if postScreeninBuffer != -1 {
-		err = h.QsProjectRepo.UpdatePostScreenInBuffer(r.Context(), projectID, postScreeninBuffer)
+		err = h.ProjectService.UpdatePostScreenInBuffer(r.Context(), projectID, postScreeninBuffer)
 	} else if moderatorBuffer != -1 {
-		err = h.QsProjectRepo.UpdateModeratorBufferMRA(r.Context(), projectID, moderatorBuffer)
+		err = h.ProjectService.UpdateModeratorBufferMRA(r.Context(), projectID, moderatorBuffer)
 	} else {
-		err = h.QsProjectRepo.UpdateSchedulerGenerated(r.Context(), projectID)
+		err = h.ProjectService.UpdateSchedulerGenerated(r.Context(), projectID)
 	}
 
 	if err != nil {
@@ -273,7 +273,7 @@ func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while updating external survey id",
@@ -289,7 +289,7 @@ func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.QsProjectRepo.UpdateExternalSurveyID(r.Context(), projectID, body.ExternalSurveyID); err != nil {
+	if err := h.ProjectService.UpdateExternalSurveyID(r.Context(), projectID, body.ExternalSurveyID); err != nil {
 		slog.Error("update external survey id failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
@@ -312,7 +312,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while trying to reset project moderators",
@@ -334,7 +334,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 	}
 
 	if mode == "reset" {
-		existingIDs, err := h.QsProjectRepo.GetProjectModeratorIDs(r.Context(), projectID)
+		existingIDs, err := h.ProjectService.GetProjectModeratorIDs(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get project mod ids failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -344,7 +344,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		if err := h.QsProjectRepo.ResetProjectModeratorsMRA(r.Context(), projectID, body.ModeratorIDs, existingIDs); err != nil {
+		if err := h.ProjectService.ResetProjectModeratorsMRA(r.Context(), projectID, body.ModeratorIDs, existingIDs); err != nil {
 			slog.Error("reset project mods failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
@@ -364,7 +364,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		modID := body.ModeratorIDs[0]
-		if err := h.QsProjectRepo.UnassignModeratorFromProject(r.Context(), modID, projectID); err != nil {
+		if err := h.ProjectService.UnassignModeratorFromProject(r.Context(), modID, projectID); err != nil {
 			slog.Error("unassign moderator failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
@@ -373,7 +373,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		mods, err := h.QsProjectRepo.GetModeratorsList(r.Context(), projectID)
+		mods, err := h.ProjectService.GetModeratorsList(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get moderators list failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -395,7 +395,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 // query params to communication_type_id, queries by language_code.
 // Response: {body_content: "..."} (records[0]).
 func (h *Handler) GetEmailTemplateMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while getting the email template",
@@ -428,7 +428,7 @@ func (h *Handler) GetEmailTemplateMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	record, err := h.QsProjectRepo.GetEmailTemplateMRA(r.Context(), typeID, responderLanguage)
+	record, err := h.ProjectService.GetEmailTemplateMRA(r.Context(), typeID, responderLanguage)
 	if err != nil {
 		slog.Error("get email template failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -454,7 +454,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while exporting project",
@@ -479,7 +479,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 
 	rescheduleLinkPrefix := "https://apolloqualscheduler.com/scheduler/qstool/"
 
-	exportRows, err := h.QsProjectRepo.HandleProjectExportMRA(r.Context(), projectID, body.PMTimeZone, body.PMTimeZoneAbbr, rescheduleLinkPrefix)
+	exportRows, err := h.ProjectService.HandleProjectExportMRA(r.Context(), projectID, body.PMTimeZone, body.PMTimeZoneAbbr, rescheduleLinkPrefix)
 	if err != nil {
 		slog.Error("export query failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -489,12 +489,12 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	noTsRows, err := h.QsProjectRepo.HandleProjectNoTimeslotExportMRA(r.Context(), projectID, body.PMTimeZone, body.PMTimeZoneAbbr)
+	noTsRows, err := h.ProjectService.HandleProjectNoTimeslotExportMRA(r.Context(), projectID, body.PMTimeZone, body.PMTimeZoneAbbr)
 	if err != nil {
 		slog.Error("no-timeslot export query failed", "error", err)
 	}
 
-	projectName, err := h.QsProjectRepo.GetProjectName(r.Context(), projectID)
+	projectName, err := h.ProjectService.GetProjectName(r.Context(), projectID)
 	if err != nil {
 		projectName = fmt.Sprintf("Project_%d", projectID)
 	}
@@ -572,7 +572,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while updating project sample size",
@@ -589,7 +589,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get current project details to validate
-	project, err := h.QsProjectRepo.GetProjectDetailsMRA(r.Context(), projectID)
+	project, err := h.ProjectService.GetProjectDetailsMRA(r.Context(), projectID)
 	if err != nil || project == nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "project not found",
@@ -625,7 +625,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 	// Auto-transition logic
 	if projectStatusID == projectStatusInProgress && scheduled == 0 && completed == body.SampleSize {
 		// InProgress → Completed
-		if err := h.QsProjectRepo.UpdateSampleSizeProjectStatusMRA(r.Context(), projectID, body.SampleSize, projectStatusCompleted); err != nil {
+		if err := h.ProjectService.UpdateSampleSizeProjectStatusMRA(r.Context(), projectID, body.SampleSize, projectStatusCompleted); err != nil {
 			slog.Error("update sample size with status failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
@@ -635,7 +635,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if projectStatusID == projectStatusCompleted && scheduled == 0 {
 		// Completed → InProgress
-		if err := h.QsProjectRepo.UpdateSampleSizeProjectStatusMRA(r.Context(), projectID, body.SampleSize, projectStatusInProgress); err != nil {
+		if err := h.ProjectService.UpdateSampleSizeProjectStatusMRA(r.Context(), projectID, body.SampleSize, projectStatusInProgress); err != nil {
 			slog.Error("update sample size with status failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
@@ -645,7 +645,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// Just update sample_size
-		if err := h.QsProjectRepo.UpdateSampleSizeMRA(r.Context(), projectID, body.SampleSize); err != nil {
+		if err := h.ProjectService.UpdateSampleSizeMRA(r.Context(), projectID, body.SampleSize); err != nil {
 			slog.Error("update sample size failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
@@ -671,7 +671,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while getting available and unavailable moderators assigned to the project",
@@ -680,7 +680,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 	}
 
 	// 1. Get project details
-	project, err := h.QsProjectRepo.GetProjectDetailsMRA(r.Context(), projectID)
+	project, err := h.ProjectService.GetProjectDetailsMRA(r.Context(), projectID)
 	if err != nil || project == nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"errorMessage": "An error occured while getting project details",
@@ -698,7 +698,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 	}
 
 	// 2. Get moderator time ranges per project
-	timeRanges, err := h.QsProjectRepo.GetModeratorsTimeRangePerProject(r.Context(), projectID)
+	timeRanges, err := h.ProjectService.GetModeratorsTimeRangePerProject(r.Context(), projectID)
 	if err != nil {
 		slog.Error("get moderator time ranges failed", "error", err)
 	}
@@ -708,7 +708,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 	}
 
 	// 3. Get project moderator IDs
-	modIDs, err := h.QsProjectRepo.GetProjectModeratorIDs(r.Context(), projectID)
+	modIDs, err := h.ProjectService.GetProjectModeratorIDs(r.Context(), projectID)
 	if err != nil || len(modIDs) == 0 {
 		support.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"errorMessage": "No moderators assigned to the project ",
@@ -717,7 +717,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 	}
 
 	// 4. Get all moderator availability per client
-	availabilities, err := h.QsProjectRepo.GetAllModeratorsAvailabilityPerClient(r.Context(), clientID, projectID)
+	availabilities, err := h.ProjectService.GetAllModeratorsAvailabilityPerClient(r.Context(), clientID, projectID)
 	if err != nil {
 		slog.Error("get moderator availability failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -833,7 +833,7 @@ func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while getting the number of available moderators",
@@ -842,7 +842,7 @@ func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get moderator availability per role
-	availabilities, err := h.QsProjectRepo.GetAllModeratorsAvailabilityPerRole(r.Context(), projectID)
+	availabilities, err := h.ProjectService.GetAllModeratorsAvailabilityPerRole(r.Context(), projectID)
 	if err != nil {
 		slog.Error("get moderator availability per role failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -853,7 +853,7 @@ func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Get project details for interviewLength and completed count
-	project, err := h.QsProjectRepo.GetProjectDetailsMRA(r.Context(), projectID)
+	project, err := h.ProjectService.GetProjectDetailsMRA(r.Context(), projectID)
 	if err != nil || project == nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"errorMessage": "An error occured while getting project details",

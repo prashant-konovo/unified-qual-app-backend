@@ -54,3 +54,17 @@ func (s *ParticipantService) UpsertEligibilityStatusMRA(ctx context.Context, par
 func (s *ParticipantService) ResetIneligibleMailSentMRA(ctx context.Context, externalResponderID string) error {
 	return s.timeSlotRepo.ResetIneligibleMailSentMRA(ctx, externalResponderID)
 }
+
+// --- QsRespondentRepo MRA methods (used in mra/moderator.go) ---
+
+func (s *ParticipantService) GetRespondentByExternalIdMRA(ctx context.Context, externalResponderID string, projectID int64) ([]map[string]any, error) {
+	return s.respondentRepo.GetRespondentByExternalIdMRA(ctx, externalResponderID, projectID)
+}
+
+func (s *ParticipantService) GetRescheduleTokenMRA(ctx context.Context, projectID, responderID int64) (string, error) {
+	return s.respondentRepo.GetRescheduleTokenMRA(ctx, projectID, responderID)
+}
+
+func (s *ParticipantService) GetParticipantIdMRA(ctx context.Context, timeslotID int64) ([]map[string]any, error) {
+	return s.respondentRepo.GetParticipantIdMRA(ctx, timeslotID)
+}

@@ -84,8 +84,8 @@ func (h *Handler) GetConferenceParticipants(w http.ResponseWriter, r *http.Reque
 			"conferencePin": ci.Pin,
 		}
 		// Enrich with timeslot start/end/projectId if available
-		if h.QsTimeSlotRepo != nil {
-			ts, tsErr := h.QsTimeSlotRepo.GetByID(r.Context(), ci.TimeSlotID)
+		if h.InterviewService.TimeSlotAvailable() {
+			ts, tsErr := h.InterviewService.GetByID(r.Context(), ci.TimeSlotID)
 			if tsErr == nil && ts != nil {
 				tsObj["startTime"] = ts.StartTime.Format(time.RFC3339)
 				tsObj["endTime"] = ts.EndTime.Format(time.RFC3339)

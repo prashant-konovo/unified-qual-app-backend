@@ -70,8 +70,8 @@ func (h *Handler) GetTimeslotModeratorOptionsExt(w http.ResponseWriter, r *http.
 		support.WriteJSON(w, http.StatusOK, mods)
 		return
 	}
-	if h.QsUserRepo != nil {
-		allMods, err := h.QsUserRepo.GetModerators(r.Context())
+	if h.ModeratorService.QsUserAvailable() {
+		allMods, err := h.ModeratorService.GetModerators(r.Context())
 		if err != nil {
 			slog.Error("get qs moderators failed", "error", err)
 		}

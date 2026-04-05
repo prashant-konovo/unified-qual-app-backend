@@ -495,7 +495,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	respondentIdentifier := r.URL.Query().Get("respondentIdentifer")
 	rescheduleToken := r.URL.Query().Get("rescheduleToken")
 
-	if h.QsSurveyRepo == nil || h.QsProjectRepo == nil || !h.ModeratorService.QsUserAvailable() || !h.ModeratorService.TimeSlotAvailable() || h.QsRespondentRepo == nil {
+	if h.QsSurveyRepo == nil || !h.ProjectService.QsProjectAvailable() || !h.ModeratorService.QsUserAvailable() || !h.ModeratorService.TimeSlotAvailable() || h.QsRespondentRepo == nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":           "database not configured",
 			"errorMessage":    "an error occurred while getting moderators availability",
@@ -505,7 +505,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	}
 
 	// Step 1: Get survey → clientId, projectId
-	survey, err := h.QsSurveyRepo.GetSurveyByIdMRA(ctx, surveyID)
+	survey, err := h.SurveyService.GetSurveyByIdMRA(ctx, surveyID)
 	if err != nil {
 		slog.Error("get survey failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -527,7 +527,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	projectID, _ := survey["project_id"].(int64)
 
 	// Step 2: Get project details
-	project, err := h.QsProjectRepo.GetProjectDetailsMRA(ctx, projectID)
+	project, err := h.ProjectService.GetProjectDetailsMRA(ctx, projectID)
 	if err != nil {
 		slog.Error("get project details failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -618,7 +618,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 		}
 
 		// Get respondent ID
-		respRecords, err := h.QsRespondentRepo.GetRespondentByExternalIdMRA(ctx, respondentIdentifier, projectID)
+		respRecords, err := h.ParticipantService.GetRespondentByExternalIdMRA(ctx, respondentIdentifier, projectID)
 		if err != nil {
 			slog.Error("get respondent by external id failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -681,7 +681,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 		}
 
 		// Validate reschedule token
-		existingToken, err := h.QsRespondentRepo.GetRescheduleTokenMRA(ctx, projectID, responderID)
+		existingToken, err := h.ParticipantService.GetRescheduleTokenMRA(ctx, projectID, responderID)
 		if err != nil {
 			slog.Error("get reschedule token failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -712,7 +712,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	}
 
 	// Step 5: Get moderator time ranges and build map
-	moderatorsTimeRange, err := h.QsProjectRepo.GetModeratorsTimeRangePerProjectMRA(ctx, projectID)
+	moderatorsTimeRange, err := h.ProjectService.GetModeratorsTimeRangePerProjectMRA(ctx, projectID)
 	if err != nil {
 		slog.Error("get moderators time range failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -979,12 +979,12 @@ func (h *Handler) GetProjectsForModeratorMRA(w http.ResponseWriter, r *http.Requ
 	clientIDStr := chi.URLParam(r, "client_id")
 	clientID, _ := strconv.ParseInt(clientIDStr, 10, 64)
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
-	records, err := h.QsProjectRepo.GetProjectsForModeratorMRA(r.Context(), clientID, modID)
+	records, err := h.ProjectService.GetProjectsForModeratorMRA(r.Context(), clientID, modID)
 	if err != nil {
 		slog.Error("get projects for moderator mra failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -1388,12 +1388,12 @@ func (h *Handler) GetParticipantIdMRA(w http.ResponseWriter, r *http.Request) {
 	tsIDStr := chi.URLParam(r, "timeslot_id")
 	tsID, _ := strconv.ParseInt(tsIDStr, 10, 64)
 
-	if h.QsRespondentRepo == nil {
+	if !h.ParticipantService.Available() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
-	records, err := h.QsRespondentRepo.GetParticipantIdMRA(r.Context(), tsID)
+	records, err := h.ParticipantService.GetParticipantIdMRA(r.Context(), tsID)
 	if err != nil {
 		slog.Error("get participant id mra failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -1421,7 +1421,7 @@ func (h *Handler) UpsertModeratorTimeRangeMRA(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
 		return
 	}
@@ -1437,7 +1437,7 @@ func (h *Handler) UpsertModeratorTimeRangeMRA(w http.ResponseWriter, r *http.Req
 	}
 
 	// Check project status is Defining (1)
-	statusID, err := h.QsProjectRepo.GetProjectStatusByID(r.Context(), projectID)
+	statusID, err := h.ProjectService.GetProjectStatusByID(r.Context(), projectID)
 	if err != nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
@@ -1450,7 +1450,7 @@ func (h *Handler) UpsertModeratorTimeRangeMRA(w http.ResponseWriter, r *http.Req
 	}
 
 	// Upsert
-	if err := h.QsProjectRepo.UpsertModeratorTimeRangePerProject(r.Context(), projectID, moderatorID, body.StartTime, body.EndTime, body.Timezone); err != nil {
+	if err := h.ProjectService.UpsertModeratorTimeRangePerProject(r.Context(), projectID, moderatorID, body.StartTime, body.EndTime, body.Timezone); err != nil {
 		slog.Error("upsert moderator time range failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return

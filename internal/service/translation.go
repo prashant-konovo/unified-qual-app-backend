@@ -86,3 +86,21 @@ func (s *TranslationService) GetCountriesWithLocalisationsMRA(ctx context.Contex
 func (s *TranslationService) DeleteMeetingInformationTranslationMRA(ctx context.Context, projectID, languageID int64) (map[string]any, error) {
 	return s.projectRepo.DeleteMeetingInformationTranslationMRA(ctx, projectID, languageID)
 }
+
+// --- QsAnswerRepo methods (used in ls/project.go, ls/integration.go) ---
+
+func (s *TranslationService) ListNativeSurveysByProject(ctx context.Context, projectID int64) ([]qs.NativeSurvey, error) {
+	return s.answerRepo.ListNativeSurveysByProject(ctx, projectID)
+}
+
+func (s *TranslationService) ListProjectsUsers(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	return s.answerRepo.ListProjectsUsers(ctx, projectID)
+}
+
+func (s *TranslationService) GetParticipantEligibility(ctx context.Context, responderID, projectID int64) (map[string]any, error) {
+	return s.answerRepo.GetParticipantEligibility(ctx, responderID, projectID)
+}
+
+func (s *TranslationService) GetCommunicationTemplate(ctx context.Context, name string) (*qs.CommunicationTemplate, error) {
+	return s.answerRepo.GetCommunicationTemplate(ctx, name)
+}

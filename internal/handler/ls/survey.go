@@ -224,8 +224,8 @@ func (h *Handler) buildSurveyCrowdFlatJSON(ctx context.Context, sc iris.ICSurvey
 	}
 	// Check project type via survey → project → project_type_id
 	if survey, _ := h.SurveyService.GetSurvey(ctx, sc.SurveyID); survey != nil {
-		if h.IrisProjectRepo != nil {
-			if p, _ := h.IrisProjectRepo.GetByID(ctx, survey.ProjectID); p != nil {
+		if h.ProjectService != nil {
+			if p, _ := h.ProjectService.IrisGetByID(ctx, survey.ProjectID); p != nil {
 				if p.ProjectTypeID == 1 { // quant
 					if sc.QuantHonorarium.Valid {
 						honorarium = sc.QuantHonorarium.Int64
@@ -553,8 +553,8 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	// Resolve calling user's IRIS DB ID from JWT email
 	var callerUserID int64
 	user := middleware.GetUser(r)
-	if user != nil && user.Email != "" && h.IrisUserRepo != nil {
-		u, err := h.IrisUserRepo.GetByEmail(r.Context(), user.Email)
+	if user != nil && user.Email != "" && h.UserService.IrisAvailable() {
+		u, err := h.UserService.GetIrisUserByEmail(r.Context(), user.Email)
 		if err == nil && u != nil {
 			callerUserID = u.ID
 		}

@@ -401,8 +401,8 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 
 		// Build project listJson
 		projectJSON := map[string]any{}
-		if h.IrisProjectRepo != nil {
-			if p, err := h.IrisProjectRepo.GetByID(ctx, pi.ProjectID); err == nil && p != nil {
+		if h.ProjectService != nil {
+			if p, err := h.ProjectService.IrisGetByID(ctx, pi.ProjectID); err == nil && p != nil {
 				projectJSON = map[string]any{
 					"id":                  p.ID,
 					"name":                p.Name,

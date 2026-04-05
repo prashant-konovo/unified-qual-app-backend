@@ -17,11 +17,11 @@ import (
 // GetAllAccountsMRA handles GET /salesforce/getAllAccounts (MRA).
 // Contract-identical: returns {data: [{id, account_name}]}
 func (h *Handler) GetAllAccountsMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
-	records, err := h.QsProjectRepo.GetAllAccountsMRA(r.Context())
+	records, err := h.ProjectService.GetAllAccountsMRA(r.Context())
 	if err != nil {
 		slog.Error("get all accounts mra failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -33,11 +33,11 @@ func (h *Handler) GetAllAccountsMRA(w http.ResponseWriter, r *http.Request) {
 // GetSalesforceClientsMRA handles GET /salesforce/clients (MRA).
 // Contract-identical: returns {data: [{accountId, name}]}
 func (h *Handler) GetSalesforceClientsMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
-	records, err := h.QsProjectRepo.GetSalesforceClientsMRA(r.Context())
+	records, err := h.ProjectService.GetSalesforceClientsMRA(r.Context())
 	if err != nil {
 		slog.Error("get salesforce clients mra failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -54,11 +54,11 @@ func (h *Handler) GetSalesforceClientsMRA(w http.ResponseWriter, r *http.Request
 func (h *Handler) GetSalesforceProjectsMRA(w http.ResponseWriter, r *http.Request) {
 	sfClientID := chi.URLParam(r, "salesforce_client_id")
 
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
-	records, err := h.QsProjectRepo.GetSalesforceProjectsMRA(r.Context(), sfClientID)
+	records, err := h.ProjectService.GetSalesforceProjectsMRA(r.Context(), sfClientID)
 	if err != nil {
 		slog.Error("get salesforce projects mra failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -73,7 +73,7 @@ func (h *Handler) GetSalesforceProjectsMRA(w http.ResponseWriter, r *http.Reques
 // GetSalesforceClientsWithFilterMRA handles POST /salesforce/getSalesforceClientsWithFilter (MRA).
 // Contract-identical: returns {data: [{salesforce_account_id, name}]}
 func (h *Handler) GetSalesforceClientsWithFilterMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsProjectRepo == nil {
+	if !h.ProjectService.QsProjectAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -86,7 +86,7 @@ func (h *Handler) GetSalesforceClientsWithFilterMRA(w http.ResponseWriter, r *ht
 		return
 	}
 
-	records, err := h.QsProjectRepo.GetSalesforceClientsWithFilterMRA(r.Context(), body.ProjectAccountID)
+	records, err := h.ProjectService.GetSalesforceClientsWithFilterMRA(r.Context(), body.ProjectAccountID)
 	if err != nil {
 		slog.Error("get salesforce clients with filter mra failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{

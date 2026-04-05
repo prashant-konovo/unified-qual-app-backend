@@ -248,3 +248,162 @@ func ResolveSource(source, serviceCategory string) string {
 	}
 	return ""
 }
+
+// ── QS Project passthrough ─────────────────────────────────────────────────
+
+func (s *ProjectService) CreateProjectFull(ctx context.Context, req map[string]any) (map[string]any, error) {
+	return s.qsProjectRepo.CreateProjectFull(ctx, req)
+}
+
+func (s *ProjectService) GetSalesForceJobNumberText(ctx context.Context, sfProjectID string) (string, error) {
+	return s.qsProjectRepo.GetSalesForceJobNumberText(ctx, sfProjectID)
+}
+
+func (s *ProjectService) GetProjectDetailsMRA(ctx context.Context, projectID int64) (map[string]any, error) {
+	return s.qsProjectRepo.GetProjectDetailsMRA(ctx, projectID)
+}
+
+func (s *ProjectService) GetProjectsMRA(ctx context.Context, creatorID, status int, sort, search string, externalClientIDs []string) ([]map[string]any, error) {
+	return s.qsProjectRepo.GetProjectsMRA(ctx, creatorID, status, sort, search, externalClientIDs)
+}
+
+func (s *ProjectService) GetProjectsForModsMRA(ctx context.Context, clientID int64) ([]map[string]any, error) {
+	return s.qsProjectRepo.GetProjectsForModsMRA(ctx, clientID)
+}
+
+func (s *ProjectService) SaveUserSelection(ctx context.Context, userID int64, accountIDs, clientIDs []string) error {
+	return s.qsProjectRepo.SaveUserSelection(ctx, userID, accountIDs, clientIDs)
+}
+
+func (s *ProjectService) UpdateSchedulerGenerated(ctx context.Context, projectID int64) error {
+	return s.qsProjectRepo.UpdateSchedulerGenerated(ctx, projectID)
+}
+
+func (s *ProjectService) UpdatePostScreenInBuffer(ctx context.Context, projectID int64, buffer float64) error {
+	return s.qsProjectRepo.UpdatePostScreenInBuffer(ctx, projectID, buffer)
+}
+
+func (s *ProjectService) UpdateModeratorBufferMRA(ctx context.Context, projectID int64, buffer float64) error {
+	return s.qsProjectRepo.UpdateModeratorBufferMRA(ctx, projectID, buffer)
+}
+
+func (s *ProjectService) UpdateExternalSurveyID(ctx context.Context, projectID int64, surveyID string) error {
+	return s.qsProjectRepo.UpdateExternalSurveyID(ctx, projectID, surveyID)
+}
+
+func (s *ProjectService) GetProjectModeratorIDs(ctx context.Context, projectID int64) ([]int64, error) {
+	return s.qsProjectRepo.GetProjectModeratorIDs(ctx, projectID)
+}
+
+func (s *ProjectService) ResetProjectModeratorsMRA(ctx context.Context, projectID int64, newIDs, existingIDs []int64) error {
+	return s.qsProjectRepo.ResetProjectModeratorsMRA(ctx, projectID, newIDs, existingIDs)
+}
+
+func (s *ProjectService) UnassignModeratorFromProject(ctx context.Context, userID, projectID int64) error {
+	return s.qsProjectRepo.UnassignModeratorFromProject(ctx, userID, projectID)
+}
+
+func (s *ProjectService) GetModeratorsList(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	return s.qsProjectRepo.GetModeratorsList(ctx, projectID)
+}
+
+func (s *ProjectService) GetEmailTemplateMRA(ctx context.Context, typeID int, language string) (map[string]any, error) {
+	return s.qsProjectRepo.GetEmailTemplateMRA(ctx, typeID, language)
+}
+
+func (s *ProjectService) HandleProjectExportMRA(ctx context.Context, projectID int64, pmTimeZone, pmTimeZoneAbbr, rescheduleLinkPrefix string) ([][]string, error) {
+	return s.qsProjectRepo.HandleProjectExportMRA(ctx, projectID, pmTimeZone, pmTimeZoneAbbr, rescheduleLinkPrefix)
+}
+
+func (s *ProjectService) HandleProjectNoTimeslotExportMRA(ctx context.Context, projectID int64, pmTimeZone, pmTimeZoneAbbr string) ([][]string, error) {
+	return s.qsProjectRepo.HandleProjectNoTimeslotExportMRA(ctx, projectID, pmTimeZone, pmTimeZoneAbbr)
+}
+
+func (s *ProjectService) GetProjectName(ctx context.Context, projectID int64) (string, error) {
+	return s.qsProjectRepo.GetProjectName(ctx, projectID)
+}
+
+func (s *ProjectService) UpdateQsProject(ctx context.Context, id int64, fields map[string]any) error {
+	return s.qsProjectRepo.Update(ctx, id, fields)
+}
+
+func (s *ProjectService) UpdateSampleSizeMRA(ctx context.Context, projectID int64, sampleSize int64) error {
+	return s.qsProjectRepo.UpdateSampleSizeMRA(ctx, projectID, sampleSize)
+}
+
+func (s *ProjectService) UpdateSampleSizeProjectStatusMRA(ctx context.Context, projectID int64, sampleSize int64, projectStatusID int64) error {
+	return s.qsProjectRepo.UpdateSampleSizeProjectStatusMRA(ctx, projectID, sampleSize, projectStatusID)
+}
+
+func (s *ProjectService) GetModeratorsTimeRangePerProject(ctx context.Context, projectID int64) ([]qs.ModeratorTimeRange, error) {
+	return s.qsProjectRepo.GetModeratorsTimeRangePerProject(ctx, projectID)
+}
+
+func (s *ProjectService) GetAllModeratorsAvailabilityPerClient(ctx context.Context, clientID int64, projectID int64) ([]qs.ModeratorAvailability, error) {
+	return s.qsProjectRepo.GetAllModeratorsAvailabilityPerClient(ctx, clientID, projectID)
+}
+
+func (s *ProjectService) GetProjectStatusByID(ctx context.Context, projectID int64) (int64, error) {
+	return s.qsProjectRepo.GetProjectStatusByID(ctx, projectID)
+}
+
+func (s *ProjectService) UpsertModeratorTimeRangePerProject(ctx context.Context, projectID, moderatorID int64, startTime, endTime, timezone string) error {
+	return s.qsProjectRepo.UpsertModeratorTimeRangePerProject(ctx, projectID, moderatorID, startTime, endTime, timezone)
+}
+
+func (s *ProjectService) GetAllModeratorsAvailabilityPerRole(ctx context.Context, projectID int64) ([]qs.ModeratorAvailability, error) {
+	return s.qsProjectRepo.GetAllModeratorsAvailabilityPerRole(ctx, projectID)
+}
+
+func (s *ProjectService) GetModeratorsTimeRangePerProjectMRA(ctx context.Context, projectID int64) ([]map[string]any, error) {
+	return s.qsProjectRepo.GetModeratorsTimeRangePerProjectMRA(ctx, projectID)
+}
+
+func (s *ProjectService) GetProjectsForModeratorMRA(ctx context.Context, clientID, moderatorID int64) ([]map[string]any, error) {
+	return s.qsProjectRepo.GetProjectsForModeratorMRA(ctx, clientID, moderatorID)
+}
+
+func (s *ProjectService) GetAllAccountsMRA(ctx context.Context) ([]map[string]any, error) {
+	return s.qsProjectRepo.GetAllAccountsMRA(ctx)
+}
+
+func (s *ProjectService) GetSalesforceClientsMRA(ctx context.Context) ([]map[string]any, error) {
+	return s.qsProjectRepo.GetSalesforceClientsMRA(ctx)
+}
+
+func (s *ProjectService) GetSalesforceProjectsMRA(ctx context.Context, salesforceClientID string) ([]map[string]any, error) {
+	return s.qsProjectRepo.GetSalesforceProjectsMRA(ctx, salesforceClientID)
+}
+
+func (s *ProjectService) GetSalesforceClientsWithFilterMRA(ctx context.Context, projectAccountID int) ([]map[string]any, error) {
+	return s.qsProjectRepo.GetSalesforceClientsWithFilterMRA(ctx, projectAccountID)
+}
+
+func (s *ProjectService) QsGetByID(ctx context.Context, id int64) (*qs.Project, error) {
+	if s.qsProjectRepo == nil {
+		return nil, nil
+	}
+	return s.qsProjectRepo.GetByID(ctx, id)
+}
+
+func (s *ProjectService) TimeSlotCounts(ctx context.Context, projectID int64) (scheduled, completed int, err error) {
+	return s.qsProjectRepo.TimeSlotCounts(ctx, projectID)
+}
+
+func (s *ProjectService) GetTopics(ctx context.Context, projectID int64) ([]qs.Topic, error) {
+	return s.qsProjectRepo.GetTopics(ctx, projectID)
+}
+
+// ── IRIS Project passthrough ────────────────────────────────────────────────
+
+func (s *ProjectService) IrisGetByID(ctx context.Context, id int64) (*iris.Project, error) {
+	if s.irisProjectRepo == nil {
+		return nil, nil
+	}
+	return s.irisProjectRepo.GetByID(ctx, id)
+}
+
+// QsProjectAvailable reports whether the QS project repository is configured.
+func (s *ProjectService) QsProjectAvailable() bool {
+	return s.qsProjectRepo != nil
+}

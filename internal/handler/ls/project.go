@@ -33,8 +33,8 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 	}
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		surveys, err := h.IrisSurveyRepo.ListSurveysForProject(r.Context(), projectID)
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		surveys, err := h.SurveyService.ListSurveysForProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris project surveys failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -55,8 +55,8 @@ func (h *Handler) GetProjectSurveys(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// QS: list native surveys by project
-	if h.QsAnswerRepo != nil {
-		surveys, err := h.QsAnswerRepo.ListNativeSurveysByProject(r.Context(), projectID)
+	if h.TranslationService.AnswerRepoAvailable() {
+		surveys, err := h.TranslationService.ListNativeSurveysByProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs project surveys failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -89,8 +89,8 @@ func (h *Handler) GetProjectTimeSlots(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsTimeSlotRepo != nil {
-		slots, _, err := h.QsTimeSlotRepo.List(r.Context(), 1, 500, &projectID, nil, nil, nil, nil)
+	if h.InterviewService.TimeSlotAvailable() {
+		slots, _, err := h.InterviewService.ListTimeSlots(r.Context(), 1, 500, &projectID, nil, nil, nil, nil)
 		if err != nil {
 			slog.Error("project timeslots failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -123,8 +123,8 @@ func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		users, err := h.IrisSurveyRepo.ListUserProjects(r.Context(), projectID)
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		users, err := h.SurveyService.ListUserProjects(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris project users failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -136,8 +136,8 @@ func (h *Handler) GetProjectUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsAnswerRepo != nil {
-		users, err := h.QsAnswerRepo.ListProjectsUsers(r.Context(), projectID)
+	if h.TranslationService.AnswerRepoAvailable() {
+		users, err := h.TranslationService.ListProjectsUsers(r.Context(), projectID)
 		if err != nil {
 			slog.Error("qs project users failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -163,8 +163,8 @@ func (h *Handler) GetProjectObservers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.IrisSurveyRepo != nil {
-		observers, err := h.IrisSurveyRepo.ListObserversForProject(r.Context(), projectID)
+	if h.SurveyService.IrisAvailable() {
+		observers, err := h.SurveyService.ListObserversForProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get observers failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -192,8 +192,8 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if h.IrisSurveyRepo != nil {
-		body, err := h.IrisSurveyRepo.GetQualRescheduleBody(r.Context(), projectID)
+	if h.SurveyService.IrisAvailable() {
+		body, err := h.SurveyService.GetQualRescheduleBody(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get qual resched body failed", "error", err)
 		}
@@ -202,8 +202,8 @@ func (h *Handler) GetProjectQualReschedBody(w http.ResponseWriter, r *http.Reque
 	}
 
 	// QS: get template by name
-	if h.QsAnswerRepo != nil {
-		t, _ := h.QsAnswerRepo.GetCommunicationTemplate(r.Context(), "reschedule")
+	if h.TranslationService.AnswerRepoAvailable() {
+		t, _ := h.TranslationService.GetCommunicationTemplate(r.Context(), "reschedule")
 		if t != nil {
 			support.WriteJSON(w, http.StatusOK, map[string]any{"html": t.Body})
 			return
@@ -222,8 +222,8 @@ func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if h.IrisSurveyRepo != nil && support.ResolveSource(r) == "iris" {
-		avails, err := h.IrisSurveyRepo.GetProjectAvailability(r.Context(), projectID)
+	if h.SurveyService.IrisAvailable() && support.ResolveSource(r) == "iris" {
+		avails, err := h.SurveyService.GetProjectAvailability(r.Context(), projectID)
 		if err != nil {
 			slog.Error("project availability failed", "error", err)
 		}
@@ -240,13 +240,13 @@ func (h *Handler) GetProjectAvailability(w http.ResponseWriter, r *http.Request)
 	}
 
 	// QS: get moderator availability for this project's moderators
-	if h.QsUserRepo != nil && h.QsProjectRepo != nil {
-		proj, _ := h.QsProjectRepo.GetByID(r.Context(), projectID)
+	if h.ModeratorService.QsUserAvailable() && h.ProjectService.QsProjectAvailable() {
+		proj, _ := h.ProjectService.QsGetByID(r.Context(), projectID)
 		clientID := int64(0)
 		if proj != nil && proj.ClientID.Valid {
 			clientID = proj.ClientID.Int64
 		}
-		avails, err := h.QsUserRepo.ListModeratorAvailability(r.Context(), 0, &clientID, "", "")
+		avails, err := h.ModeratorService.ListModeratorAvailability(r.Context(), 0, &clientID, "", "")
 		if err != nil {
 			slog.Error("get qs project avail failed", "error", err)
 		}
@@ -266,8 +266,8 @@ func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if h.IrisSurveyRepo != nil && support.ResolveSource(r) == "iris" {
-		mods, err := h.IrisSurveyRepo.GetSchedulerModerators(r.Context(), projectID)
+	if h.SurveyService.IrisAvailable() && support.ResolveSource(r) == "iris" {
+		mods, err := h.SurveyService.GetSchedulerModerators(r.Context(), projectID)
 		if err != nil {
 			slog.Error("scheduler mods failed", "error", err)
 		}
@@ -276,11 +276,11 @@ func (h *Handler) GetProjectSchedulerModerators(w http.ResponseWriter, r *http.R
 	}
 
 	// QS: get moderators from timeslots for this project
-	if h.QsTimeSlotRepo != nil {
-		tsRows, _, _ := h.QsTimeSlotRepo.ListByProject(r.Context(), projectID, 1, 1000)
+	if h.InterviewService.TimeSlotAvailable() {
+		tsRows, _, _ := h.InterviewService.ListByProject(r.Context(), projectID, 1, 1000)
 		modMap := map[int64]map[string]any{}
 		for _, ts := range tsRows {
-			mods, _ := h.QsTimeSlotRepo.GetModerators(r.Context(), ts.ID)
+			mods, _ := h.InterviewService.GetModerators(r.Context(), ts.ID)
 			for _, m := range mods {
 				if _, ok := modMap[m.ModeratorID]; !ok {
 					modMap[m.ModeratorID] = map[string]any{
@@ -310,8 +310,8 @@ func (h *Handler) GetProjectDashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.IrisSurveyRepo != nil {
-		data, err := h.IrisSurveyRepo.GetProjectDashboardInfo(r.Context(), projectID)
+	if h.SurveyService.IrisAvailable() {
+		data, err := h.SurveyService.GetProjectDashboardInfo(r.Context(), projectID)
 		if err != nil {
 			slog.Error("project dashboard failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -331,8 +331,8 @@ func (h *Handler) ResetProjectModerators(w http.ResponseWriter, r *http.Request)
 	}
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		count, err := h.IrisSurveyRepo.ResetProjectModerators(r.Context(), projectID)
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		count, err := h.SurveyService.ResetProjectModerators(r.Context(), projectID)
 		if err != nil {
 			slog.Error("reset project mods failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reset failed"})
@@ -375,15 +375,15 @@ func (h *Handler) HandleProjectExport(w http.ResponseWriter, r *http.Request) {
 
 	var data []map[string]any
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		data, err = h.IrisSurveyRepo.ExportProjectData(r.Context(), projectID)
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		data, err = h.SurveyService.ExportProjectData(r.Context(), projectID)
 		if err != nil {
 			slog.Error("iris export failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
 			return
 		}
-	} else if h.QsTimeSlotRepo != nil {
-		slots, _, err := h.QsTimeSlotRepo.List(r.Context(), 1, 10000, &projectID, nil, nil, nil, nil)
+	} else if h.InterviewService.TimeSlotAvailable() {
+		slots, _, err := h.InterviewService.ListTimeSlots(r.Context(), 1, 10000, &projectID, nil, nil, nil, nil)
 		if err != nil {
 			slog.Error("qs export failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "export failed"})
@@ -430,8 +430,8 @@ func (h *Handler) GetAvailableModeratorsCount(w http.ResponseWriter, r *http.Req
 	}
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		count, err := h.IrisSurveyRepo.GetAvailableModeratorsCount(r.Context(), projectID)
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		count, err := h.SurveyService.GetAvailableModeratorsCount(r.Context(), projectID)
 		if err != nil {
 			slog.Error("count mods failed", "error", err)
 		}
@@ -460,8 +460,8 @@ func (h *Handler) GetUnavailableModerators(w http.ResponseWriter, r *http.Reques
 	}
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		mods, err := h.IrisSurveyRepo.GetUnavailableModerators(r.Context(), projectID)
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		mods, err := h.SurveyService.GetUnavailableModerators(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get unavail mods failed", "error", err)
 		}
@@ -480,9 +480,9 @@ func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
 	page, pageSize := support.ParsePagination(r)
 	source := support.ResolveSource(r)
 
-	if (source == "" || source == "qs") && h.QsUserRepo != nil {
+	if (source == "" || source == "qs") && h.AdminService.QsAvailable() {
 		managerRoleID := 2
-		users, total, err := h.QsUserRepo.List(r.Context(), page, pageSize, &managerRoleID, "")
+		users, total, err := h.AdminService.ListQsUsers(r.Context(), page, pageSize, &managerRoleID, "")
 		if err != nil {
 			slog.Error("list PMs failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
@@ -502,8 +502,8 @@ func (h *Handler) ListProjectManagers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if source == "iris" && h.IrisUserRepo != nil {
-		users, total, err := h.IrisUserRepo.List(r.Context(), page, pageSize, nil, "")
+	if source == "iris" && h.AdminService.IrisAvailable() {
+		users, total, err := h.AdminService.ListIrisUsers(r.Context(), page, pageSize, nil, "")
 		if err != nil {
 			slog.Error("list IRIS PMs failed", "error", err)
 		}
