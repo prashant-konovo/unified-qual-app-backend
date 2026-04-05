@@ -32,16 +32,16 @@ func (h *Handler) GetTimeslotModerators(w http.ResponseWriter, r *http.Request) 
 	}
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		mods, err := h.IrisSurveyRepo.GetModeratorsForTimeSlot(r.Context(), tsID)
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		mods, err := h.SurveyService.GetModeratorsForTimeSlot(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get ts mods failed", "error", err)
 		}
 		support.WriteJSON(w, http.StatusOK, mods)
 		return
 	}
-	if h.QsTimeSlotRepo != nil {
-		mods, err := h.QsTimeSlotRepo.GetModerators(r.Context(), tsID)
+	if h.InterviewService.TimeSlotAvailable() {
+		mods, err := h.InterviewService.GetModerators(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get qs ts mods failed", "error", err)
 		}
@@ -62,8 +62,8 @@ func (h *Handler) GetTimeslotModeratorOptionsExt(w http.ResponseWriter, r *http.
 	}
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		mods, err := h.IrisSurveyRepo.GetPossibleModeratorsForTimeSlot(r.Context(), tsID)
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		mods, err := h.SurveyService.GetPossibleModeratorsForTimeSlot(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get possible mods failed", "error", err)
 		}
@@ -76,8 +76,8 @@ func (h *Handler) GetTimeslotModeratorOptionsExt(w http.ResponseWriter, r *http.
 			slog.Error("get qs moderators failed", "error", err)
 		}
 		assigned := map[int64]bool{}
-		if h.QsTimeSlotRepo != nil {
-			tsMods, _ := h.QsTimeSlotRepo.GetModerators(r.Context(), tsID)
+		if h.InterviewService.TimeSlotAvailable() {
+			tsMods, _ := h.InterviewService.GetModerators(r.Context(), tsID)
 			for _, m := range tsMods {
 				assigned[m.ModeratorID] = true
 			}
@@ -114,15 +114,15 @@ func (h *Handler) AssignTimeslotModerator(w http.ResponseWriter, r *http.Request
 	}
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		_, err := h.IrisSurveyRepo.AssignModeratorToTimeSlot(r.Context(), tsID, req.ModeratorID, req.IsHost)
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		_, err := h.SurveyService.AssignModeratorToTimeSlot(r.Context(), tsID, req.ModeratorID, req.IsHost)
 		if err != nil {
 			slog.Error("assign mod failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "assign failed"})
 			return
 		}
 		// Return updated moderators list (legacy returns array)
-		mods, err := h.IrisSurveyRepo.GetModeratorsForTimeSlot(r.Context(), tsID)
+		mods, err := h.SurveyService.GetModeratorsForTimeSlot(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get mods after assign failed", "error", err)
 		}
@@ -140,9 +140,9 @@ func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Reque
 	modID, _ := validate.ParseIDParam(r, "modId")
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
+	if source == "iris" && h.SurveyService.IrisAvailable() {
 		// Hook: ModeratorTimeSlot.beforeDeleteHooks — cleanup calendar + invitations
-		events, err := h.IrisSurveyRepo.GetTimeSlotEvents(r.Context(), tsID, &modID, nil, iris.RoleModerator)
+		events, err := h.SurveyService.GetTimeSlotEvents(r.Context(), tsID, &modID, nil, iris.RoleModerator)
 		if err != nil {
 			slog.Warn("hook: get time_slot_events failed (non-fatal)", "tsId", tsID, "error", err)
 		}
@@ -152,21 +152,21 @@ func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Reque
 					slog.Warn("hook: delete gcal event failed (non-fatal)", "eventId", evt.GCalEventID, "error", err)
 				}
 			}
-			if err := h.IrisSurveyRepo.DeleteTimeSlotEvent(r.Context(), evt.ID); err != nil {
+			if err := h.SurveyService.DeleteTimeSlotEvent(r.Context(), evt.ID); err != nil {
 				slog.Warn("hook: delete time_slot_event failed (non-fatal)", "id", evt.ID, "error", err)
 			}
 		}
-		if err := h.IrisSurveyRepo.DeleteConferenceInvitations(r.Context(), tsID, &modID, nil, iris.RoleModerator); err != nil {
+		if err := h.SurveyService.DeleteConferenceInvitations(r.Context(), tsID, &modID, nil, iris.RoleModerator); err != nil {
 			slog.Warn("hook: delete conference_invitations failed (non-fatal)", "tsId", tsID, "error", err)
 		}
 
-		if err := h.IrisSurveyRepo.RemoveModeratorFromTimeSlot(r.Context(), tsID, modID); err != nil {
+		if err := h.SurveyService.RemoveModeratorFromTimeSlot(r.Context(), tsID, modID); err != nil {
 			slog.Error("unassign mod failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "unassign failed"})
 			return
 		}
 		// Return remaining moderators (legacy returns array)
-		mods, err := h.IrisSurveyRepo.GetModeratorsForTimeSlot(r.Context(), tsID)
+		mods, err := h.SurveyService.GetModeratorsForTimeSlot(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get mods after unassign failed", "error", err)
 		}
@@ -186,8 +186,8 @@ func (h *Handler) GetTimeslotObservers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.IrisSurveyRepo != nil {
-		observers, err := h.IrisSurveyRepo.ListObserversForTimeSlot(r.Context(), tsID)
+	if h.SurveyService.IrisAvailable() {
+		observers, err := h.SurveyService.ListObserversForTimeSlot(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get ts observers failed", "error", err)
 		}
@@ -222,31 +222,31 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if h.IrisSurveyRepo != nil {
+	if h.SurveyService.IrisAvailable() {
 		ctx := r.Context()
 
 		// Hook: Observer.beforeDeleteHooks — cleanup calendar + TimeSlotEvent for each deleted observer
 		for _, email := range req.ToDelete {
-			obs, err := h.IrisSurveyRepo.GetObserverByEmail(ctx, req.ProjectID, tsID, email)
+			obs, err := h.SurveyService.GetObserverByEmail(ctx, req.ProjectID, tsID, email)
 			if err != nil {
 				slog.Warn("hook: get observer by email failed (non-fatal)", "email", email, "error", err)
 				continue
 			}
 			if obs != nil {
-				events, _ := h.IrisSurveyRepo.GetTimeSlotEvents(ctx, tsID, nil, &obs.ID, iris.RoleObserver)
+				events, _ := h.SurveyService.GetTimeSlotEvents(ctx, tsID, nil, &obs.ID, iris.RoleObserver)
 				for _, evt := range events {
 					if h.Services.GoogleCal.Configured() {
 						if err := h.Services.GoogleCal.DeleteEvent(ctx, "", evt.GCalEventID); err != nil {
 							slog.Warn("hook: delete observer gcal event failed (non-fatal)", "eventId", evt.GCalEventID, "error", err)
 						}
 					}
-					_ = h.IrisSurveyRepo.DeleteTimeSlotEvent(ctx, evt.ID)
+					_ = h.SurveyService.DeleteTimeSlotEvent(ctx, evt.ID)
 				}
 			}
 		}
 
 		// Core DB operation: add/remove observers
-		if err := h.IrisSurveyRepo.PutObserversForTimeSlot(ctx, req.ProjectID, tsID, req.ToAdd, req.ToDelete); err != nil {
+		if err := h.SurveyService.PutObserversForTimeSlot(ctx, req.ProjectID, tsID, req.ToAdd, req.ToDelete); err != nil {
 			slog.Error("update observers failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
@@ -254,17 +254,17 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 
 		// Hook: Observer.afterCreateHooks — create ConferenceInvitation + calendar event for each added observer
 		for _, email := range req.ToAdd {
-			obs, err := h.IrisSurveyRepo.GetObserverByEmail(ctx, req.ProjectID, tsID, email)
+			obs, err := h.SurveyService.GetObserverByEmail(ctx, req.ProjectID, tsID, email)
 			if err != nil || obs == nil {
 				slog.Warn("hook: get new observer failed (non-fatal)", "email", email, "error", err)
 				continue
 			}
-			if err := h.IrisSurveyRepo.CreateConferenceInvitation(ctx, tsID, obs.ID); err != nil {
+			if err := h.SurveyService.CreateConferenceInvitation(ctx, tsID, obs.ID); err != nil {
 				slog.Warn("hook: create conference_invitation failed (non-fatal)", "observerId", obs.ID, "error", err)
 			}
 			// Best-effort Google Calendar event creation
 			if h.Services.GoogleCal.Configured() {
-				start, end, err := h.IrisSurveyRepo.GetTimeSlotTimes(ctx, tsID)
+				start, end, err := h.SurveyService.GetTimeSlotTimes(ctx, tsID)
 				if err == nil {
 					evt := &integration.CalendarEvent{
 						Summary:   fmt.Sprintf("Interview Observer - %s", email),
@@ -276,14 +276,14 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 					if err != nil {
 						slog.Warn("hook: create observer gcal event failed (non-fatal)", "email", email, "error", err)
 					} else if created != nil && created.ID != "" {
-						_ = h.IrisSurveyRepo.CreateTimeSlotEvent(ctx, tsID, created.ID, iris.RoleObserver, nil, &obs.ID)
+						_ = h.SurveyService.CreateTimeSlotEvent(ctx, tsID, created.ID, iris.RoleObserver, nil, &obs.ID)
 					}
 				}
 			}
 		}
 
 		// Return updated observers list (legacy returns {"observers": [...]})
-		observers, err := h.IrisSurveyRepo.ListObserversForTimeSlot(ctx, tsID)
+		observers, err := h.SurveyService.ListObserversForTimeSlot(ctx, tsID)
 		if err != nil {
 			slog.Error("get observers after update failed", "error", err)
 		}

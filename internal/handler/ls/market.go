@@ -24,7 +24,7 @@ import (
 // Legacy contract: {markets: [adminJson], limit, offset, totalCount}
 // Query params: brandId, subscriptionId, accountId, includeAnyProfession, lang, limit, offset
 func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
-	if h.IrisSurveyRepo == nil {
+	if !h.SurveyService.IrisAvailable() {
 		support.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}, "limit": nil, "offset": nil, "totalCount": 0})
 		return
 	}
@@ -55,7 +55,7 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 		if v, err := strconv.ParseInt(aid, 10, 64); err == nil {
 			if v == 0 {
 				filter.SubscriptionID = &v
-			} else if subID := h.IrisSurveyRepo.GetSubscriptionIDForAccount(r.Context(), v); subID != nil {
+			} else if subID := h.SurveyService.GetSubscriptionIDForAccount(r.Context(), v); subID != nil {
 				filter.SubscriptionID = subID
 			}
 		}
@@ -80,7 +80,7 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	markets, totalCount, err := h.IrisSurveyRepo.ListMarkets(r.Context(), filter)
+	markets, totalCount, err := h.SurveyService.ListMarkets(r.Context(), filter)
 	if err != nil {
 		slog.Error("list markets failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -93,13 +93,13 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 		// Translations
 		name := m.Name
 		if lang != "en_us" {
-			if translated := h.IrisSurveyRepo.GetMarketNameTranslation(ctx, m.ID, lang); translated != "" {
+			if translated := h.SurveyService.GetMarketNameTranslation(ctx, m.ID, lang); translated != "" {
 				name = translated
 			}
 		}
 		rollup := dto.NullStr(m.Rollup)
 		if lang != "en_us" {
-			if translated := h.IrisSurveyRepo.GetMarketRollupTranslation(ctx, m.ID, lang); translated != "" {
+			if translated := h.SurveyService.GetMarketRollupTranslation(ctx, m.ID, lang); translated != "" {
 				rollup = translated
 			}
 		}
@@ -134,8 +134,8 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/markets/npi
 // Response: {"markets": [...]}
 func (h *Handler) ListMarketsNPI(w http.ResponseWriter, r *http.Request) {
-	if h.IrisSurveyRepo != nil {
-		markets, err := h.IrisSurveyRepo.ListMarketsWithNPI(r.Context())
+	if h.SurveyService.IrisAvailable() {
+		markets, err := h.SurveyService.ListMarketsWithNPI(r.Context())
 		if err != nil {
 			slog.Error("list npi markets failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -163,8 +163,8 @@ func (h *Handler) GetCrowdableAttributes(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if h.IrisSurveyRepo != nil {
-		attrs, err := h.IrisSurveyRepo.GetCrowdableAttributes(r.Context(), marketID)
+	if h.SurveyService.IrisAvailable() {
+		attrs, err := h.SurveyService.GetCrowdableAttributes(r.Context(), marketID)
 		if err != nil {
 			slog.Error("crowdable attrs failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})

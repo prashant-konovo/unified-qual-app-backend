@@ -22,7 +22,7 @@ type InterviewHandler struct{ *support.Deps }
 
 func (h *InterviewHandler) ListTimeslots(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
@@ -74,7 +74,7 @@ func (h *InterviewHandler) ListTimeslots(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	slots, total, err := h.QsTimeSlotRepo.List(ctx, page, pageSize, projectID, statusID, moderatorID, fromTime, toTime)
+	slots, total, err := h.InterviewService.ListTimeSlots(ctx, page, pageSize, projectID, statusID, moderatorID, fromTime, toTime)
 	if err != nil {
 		slog.ErrorContext(ctx, "list timeslots failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to list timeslots"})
@@ -91,7 +91,7 @@ func (h *InterviewHandler) ListTimeslots(w http.ResponseWriter, r *http.Request)
 
 func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
@@ -131,7 +131,7 @@ func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request
 		Duration:  body.Duration,
 	}
 
-	tsID, err := h.QsTimeSlotRepo.Create(ctx, ts)
+	tsID, err := h.InterviewService.Create(ctx, ts)
 	if err != nil {
 		slog.ErrorContext(ctx, "create timeslot failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create timeslot"})
@@ -140,7 +140,7 @@ func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request
 
 	// Assign moderator if provided
 	if body.ModeratorID > 0 {
-		if _, err := h.QsTimeSlotRepo.AssignModerator(ctx, body.ModeratorID, tsID, true); err != nil {
+		if _, err := h.InterviewService.AssignModerator(ctx, body.ModeratorID, tsID, true); err != nil {
 			slog.ErrorContext(ctx, "assign moderator failed", "error", err, "timeSlotId", tsID, "moderatorId", body.ModeratorID)
 		}
 	}
@@ -150,7 +150,7 @@ func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request
 
 func (h *InterviewHandler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
@@ -161,7 +161,7 @@ func (h *InterviewHandler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ts, err := h.QsTimeSlotRepo.GetByID(ctx, tsID)
+	ts, err := h.InterviewService.GetByID(ctx, tsID)
 	if err != nil {
 		slog.ErrorContext(ctx, "get timeslot failed", "error", err, "id", tsID)
 		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "database error"})
@@ -175,7 +175,7 @@ func (h *InterviewHandler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 	result := dto.TimeslotFromDetail(ts)
 
 	// Get assigned moderators
-	mods, err := h.QsTimeSlotRepo.GetModerators(ctx, tsID)
+	mods, err := h.InterviewService.GetModerators(ctx, tsID)
 	if err != nil {
 		slog.ErrorContext(ctx, "get timeslot moderators failed", "error", err)
 	}
@@ -188,7 +188,7 @@ func (h *InterviewHandler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get linked respondent
-	resp, err := h.QsTimeSlotRepo.GetRespondent(ctx, tsID)
+	resp, err := h.InterviewService.GetRespondent(ctx, tsID)
 	if err != nil {
 		slog.ErrorContext(ctx, "get timeslot respondent failed", "error", err)
 	}
@@ -201,7 +201,7 @@ func (h *InterviewHandler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 
 func (h *InterviewHandler) UpdateTimeslot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
@@ -249,7 +249,7 @@ func (h *InterviewHandler) UpdateTimeslot(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	if err := h.QsTimeSlotRepo.Update(ctx, tsID, fields); err != nil {
+	if err := h.InterviewService.UpdateTimeSlot(ctx, tsID, fields); err != nil {
 		slog.ErrorContext(ctx, "update timeslot failed", "error", err, "id", tsID)
 		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "update failed"})
 		return
@@ -260,7 +260,7 @@ func (h *InterviewHandler) UpdateTimeslot(w http.ResponseWriter, r *http.Request
 
 func (h *InterviewHandler) DeleteTimeslot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
@@ -271,7 +271,7 @@ func (h *InterviewHandler) DeleteTimeslot(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.QsTimeSlotRepo.Delete(ctx, tsID); err != nil {
+	if err := h.InterviewService.DeleteTimeSlot(ctx, tsID); err != nil {
 		slog.ErrorContext(ctx, "delete timeslot failed", "error", err, "id", tsID)
 		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "delete failed"})
 		return
@@ -300,7 +300,7 @@ func (h *InterviewHandler) GenerateSlots(w http.ResponseWriter, r *http.Request)
 
 func (h *InterviewHandler) GetAvailableSlots(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
@@ -315,7 +315,7 @@ func (h *InterviewHandler) GetAvailableSlots(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	slots, _, err := h.QsTimeSlotRepo.List(ctx, 1, 50, projectID, &openStatus, nil, nil, nil)
+	slots, _, err := h.InterviewService.ListTimeSlots(ctx, 1, 50, projectID, &openStatus, nil, nil, nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "get available slots failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to get available slots"})

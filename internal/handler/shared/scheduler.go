@@ -22,7 +22,7 @@ import (
 
 func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -38,7 +38,7 @@ func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update timeslot status to PENDING (2)
-	if err := h.QsTimeSlotRepo.Update(ctx, body.TimeSlotID, map[string]any{"status_id": 2, "confirmed": true}); err != nil {
+	if err := h.InterviewService.UpdateTimeSlot(ctx, body.TimeSlotID, map[string]any{"status_id": 2, "confirmed": true}); err != nil {
 		slog.ErrorContext(ctx, "schedule interview: update timeslot failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to schedule interview"})
 		return
@@ -46,7 +46,7 @@ func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 
 	// Assign moderator if provided
 	if body.ModeratorID > 0 {
-		if _, err := h.QsTimeSlotRepo.AssignModerator(ctx, body.ModeratorID, body.TimeSlotID, true); err != nil {
+		if _, err := h.InterviewService.AssignModerator(ctx, body.ModeratorID, body.TimeSlotID, true); err != nil {
 			slog.ErrorContext(ctx, "schedule interview: assign moderator failed", "error", err)
 		}
 	}
@@ -61,7 +61,7 @@ func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) CancelInterview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -96,7 +96,7 @@ func (h *Handler) CancelInterview(w http.ResponseWriter, r *http.Request) {
 		fields["status_modified_by"] = 0 // placeholder: would need user lookup to get QS user ID
 	}
 
-	if err := h.QsTimeSlotRepo.Update(ctx, tsID, fields); err != nil {
+	if err := h.InterviewService.UpdateTimeSlot(ctx, tsID, fields); err != nil {
 		slog.ErrorContext(ctx, "cancel interview failed", "error", err, "id", tsID)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "cancel failed"})
 		return
@@ -107,7 +107,7 @@ func (h *Handler) CancelInterview(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -154,7 +154,7 @@ func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
 		fields["invalidation_reason_text"] = body.Reason
 	}
 
-	if err := h.QsTimeSlotRepo.Update(ctx, tsID, fields); err != nil {
+	if err := h.InterviewService.UpdateTimeSlot(ctx, tsID, fields); err != nil {
 		slog.ErrorContext(ctx, "reschedule interview failed", "error", err, "id", tsID)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reschedule failed"})
 		return

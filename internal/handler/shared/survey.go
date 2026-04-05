@@ -22,12 +22,12 @@ type SurveyHandler struct{ *support.Deps }
 
 func (h *SurveyHandler) ListSurveys(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsSurveyRepo == nil {
+	if !h.SurveyService.QsAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	search := r.URL.Query().Get("search")
-	rows, err := h.QsSurveyRepo.List(ctx, search)
+	rows, err := h.SurveyService.List(ctx, search)
 	if err != nil {
 		slog.Error("list surveys", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to list surveys"})
@@ -43,7 +43,7 @@ func (h *SurveyHandler) ListSurveys(w http.ResponseWriter, r *http.Request) {
 
 func (h *SurveyHandler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsSurveyRepo == nil {
+	if !h.SurveyService.QsAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
@@ -64,13 +64,13 @@ func (h *SurveyHandler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
 	if req.Rules == nil {
 		req.Rules = json.RawMessage("[]")
 	}
-	newID, err := h.QsSurveyRepo.Create(ctx, req.ProjectID, req.Title, req.Status, req.Questions, req.Rules)
+	newID, err := h.SurveyService.Create(ctx, req.ProjectID, req.Title, req.Status, req.Questions, req.Rules)
 	if err != nil {
 		slog.Error("create survey", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create survey"})
 		return
 	}
-	row, err := h.QsSurveyRepo.GetByID(ctx, newID)
+	row, err := h.SurveyService.GetByID(ctx, newID)
 	if err != nil || row == nil {
 		support.WriteJSON(w, http.StatusCreated, map[string]any{"id": fmt.Sprintf("%d", newID)})
 		return
@@ -80,7 +80,7 @@ func (h *SurveyHandler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
 
 func (h *SurveyHandler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsSurveyRepo == nil {
+	if !h.SurveyService.QsAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
@@ -100,12 +100,12 @@ func (h *SurveyHandler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
 	if req.Rules == nil {
 		req.Rules = json.RawMessage("[]")
 	}
-	if err := h.QsSurveyRepo.Update(ctx, surveyID, req.Title, req.Status, req.Questions, req.Rules); err != nil {
+	if err := h.SurveyService.Update(ctx, surveyID, req.Title, req.Status, req.Questions, req.Rules); err != nil {
 		slog.Error("update survey", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to update survey"})
 		return
 	}
-	row, err := h.QsSurveyRepo.GetByID(ctx, surveyID)
+	row, err := h.SurveyService.GetByID(ctx, surveyID)
 	if err != nil || row == nil {
 		support.WriteJSON(w, http.StatusOK, map[string]any{"id": fmt.Sprintf("%d", surveyID), "updatedAt": support.Now()})
 		return
@@ -115,7 +115,7 @@ func (h *SurveyHandler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
 
 func (h *SurveyHandler) DeleteSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsSurveyRepo == nil {
+	if !h.SurveyService.QsAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
@@ -124,7 +124,7 @@ func (h *SurveyHandler) DeleteSurvey(w http.ResponseWriter, r *http.Request) {
 		support.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
-	if err := h.QsSurveyRepo.Delete(ctx, surveyID); err != nil {
+	if err := h.SurveyService.Delete(ctx, surveyID); err != nil {
 		slog.Error("delete survey", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to delete survey"})
 		return
@@ -134,7 +134,7 @@ func (h *SurveyHandler) DeleteSurvey(w http.ResponseWriter, r *http.Request) {
 
 func (h *SurveyHandler) GetPublicSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsSurveyRepo == nil {
+	if !h.SurveyService.QsAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
@@ -143,7 +143,7 @@ func (h *SurveyHandler) GetPublicSurvey(w http.ResponseWriter, r *http.Request) 
 		support.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
-	row, err := h.QsSurveyRepo.GetByID(ctx, surveyID)
+	row, err := h.SurveyService.GetByID(ctx, surveyID)
 	if err != nil {
 		slog.Error("get public survey", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to get survey"})

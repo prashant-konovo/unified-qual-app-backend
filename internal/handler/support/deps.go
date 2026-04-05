@@ -36,6 +36,9 @@ type Deps struct {
 	PaymentService     *service.PaymentService
 	NotificationService *service.NotificationService
 	MediaService       *service.MediaService
+	UserService        *service.UserService
+	InterviewService   *service.InterviewService
+	SurveyService      *service.SurveyService
 }
 
 // NewDeps creates the shared dependency container.

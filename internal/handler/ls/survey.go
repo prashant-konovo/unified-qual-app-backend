@@ -35,8 +35,8 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		s, err := h.IrisSurveyRepo.GetSurvey(r.Context(), surveyID)
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		s, err := h.SurveyService.GetSurvey(r.Context(), surveyID)
 		if err != nil {
 			slog.Error("iris survey get failed", "id", surveyID, "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -60,8 +60,8 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// QS
-	if h.QsSurveyRepo != nil {
-		s, err := h.QsSurveyRepo.GetByID(r.Context(), surveyID)
+	if h.SurveyService.QsAvailable() {
+		s, err := h.SurveyService.GetByID(r.Context(), surveyID)
 		if err != nil {
 			slog.Error("qs survey get failed", "id", surveyID, "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -95,17 +95,17 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.IrisSurveyRepo != nil && support.ResolveSource(r) == "iris" {
-		errors, err := h.IrisSurveyRepo.ValidateSurvey(r.Context(), surveyID)
+	if h.SurveyService.IrisAvailable() && support.ResolveSource(r) == "iris" {
+		errors, err := h.SurveyService.ValidateSurvey(r.Context(), surveyID)
 		if err != nil {
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "validation failed"})
 			return
 		}
-		warnings := h.IrisSurveyRepo.ValidateSurveyWarnings(r.Context(), surveyID)
+		warnings := h.SurveyService.ValidateSurveyWarnings(r.Context(), surveyID)
 
 		// Hook: SL completions calculation + basis survey propagation
 		// Matches Scala: when brandType=2, slEligible=1, slCompletionsNeeded=0
-		if err := h.IrisSurveyRepo.CalculateSLCompletions(r.Context(), surveyID); err != nil {
+		if err := h.SurveyService.CalculateSLCompletions(r.Context(), surveyID); err != nil {
 			slog.Warn("hook: SL completions calculation failed (non-fatal)", "surveyId", surveyID, "error", err)
 		}
 
@@ -134,8 +134,8 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// QS: surveys are always valid if they exist
-	if h.QsSurveyRepo != nil {
-		s, _ := h.QsSurveyRepo.GetByID(r.Context(), surveyID)
+	if h.SurveyService.QsAvailable() {
+		s, _ := h.SurveyService.GetByID(r.Context(), surveyID)
 		if s == nil {
 			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 			return
@@ -164,7 +164,7 @@ func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.IrisSurveyRepo == nil || support.ResolveSource(r) != "iris" {
+	if !h.SurveyService.IrisAvailable() || support.ResolveSource(r) != "iris" {
 		support.WriteJSON(w, http.StatusOK, map[string]any{"surveyId": surveyID, "surveyCrowds": []any{}})
 		return
 	}
@@ -176,7 +176,7 @@ func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 	}
 	includeDetailCrowds := q.Get("survey_detail_crowds") == "true"
 
-	surveyCrowds, err := h.IrisSurveyRepo.GetSurveyCrowds(r.Context(), surveyID)
+	surveyCrowds, err := h.SurveyService.GetSurveyCrowds(r.Context(), surveyID)
 	if err != nil {
 		slog.Error("get survey crowds failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -184,7 +184,7 @@ func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get survey info for startTime/status
-	survey, _ := h.IrisSurveyRepo.GetSurvey(r.Context(), surveyID)
+	survey, _ := h.SurveyService.GetSurvey(r.Context(), surveyID)
 
 	ctx := r.Context()
 	items := make([]map[string]any, 0, len(surveyCrowds))
@@ -215,7 +215,7 @@ func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 
 // buildSurveyCrowdFlatJSON produces the base flatJson fields from survey_crowd.
 func (h *Handler) buildSurveyCrowdFlatJSON(ctx context.Context, sc iris.ICSurveyCrowd) map[string]any {
-	answerTotal := h.IrisSurveyRepo.CountSurveyCrowdAnswers(ctx, sc.SurveyID, sc.CrowdID)
+	answerTotal := h.SurveyService.CountSurveyCrowdAnswers(ctx, sc.SurveyID, sc.CrowdID)
 
 	// honorarium: qualHonorarium for qual, quantHonorarium for quant
 	var honorarium any
@@ -223,7 +223,7 @@ func (h *Handler) buildSurveyCrowdFlatJSON(ctx context.Context, sc iris.ICSurvey
 		honorarium = sc.QualHonorarium.Int64
 	}
 	// Check project type via survey → project → project_type_id
-	if survey, _ := h.IrisSurveyRepo.GetSurvey(ctx, sc.SurveyID); survey != nil {
+	if survey, _ := h.SurveyService.GetSurvey(ctx, sc.SurveyID); survey != nil {
 		if h.IrisProjectRepo != nil {
 			if p, _ := h.IrisProjectRepo.GetByID(ctx, survey.ProjectID); p != nil {
 				if p.ProjectTypeID == 1 { // quant
@@ -259,8 +259,8 @@ func (h *Handler) buildSurveyCrowdFlatJSON(ctx context.Context, sc iris.ICSurvey
 func (h *Handler) buildSurveyCrowdAdminJSON(ctx context.Context, sc iris.ICSurveyCrowd, survey *iris.ICSurvey) map[string]any {
 	flat := h.buildSurveyCrowdFlatJSON(ctx, sc)
 
-	shcStatus := h.IrisSurveyRepo.GetSHCStatus(ctx, sc.ID)
-	shcLevel := h.IrisSurveyRepo.GetSHCHonorariumLevel(ctx, sc.ID)
+	shcStatus := h.SurveyService.GetSHCStatus(ctx, sc.ID)
+	shcLevel := h.SurveyService.GetSHCHonorariumLevel(ctx, sc.ID)
 
 	// currentShcHonorariumLevel: nil if unfielded
 	var shcLevelVal any
@@ -283,7 +283,7 @@ func (h *Handler) buildSurveyCrowdAdminJSON(ctx context.Context, sc iris.ICSurve
 	// Crowd group
 	var crowdGroup any
 	if sc.CrowdGroupID.Valid {
-		crowdGroup = h.IrisSurveyRepo.GetCrowdGroupInfo(ctx, sc.CrowdGroupID.Int64)
+		crowdGroup = h.SurveyService.GetCrowdGroupInfo(ctx, sc.CrowdGroupID.Int64)
 	}
 
 	// Nested crowd object using adminJsonAvailable (basicJson + counts)
@@ -303,18 +303,18 @@ func (h *Handler) buildSurveyCrowdAdminJSON(ctx context.Context, sc iris.ICSurve
 	flat["shcStatus"] = shcStatus
 	flat["crowd"] = crowdJSON
 	flat["crowdGroup"] = crowdGroup
-	flat["vendors"] = h.IrisSurveyRepo.GetSurveyCrowdVendors(ctx, sc.ID)
+	flat["vendors"] = h.SurveyService.GetSurveyCrowdVendors(ctx, sc.ID)
 	flat["currentShcHonorariumLevel"] = shcLevelVal
-	flat["crowdMarketHonoGroups"] = h.IrisSurveyRepo.GetCrowdMarketHonoGroups(ctx, sc.CrowdID, sc.SurveyID)
-	flat["multiProfessionCrowdMarketsHono"] = h.IrisSurveyRepo.GetMultiProfessionHono(ctx, sc.ID)
-	flat["surveyCustomHonoReasons"] = h.IrisSurveyRepo.GetSurveyCustomHonoReasonIDs(ctx, sc.SurveyID)
-	flat["crowdCurrency"] = h.IrisSurveyRepo.GetCrowdCurrency(ctx, sc.CrowdID)
+	flat["crowdMarketHonoGroups"] = h.SurveyService.GetCrowdMarketHonoGroups(ctx, sc.CrowdID, sc.SurveyID)
+	flat["multiProfessionCrowdMarketsHono"] = h.SurveyService.GetMultiProfessionHono(ctx, sc.ID)
+	flat["surveyCustomHonoReasons"] = h.SurveyService.GetSurveyCustomHonoReasonIDs(ctx, sc.SurveyID)
+	flat["crowdCurrency"] = h.SurveyService.GetCrowdCurrency(ctx, sc.CrowdID)
 	flat["currentShcHonorariumOptions"] = options
 	flat["excluded"] = sc.Excluded
 	flat["isInvitationPaused"] = sc.IsInvitationPaused
 	flat["isReminderPaused"] = sc.IsReminderPaused
 	flat["isSampleClosed"] = sc.IsSampleClosed
-	flat["crowdAttributeRemoved"] = h.IrisSurveyRepo.GetCrowdAttributesRemoved(ctx, sc.ID)
+	flat["crowdAttributeRemoved"] = h.SurveyService.GetCrowdAttributesRemoved(ctx, sc.ID)
 
 	return flat
 }
@@ -323,8 +323,8 @@ func (h *Handler) buildSurveyCrowdAdminJSON(ctx context.Context, sc iris.ICSurve
 func (h *Handler) buildSurveyCrowdSharedJSON(ctx context.Context, sc iris.ICSurveyCrowd) map[string]any {
 	flat := h.buildSurveyCrowdFlatJSON(ctx, sc)
 
-	shcStatus := h.IrisSurveyRepo.GetSHCStatus(ctx, sc.ID)
-	shcLevel := h.IrisSurveyRepo.GetSHCHonorariumLevel(ctx, sc.ID)
+	shcStatus := h.SurveyService.GetSHCStatus(ctx, sc.ID)
+	shcLevel := h.SurveyService.GetSHCHonorariumLevel(ctx, sc.ID)
 
 	var shcLevelVal any
 	if shcLevel != nil && shcStatus != "unfielded" {
@@ -343,18 +343,18 @@ func (h *Handler) buildSurveyCrowdSharedJSON(ctx context.Context, sc iris.ICSurv
 
 	var crowdGroup any
 	if sc.CrowdGroupID.Valid {
-		crowdGroup = h.IrisSurveyRepo.GetCrowdGroupInfo(ctx, sc.CrowdGroupID.Int64)
+		crowdGroup = h.SurveyService.GetCrowdGroupInfo(ctx, sc.CrowdGroupID.Int64)
 	}
 
 	flat["surveyCrowdId"] = sc.ID
 	flat["currentShcHonorariumLevel"] = shcLevelVal
-	flat["crowdMarketHonoGroups"] = h.IrisSurveyRepo.GetCrowdMarketHonoGroups(ctx, sc.CrowdID, sc.SurveyID)
-	flat["surveyCustomHonoReasons"] = h.IrisSurveyRepo.GetSurveyCustomHonoReasonIDs(ctx, sc.SurveyID)
-	flat["crowdCurrency"] = h.IrisSurveyRepo.GetCrowdCurrency(ctx, sc.CrowdID)
+	flat["crowdMarketHonoGroups"] = h.SurveyService.GetCrowdMarketHonoGroups(ctx, sc.CrowdID, sc.SurveyID)
+	flat["surveyCustomHonoReasons"] = h.SurveyService.GetSurveyCustomHonoReasonIDs(ctx, sc.SurveyID)
+	flat["crowdCurrency"] = h.SurveyService.GetCrowdCurrency(ctx, sc.CrowdID)
 	flat["currentShcHonorariumOptions"] = options
 	flat["excluded"] = sc.Excluded
 	flat["crowdGroup"] = crowdGroup
-	flat["multiProfessionCrowdMarketsHono"] = h.IrisSurveyRepo.GetMultiProfessionHono(ctx, sc.ID)
+	flat["multiProfessionCrowdMarketsHono"] = h.SurveyService.GetMultiProfessionHono(ctx, sc.ID)
 
 	return flat
 }
@@ -393,12 +393,12 @@ func (h *Handler) buildSurveyCrowdDetailJSON(ctx context.Context, sc iris.ICSurv
 
 	flat["surveyCrowdId"] = sc.ID
 	flat["crowd"] = h.buildCrowdFlatJSON(ctx, sc.CrowdID, &sc.SurveyID)
-	flat["answerTotal"] = h.IrisSurveyRepo.CountSurveyCrowdAnswers(ctx, sc.SurveyID, sc.CrowdID)
+	flat["answerTotal"] = h.SurveyService.CountSurveyCrowdAnswers(ctx, sc.SurveyID, sc.CrowdID)
 	flat["surveyTimeStarted"] = surveyTimeStarted
 	flat["surveyStatus"] = surveyStatus
-	flat["shcStatus"] = h.IrisSurveyRepo.GetSHCStatus(ctx, sc.ID)
-	flat["vendors"] = h.IrisSurveyRepo.GetSurveyCrowdVendors(ctx, sc.ID)
-	flat["crowdCurrency"] = h.IrisSurveyRepo.GetCrowdCurrency(ctx, sc.CrowdID)
+	flat["shcStatus"] = h.SurveyService.GetSHCStatus(ctx, sc.ID)
+	flat["vendors"] = h.SurveyService.GetSurveyCrowdVendors(ctx, sc.ID)
+	flat["crowdCurrency"] = h.SurveyService.GetCrowdCurrency(ctx, sc.CrowdID)
 	flat["excluded"] = sc.Excluded
 	flat["isInvitationPaused"] = sc.IsInvitationPaused
 	flat["isReminderPaused"] = sc.IsReminderPaused
@@ -410,7 +410,7 @@ func (h *Handler) buildSurveyCrowdDetailJSON(ctx context.Context, sc iris.ICSurv
 
 // buildCrowdBasicJSONForSurveyCrowd loads an ICCrowd and returns basicJson.
 func (h *Handler) buildCrowdBasicJSONForSurveyCrowd(ctx context.Context, crowdID int64) map[string]any {
-	crowd, err := h.IrisSurveyRepo.GetCrowdByID(ctx, crowdID)
+	crowd, err := h.SurveyService.GetCrowdByID(ctx, crowdID)
 	if err != nil || crowd == nil {
 		return map[string]any{}
 	}
@@ -420,10 +420,10 @@ func (h *Handler) buildCrowdBasicJSONForSurveyCrowd(ctx context.Context, crowdID
 // buildCrowdFlatJSON produces crowd.flatJson(surveyId) = basicJson + contactableCount + partialCount + totalAnswerByBrand.
 func (h *Handler) buildCrowdFlatJSON(ctx context.Context, crowdID int64, surveyID *int64) map[string]any {
 	base := h.buildCrowdBasicJSONForSurveyCrowd(ctx, crowdID)
-	size := h.IrisSurveyRepo.GetCrowdSize(ctx, crowdID)
+	size := h.SurveyService.GetCrowdSize(ctx, crowdID)
 
 	// Brand IDs for keyed counts
-	brandIDs, _ := h.IrisSurveyRepo.GetCrowdBrandIDs(ctx, crowdID)
+	brandIDs, _ := h.SurveyService.GetCrowdBrandIDs(ctx, crowdID)
 	if brandIDs == nil {
 		brandIDs = []int64{}
 	}
@@ -441,7 +441,7 @@ func (h *Handler) buildCrowdFlatJSON(ctx context.Context, crowdID int64, surveyI
 		totalAnswerByBrand := map[string]int64{}
 		for _, bid := range []int64{1, 2} {
 			var count int64
-			_ = h.IrisSurveyRepo.CountSurveyCrowdAnswersByBrand(ctx, *surveyID, crowdID, bid, &count)
+			_ = h.SurveyService.CountSurveyCrowdAnswersByBrand(ctx, *surveyID, crowdID, bid, &count)
 			totalAnswerByBrand[fmt.Sprintf("%d", bid)] = count
 		}
 		base["totalAnswerByBrand"] = totalAnswerByBrand
@@ -453,9 +453,9 @@ func (h *Handler) buildCrowdFlatJSON(ctx context.Context, crowdID int64, surveyI
 // buildCrowdFlatICJSON produces crowd.flatICJson = basicJson + contactableCount + partialCount (non-contactable subtracted).
 func (h *Handler) buildCrowdFlatICJSON(ctx context.Context, crowdID int64) map[string]any {
 	base := h.buildCrowdBasicJSONForSurveyCrowd(ctx, crowdID)
-	size := h.IrisSurveyRepo.GetCrowdSize(ctx, crowdID)
+	size := h.SurveyService.GetCrowdSize(ctx, crowdID)
 
-	brandIDs, _ := h.IrisSurveyRepo.GetCrowdBrandIDs(ctx, crowdID)
+	brandIDs, _ := h.SurveyService.GetCrowdBrandIDs(ctx, crowdID)
 	if brandIDs == nil {
 		brandIDs = []int64{}
 	}
@@ -478,15 +478,15 @@ func (h *Handler) buildCrowdAdminJSONAvailable(ctx context.Context, crowdID, sur
 	base := h.buildCrowdFlatJSON(ctx, crowdID, nil)
 
 	// Admin-level list extensions
-	base["validRespondersCount"] = map[string]int64{"0": h.IrisSurveyRepo.GetCrowdSize(ctx, crowdID)}
+	base["validRespondersCount"] = map[string]int64{"0": h.SurveyService.GetCrowdSize(ctx, crowdID)}
 	base["followupRules"] = []map[string]any{}
 	base["hasRelatedSurveys"] = false
-	base["attributes"] = h.IrisSurveyRepo.GetCrowdAttributes(ctx, crowdID)
+	base["attributes"] = h.SurveyService.GetCrowdAttributes(ctx, crowdID)
 
 	// Available counts for survey
-	base["availableCount"] = h.IrisSurveyRepo.GetCrowdAvailableCount(ctx, surveyID, crowdID)
-	base["availableEligibleCount"] = h.IrisSurveyRepo.GetCrowdAvailableEligibleCount(ctx, surveyID, crowdID, false)
-	base["availableEligibleFullMatchCount"] = h.IrisSurveyRepo.GetCrowdAvailableEligibleCount(ctx, surveyID, crowdID, true)
+	base["availableCount"] = h.SurveyService.GetCrowdAvailableCount(ctx, surveyID, crowdID)
+	base["availableEligibleCount"] = h.SurveyService.GetCrowdAvailableEligibleCount(ctx, surveyID, crowdID, false)
+	base["availableEligibleFullMatchCount"] = h.SurveyService.GetCrowdAvailableEligibleCount(ctx, surveyID, crowdID, true)
 
 	return base
 }
@@ -502,8 +502,8 @@ func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.IrisSurveyRepo != nil && support.ResolveSource(r) == "iris" {
-		if err := h.IrisSurveyRepo.CloseSurvey(r.Context(), surveyID); err != nil {
+	if h.SurveyService.IrisAvailable() && support.ResolveSource(r) == "iris" {
+		if err := h.SurveyService.CloseSurvey(r.Context(), surveyID); err != nil {
 			slog.Error("close survey failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
 			return
@@ -513,8 +513,8 @@ func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// QS: update status to 'closed'
-	if h.QsSurveyRepo != nil {
-		if err := h.QsSurveyRepo.Update(r.Context(), surveyID, "", "closed", nil, nil); err != nil {
+	if h.SurveyService.QsAvailable() {
+		if err := h.SurveyService.Update(r.Context(), surveyID, "", "closed", nil, nil); err != nil {
 			slog.Error("qs close survey failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
 			return
@@ -545,7 +545,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.IrisSurveyRepo == nil {
+	if !h.SurveyService.IrisAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "database unavailable"})
 		return
 	}
@@ -565,7 +565,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch survey (verify it exists)
-	s, err := h.IrisSurveyRepo.GetSurvey(r.Context(), surveyID)
+	s, err := h.SurveyService.GetSurvey(r.Context(), surveyID)
 	if err != nil {
 		slog.Error("get survey failed", "id", surveyID, "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -587,7 +587,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !isAdmin {
-		canRead, _ := h.IrisSurveyRepo.UserCanReadProject(r.Context(), callerUserID, s.ProjectID)
+		canRead, _ := h.SurveyService.UserCanReadProject(r.Context(), callerUserID, s.ProjectID)
 		if !canRead {
 			support.WriteJSON(w, http.StatusForbidden, map[string]any{
 				"error": map[string]any{
@@ -602,14 +602,14 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Toggle the favorite
-	if err := h.IrisSurveyRepo.ToggleFavorite(r.Context(), surveyID, callerUserID, req.Favorite); err != nil {
+	if err := h.SurveyService.ToggleFavorite(r.Context(), surveyID, callerUserID, req.Favorite); err != nil {
 		slog.Error("toggle favorite failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to toggle favorite"})
 		return
 	}
 
 	// Re-fetch survey (legacy calls survey.refresh)
-	s, _ = h.IrisSurveyRepo.GetSurvey(r.Context(), surveyID)
+	s, _ = h.SurveyService.GetSurvey(r.Context(), surveyID)
 
 	// Build subscriberJson-equivalent response
 	support.WriteJSON(w, http.StatusOK, h.buildSubscriberJSON(r, s, callerUserID))
@@ -621,20 +621,20 @@ func (h *Handler) buildSubscriberJSON(r *http.Request, s *iris.ICSurvey, callerU
 
 	// Status object
 	statusObj := map[string]any{"status": s.Status, "label": ""}
-	if _, label, err := h.IrisSurveyRepo.GetSurveyStatusLabel(ctx, s.Status); err == nil {
+	if _, label, err := h.SurveyService.GetSurveyStatusLabel(ctx, s.Status); err == nil {
 		statusObj["label"] = label
 	}
 
 	// Survey type
 	var surveyType any
-	if st, err := h.IrisSurveyRepo.GetSurveyType(ctx, s.SurveyTypeID); err == nil {
+	if st, err := h.SurveyService.GetSurveyType(ctx, s.SurveyTypeID); err == nil {
 		surveyType = st
 	}
 
 	// Subscription company
 	subscriptionCompany := ""
 	if s.SubscriptionID.Valid {
-		if c, err := h.IrisSurveyRepo.GetSubscriptionCompany(ctx, s.SubscriptionID.Int64); err == nil {
+		if c, err := h.SurveyService.GetSubscriptionCompany(ctx, s.SubscriptionID.Int64); err == nil {
 			subscriptionCompany = c
 		}
 	}
@@ -642,36 +642,36 @@ func (h *Handler) buildSubscriberJSON(r *http.Request, s *iris.ICSurvey, callerU
 	// Project info
 	projectName := ""
 	projectTypeID := 1
-	if pn, err := h.IrisSurveyRepo.GetProjectName(ctx, s.ProjectID); err == nil {
+	if pn, err := h.SurveyService.GetProjectName(ctx, s.ProjectID); err == nil {
 		projectName = pn
 	}
-	if pt, err := h.IrisSurveyRepo.GetProjectTypeID(ctx, s.ProjectID); err == nil {
+	if pt, err := h.SurveyService.GetProjectTypeID(ctx, s.ProjectID); err == nil {
 		projectTypeID = pt
 	}
 
 	// Favorite check
 	favorite := false
 	if callerUserID > 0 {
-		if f, err := h.IrisSurveyRepo.IsSurveyFavoriteOf(ctx, s.ID, callerUserID); err == nil {
+		if f, err := h.SurveyService.IsSurveyFavoriteOf(ctx, s.ID, callerUserID); err == nil {
 			favorite = f
 		}
 	}
 
 	// Completions
 	numCompletions := 0
-	if cnt, err := h.IrisSurveyRepo.CountSurveyCompletions(ctx, s.ID); err == nil {
+	if cnt, err := h.SurveyService.CountSurveyCompletions(ctx, s.ID); err == nil {
 		numCompletions = cnt
 	}
 
 	// Questions
 	numQuestions := 0
-	if cnt, err := h.IrisSurveyRepo.CountSurveyQuestions(ctx, s.ID); err == nil {
+	if cnt, err := h.SurveyService.CountSurveyQuestions(ctx, s.ID); err == nil {
 		numQuestions = cnt
 	}
 
 	// Crowds count
 	numCrowds := 0
-	if cnt, err := h.IrisSurveyRepo.CountSurveyCrowds(ctx, s.ID); err == nil {
+	if cnt, err := h.SurveyService.CountSurveyCrowds(ctx, s.ID); err == nil {
 		numCrowds = cnt
 	}
 
@@ -680,7 +680,7 @@ func (h *Handler) buildSubscriberJSON(r *http.Request, s *iris.ICSurvey, callerU
 
 	// Pricing
 	pricing := map[string]any{"surveyPricingTypeId": 0, "freeScreeners": 0, "fixedRate": nil}
-	if p, err := h.IrisSurveyRepo.GetSurveyPricing(ctx, s.ID); err == nil {
+	if p, err := h.SurveyService.GetSurveyPricing(ctx, s.ID); err == nil {
 		pricing = p
 	}
 
@@ -689,14 +689,14 @@ func (h *Handler) buildSubscriberJSON(r *http.Request, s *iris.ICSurvey, callerU
 		"userId": callerUserID, "projectId": s.ProjectID,
 		"canWrite": false, "canRead": false, "favorite": favorite,
 	}
-	if perms, err := h.IrisSurveyRepo.GetUserProjectPermissions(ctx, callerUserID, s.ProjectID); err == nil {
+	if perms, err := h.SurveyService.GetUserProjectPermissions(ctx, callerUserID, s.ProjectID); err == nil {
 		perms["favorite"] = favorite
 		permissions = perms
 	}
 
 	// Qual crowd name (first crowd)
 	qualCrowdName := ""
-	if name, err := h.IrisSurveyRepo.GetFirstSurveyCrowdName(ctx, s.ID); err == nil {
+	if name, err := h.SurveyService.GetFirstSurveyCrowdName(ctx, s.ID); err == nil {
 		qualCrowdName = name
 	}
 

@@ -72,8 +72,8 @@ func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if h.QsUserRepo != nil {
-		result, err := h.QsUserRepo.CheckUserIsQsToolAndI2(r.Context(), req.Email)
+	if h.UserService.QsAvailable() {
+		result, err := h.UserService.CheckUserIsQsToolAndI2(r.Context(), req.Email)
 		if err != nil {
 			slog.Error("check qs/i2 failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -106,7 +106,7 @@ func (h *Handler) CheckUserCommPreference(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if h.QsUserRepo == nil {
+	if !h.UserService.QsAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "no database available",
@@ -115,7 +115,7 @@ func (h *Handler) CheckUserCommPreference(w http.ResponseWriter, r *http.Request
 	}
 
 	// Legacy: SELECT allow_contact_by_email FROM user_communication_preferences WHERE user_id = :userId
-	pref, err := h.QsUserRepo.GetUserCommPreference(r.Context(), userID)
+	pref, err := h.UserService.GetUserCommPreference(r.Context(), userID)
 	if err != nil {
 		slog.Error("get comm pref failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -148,7 +148,7 @@ func (h *Handler) UnsubscribeUser(w http.ResponseWriter, r *http.Request) {
 		req.PmUserID = userIDStr
 	}
 
-	if h.QsUserRepo == nil {
+	if !h.UserService.QsAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "no database available",
@@ -157,7 +157,7 @@ func (h *Handler) UnsubscribeUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy: 4-query transaction on user_communication_preferences using cognito_user_id
-	result, err := h.QsUserRepo.UpdateUserCommPreference(r.Context(), userIDStr, req.PmUserID, req.AllowContactByEmail)
+	result, err := h.UserService.UpdateUserCommPreference(r.Context(), userIDStr, req.PmUserID, req.AllowContactByEmail)
 	if err != nil {
 		slog.Error("unsubscribe failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{

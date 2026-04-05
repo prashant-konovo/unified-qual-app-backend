@@ -29,7 +29,7 @@ func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsInterviewsRepo == nil {
+	if !h.InterviewService.InterviewsAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
 		return
 	}
@@ -51,7 +51,7 @@ func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 
 	search := r.URL.Query().Get("q")
 
-	data, err := h.QsInterviewsRepo.GetAllInterviewsByOffsetAndActiveTab(
+	data, err := h.InterviewService.GetAllInterviewsByOffsetAndActiveTab(
 		r.Context(), clientID, body.ExternalClientsIDs, body.ProjectsIDs,
 		search, body.Offset, body.ActiveTab, body.PaymentStatusCode,
 	)
@@ -105,7 +105,7 @@ func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 // core DB operations and request/response contract. External integrations (Decipher, email)
 // require separate service migration.
 func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsTimeSlotRepo == nil || h.QsProjectRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() || h.QsProjectRepo == nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while scheduling the interview",
@@ -182,7 +182,7 @@ func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
 // Response: {handleScheduleInterviewResp, hanldeCancelRescheduleResp} on success,
 // or {message} for invalidateReschedule mode.
 func (h *Handler) RespondentRescheduleMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsTimeSlotRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "an error occurred in respondent reschedule",
@@ -255,7 +255,7 @@ func (h *Handler) RespondentRescheduleMRA(w http.ResponseWriter, r *http.Request
 // sets is_invalidated_interview=1 with reason, updates project status.
 // Response: {status:"SUCCESS", message:"Interview invalidated successfully"}.
 func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsTimeSlotRepo == nil || h.QsProjectRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() || h.QsProjectRepo == nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "An error occurred while invalidating the interview",
 		})
@@ -328,7 +328,7 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Check timeslot exists and not already invalidated
-	ts, err := h.QsTimeSlotRepo.GetByID(r.Context(), timeSlotID)
+	ts, err := h.InterviewService.GetByID(r.Context(), timeSlotID)
 	if err != nil || ts == nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "An error occurred while invalidating the interview",
@@ -344,7 +344,7 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Check completed payment — legacy blocks invalidation if payment is done
-	hasPaid, err := h.QsTimeSlotRepo.HasCompletedPaymentMRA(r.Context(), timeSlotID)
+	hasPaid, err := h.InterviewService.HasCompletedPaymentMRA(r.Context(), timeSlotID)
 	if err != nil {
 		slog.Error("check payment status failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -360,7 +360,7 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Invalidate
-	if err := h.QsTimeSlotRepo.InvalidateInterviewMRA(r.Context(), timeSlotID, body.InvalidationReasonCode, reasonText, invalidatedByUserID); err != nil {
+	if err := h.InterviewService.InvalidateInterviewMRA(r.Context(), timeSlotID, body.InvalidationReasonCode, reasonText, invalidatedByUserID); err != nil {
 		slog.Error("invalidate interview failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "An error occurred while invalidating the interview",
@@ -381,7 +381,7 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 // Contract-identical scaffold with legacy: two flows — standard reschedule mail & ineligible PM notification.
 // Full email orchestration (SES, template rendering, PM notification) requires separate migration.
 func (h *Handler) SendInvalidateRescheduleMailMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsTimeSlotRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "Failed to send reschedule email",
 		})
@@ -442,7 +442,7 @@ func (h *Handler) SendInvalidateRescheduleMailMRA(w http.ResponseWriter, r *http
 	}
 
 	// Fetch timeslot and validate state
-	ts, err := h.QsTimeSlotRepo.GetByID(r.Context(), timeSlotID)
+	ts, err := h.InterviewService.GetByID(r.Context(), timeSlotID)
 	if err != nil || ts == nil {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "Timeslot not found"})
 		return
@@ -488,7 +488,7 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if h.QsTimeSlotRepo == nil {
+	if !h.InterviewService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "timeslot repository not available",
 			"errorMessage": "An error occured while rescheduling or canceling the interview",
@@ -519,7 +519,7 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 	ctx := r.Context()
 
 	// Fetch timeslot first (legacy does this before any action)
-	ts, err := h.QsTimeSlotRepo.GetByID(ctx, tsID)
+	ts, err := h.InterviewService.GetByID(ctx, tsID)
 	if err != nil || ts == nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "timeslot not found",
@@ -546,7 +546,7 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
 	// Update status_id
-	if err := h.QsTimeSlotRepo.Update(ctx, tsID, map[string]any{"status_id": statusID}); err != nil {
+	if err := h.InterviewService.UpdateTimeSlot(ctx, tsID, map[string]any{"status_id": statusID}); err != nil {
 		slog.Error("cancel/reschedule update failed", "tsId", tsID, "action", action, "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
@@ -562,7 +562,7 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 	slog.Info("CancelRescheduleAction (PARTIAL)", "tsId", tsID, "action", action, "statusId", statusID)
 
 	// Re-fetch to return updated timeslot — legacy returns timeSlotRes.records[0]
-	tsUpdated, err := h.QsTimeSlotRepo.GetByID(ctx, tsID)
+	tsUpdated, err := h.InterviewService.GetByID(ctx, tsID)
 	if err != nil || tsUpdated == nil {
 		// Fallback: update was successful, return original with new statusId
 		ts.StatusID = statusID

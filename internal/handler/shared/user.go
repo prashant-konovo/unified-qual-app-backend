@@ -36,8 +36,8 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	}
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisUserRepo != nil {
-		u, err := h.IrisUserRepo.GetByID(r.Context(), userID)
+	if source == "iris" && h.UserService.IrisAvailable() {
+		u, err := h.UserService.GetIrisUserByID(r.Context(), userID)
 		if err != nil || u == nil {
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        "An error occured while fetching user info",
@@ -52,8 +52,8 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsUserRepo != nil {
-		u, err := h.QsUserRepo.GetByID(r.Context(), userID)
+	if h.UserService.QsAvailable() {
+		u, err := h.UserService.GetByID(r.Context(), userID)
 		if err != nil || u == nil {
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        "An error occured while fetching user info",
@@ -140,8 +140,8 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Source == "qs" && h.QsUserRepo != nil {
-		if err := h.QsUserRepo.Update(r.Context(), userID, req.FirstName, req.LastName, req.TimeZone); err != nil {
+	if req.Source == "qs" && h.UserService.QsAvailable() {
+		if err := h.UserService.Update(r.Context(), userID, req.FirstName, req.LastName, req.TimeZone); err != nil {
 			slog.Error("update qs user failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
@@ -268,8 +268,8 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 
 	var result []map[string]any
 
-	if h.IrisSurveyRepo != nil {
-		sfProjects, err := h.IrisSurveyRepo.ListSalesforceProjects(r.Context(), filter)
+	if h.SurveyService.IrisAvailable() {
+		sfProjects, err := h.SurveyService.ListSalesforceProjects(r.Context(), filter)
 		if err != nil {
 			slog.Error("iris sf projects failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -278,7 +278,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 		for _, s := range sfProjects {
 			// Lookup monoProjectId (project.id by salesforce_project_id)
 			var monoProjectID any
-			if pid := h.IrisSurveyRepo.GetMonoProjectID(r.Context(), s.SalesforceProjectID); pid != nil {
+			if pid := h.SurveyService.GetMonoProjectID(r.Context(), s.SalesforceProjectID); pid != nil {
 				monoProjectID = *pid
 			}
 			result = append(result, map[string]any{
@@ -321,7 +321,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 func (h *Handler) GetUserEmail(w http.ResponseWriter, r *http.Request) {
 	cognitoID := chi.URLParam(r, "id")
 
-	if h.QsUserRepo == nil {
+	if !h.UserService.QsAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "no database available",
@@ -329,7 +329,7 @@ func (h *Handler) GetUserEmail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email, err := h.QsUserRepo.GetEmailByCognitoID(r.Context(), cognitoID)
+	email, err := h.UserService.GetEmailByCognitoID(r.Context(), cognitoID)
 	if err != nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
@@ -365,7 +365,7 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsUserRepo == nil {
+	if !h.UserService.QsAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "An error occured while creating a new user",
@@ -373,7 +373,7 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.QsUserRepo.UpdateTimeZone(r.Context(), req.UserID, req.UserSelectedTimeZone); err != nil {
+	if err := h.UserService.UpdateTimeZone(r.Context(), req.UserID, req.UserSelectedTimeZone); err != nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while creating a new user",

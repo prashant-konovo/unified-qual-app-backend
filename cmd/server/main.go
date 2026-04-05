@@ -86,6 +86,9 @@ func main() {
 	deps.PaymentService = service.NewPaymentService(qsAnswerRepo, qsTimeSlotRepo, qsProjectRepo)
 	deps.NotificationService = service.NewNotificationService(irisSurveyRepo, qsAnswerRepo)
 	deps.MediaService = service.NewMediaService(irisSurveyRepo)
+	deps.UserService = service.NewUserService(qsUserRepo, irisUserRepo)
+	deps.InterviewService = service.NewInterviewService(qsTimeSlotRepo, deps.QsInterviewsRepo)
+	deps.SurveyService = service.NewSurveyService(qsSurveyRepo, irisSurveyRepo)
 	hs := handler.NewHandlers(deps)
 	r := router.New(hs, jwtAuth)
 
