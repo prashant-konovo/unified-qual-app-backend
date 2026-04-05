@@ -8,7 +8,6 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/jobs"
 	"github.com/InCrowd/unified-qual-api/internal/logger"
@@ -51,10 +50,7 @@ func main() {
 	svcClients := integration.NewServiceClients(cfg)
 	svcs := service.NewServices(cfg, qsRepos, irisRepos, svcClients)
 
-	deps := support.NewDeps(cfg, db)
-	deps.WireServices(svcs)
-
-	hs := handler.NewHandlers(deps)
+	hs := handler.NewHandlers(cfg, db, svcs)
 	r := router.New(hs, jwtAuth)
 
 	// Start scheduled jobs (if enabled)

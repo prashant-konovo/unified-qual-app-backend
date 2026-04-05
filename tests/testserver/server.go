@@ -17,7 +17,6 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
@@ -32,7 +31,6 @@ const testKID = "test-kid-001"
 // TestServer wraps httptest.Server with mock accessors for integration tests.
 type TestServer struct {
 	Server *httptest.Server
-	Deps   *support.Deps
 
 	// Mock repositories — set expectations before each request
 	IrisProjectRepo  *mocks.MockIrisProjectRepository
@@ -114,12 +112,6 @@ func New() *TestServer {
 		AuthAPIKey: "test-api-key",
 	}
 
-	deps := &support.Deps{
-		Cfg: cfg,
-		DB:  &config.DBPair{}, // nil DBs — health will show "not_configured"
-	}
-	ts.Deps = deps
-
 	// Wire mock repos into repository containers
 	qsRepos := &qs.Repositories{
 		Project:    ts.QsProjectRepo,
@@ -141,10 +133,9 @@ func New() *TestServer {
 	// Override SurveyService: the mock QsSurveyRepo can't be stored in
 	// qs.Repositories.Survey (concrete *SurveyRepo), so wire it manually.
 	svcs.Survey = service.NewSurveyService(ts.QsSurveyRepo, ts.IrisSurveyRepo, nil, nil)
-	deps.WireServices(svcs)
 
-	// Build real handlers and router
-	hs := handler.NewHandlers(deps)
+	db := &config.DBPair{} // nil DBs — health will show "not_configured"
+	hs := handler.NewHandlers(cfg, db, svcs)
 
 	// Create JWTAuth that fetches keys from our test JWKS server.
 	// Override the issuer URL so token validation matches our test tokens.
