@@ -111,6 +111,33 @@ make docker-push TAG=$(git rev-parse --short HEAD)
 ```
 ArgoCD syncs from gitops repo automatically.
 
+## Code Formatting
+
+Go code is formatted with `gofmt` and `goimports`. CI enforces formatting — unformatted code will fail the pipeline.
+
+### Setup
+
+```bash
+# Install goimports (one-time)
+go install golang.org/x/tools/cmd/goimports@latest
+```
+
+### Usage
+
+```bash
+make fmt           # Format all Go files with gofmt
+make imports       # Format + sort imports (groups: stdlib → third-party → local)
+make fmt-check     # Dry-run check — fails if any files need formatting
+```
+
+### Configuration
+
+- **`.golangci.yml`** — enables `goimports` linter with local import prefix (`github.com/InCrowd/unified-qual-api`)
+- **CI** — `gofmt -l` gate runs before lint in the `lint-test` job
+- Import grouping order: stdlib → third-party → `github.com/InCrowd/unified-qual-api`
+
+> **Tip:** Run `make fmt && make imports` before committing to avoid CI failures.
+
 ## Testing
 
 ### Unit Tests (29 tests, 3 packages)
@@ -138,20 +165,20 @@ go test -v -run TestHealth_AllDBsHealthy ./internal/handler/shared/
 
 ### Integration Tests (16 tests, full HTTP stack)
 
-Integration tests live in `tests/` and exercise the full HTTP stack (router → middleware → handler → mock repos). They use the `integration` build tag so `go test ./...` skips them by default.
+Integration tests live in `integrationtests/` and exercise the full HTTP stack (router → middleware → handler → mock repos). They use the `integration` build tag so `go test ./...` skips them by default.
 
 **Run all integration tests:**
 ```bash
 # Step 1: Run all integration tests
-go test -tags=integration -v ./tests/...
+go test -tags=integration -v ./integrationtests/...
 
 # Step 2 (optional): Run specific test
-go test -tags=integration -run TestProjects_AdminToken ./tests/...
+go test -tags=integration -run TestProjects_AdminToken ./integrationtests/...
 ```
 
 **Test structure:**
 ```
-tests/
+integrationtests/
   testserver/server.go  — TestServer builder (real Chi router, mock deps, test JWT signing)
   health_test.go        — Health endpoint full-stack tests (3 tests)
   auth_test.go          — Auth validation + SSO config + protected route tests (8 tests)
@@ -167,12 +194,12 @@ The `testserver.New()` helper creates a real `httptest.Server` with:
 ### Run All Tests (Unit + Integration)
 
 ```bash
-go test -race ./... && go test -tags=integration -race ./tests/...
+go test -race ./... && go test -tags=integration -race ./integrationtests/...
 ```
 
 ### Mocks
 
-Mocks are auto-generated with [mockery](https://github.com/vektra/mockery) in `internal/testutil/mocks/`. To regenerate after interface changes:
+Mocks are auto-generated with [mockery](https://github.com/vektra/mockery) in `internal/unittests/mocks/`. To regenerate after interface changes:
 
 ```bash
 # Step 1: Install mockery
@@ -180,7 +207,7 @@ go install github.com/vektra/mockery/v2@latest
 
 # Step 2: Regenerate a specific mock (example: IRIS ProjectRepository)
 mockery --dir=internal/repository/iris --name=ProjectRepository \
-  --output=internal/testutil/mocks --outpkg=mocks --with-expecter \
+  --output=internal/unittests/mocks --outpkg=mocks --with-expecter \
   --structname=MockIrisProjectRepository --filename=mock_iris_projectrepository.go
 ```
 
