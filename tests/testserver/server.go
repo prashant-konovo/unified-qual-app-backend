@@ -19,6 +19,8 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/handler"
 	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
+	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
+	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/InCrowd/unified-qual-api/internal/router"
 	"github.com/InCrowd/unified-qual-api/internal/service"
 	mocks "github.com/InCrowd/unified-qual-api/internal/testutil/mocks"
@@ -117,21 +119,29 @@ func New() *TestServer {
 		DB:  &config.DBPair{}, // nil DBs — health will show "not_configured"
 	}
 	ts.Deps = deps
-	deps.AuthService = service.NewAuthService(cfg, nil, ts.QsUserRepo)
-	deps.ProjectService = service.NewProjectService(ts.IrisProjectRepo, ts.QsProjectRepo, nil)
-	deps.ParticipantService = service.NewParticipantService(ts.QsRespondentRepo, ts.QsTimeSlotRepo)
-	deps.BookingService = service.NewBookingService(ts.QsTimeSlotRepo)
-	deps.TranslationService = service.NewTranslationService(ts.QsAnswerRepo, ts.QsProjectRepo)
-	deps.AdminService = service.NewAdminService(ts.QsUserRepo, ts.IrisUserRepo, ts.QsTimeSlotRepo)
-	deps.ConferenceService = service.NewConferenceService(ts.QsConferenceRepo, nil, nil, nil, nil)
-	deps.PaymentService = service.NewPaymentService(ts.QsAnswerRepo, ts.QsTimeSlotRepo, ts.QsProjectRepo, nil, nil, "", "")
-	deps.NotificationService = service.NewNotificationService(ts.IrisSurveyRepo, ts.QsAnswerRepo)
-	deps.MediaService = service.NewMediaService(ts.IrisSurveyRepo, nil, "")
-	deps.UserService = service.NewUserService(ts.QsUserRepo, ts.IrisUserRepo, nil, "us-east-1", "")
-	deps.InterviewService = service.NewInterviewService(ts.QsTimeSlotRepo, nil)
-	deps.SurveyService = service.NewSurveyService(ts.QsSurveyRepo, ts.IrisSurveyRepo, nil, nil)
-	deps.ModeratorService = service.NewModeratorService(ts.QsUserRepo, ts.QsTimeSlotRepo, nil, nil)
-	deps.SubscriptionService = service.NewSubscriptionService(ts.IrisSurveyRepo, nil, nil, "")
+
+	// Wire mock repos into repository containers
+	qsRepos := &qs.Repositories{
+		Project:    ts.QsProjectRepo,
+		User:       ts.QsUserRepo,
+		TimeSlot:   ts.QsTimeSlotRepo,
+		Respondent: ts.QsRespondentRepo,
+		Conference: ts.QsConferenceRepo,
+		Answer:     ts.QsAnswerRepo,
+		Interviews: ts.QsInterviewsRepo,
+	}
+	irisRepos := &iris.Repositories{
+		Project: ts.IrisProjectRepo,
+		User:    ts.IrisUserRepo,
+		Survey:  ts.IrisSurveyRepo,
+	}
+
+	// Create all services via centralized wiring
+	svcs := service.NewServices(cfg, qsRepos, irisRepos, nil)
+	// Override SurveyService: the mock QsSurveyRepo can't be stored in
+	// qs.Repositories.Survey (concrete *SurveyRepo), so wire it manually.
+	svcs.Survey = service.NewSurveyService(ts.QsSurveyRepo, ts.IrisSurveyRepo, nil, nil)
+	deps.WireServices(svcs)
 
 	// Build real handlers and router
 	hs := handler.NewHandlers(deps)

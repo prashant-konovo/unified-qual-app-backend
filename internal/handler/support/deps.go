@@ -36,3 +36,22 @@ func NewDeps(cfg *config.Config, db *config.DBPair) *Deps {
 		DB:  db,
 	}
 }
+
+// WireServices copies all service instances from a Services container into Deps.
+func (d *Deps) WireServices(svcs *service.Services) {
+	d.AuthService = svcs.Auth
+	d.ProjectService = svcs.Project
+	d.ParticipantService = svcs.Participant
+	d.BookingService = svcs.Booking
+	d.TranslationService = svcs.Translation
+	d.AdminService = svcs.Admin
+	d.ConferenceService = svcs.Conference
+	d.PaymentService = svcs.Payment
+	d.NotificationService = svcs.Notification
+	d.MediaService = svcs.Media
+	d.UserService = svcs.User
+	d.InterviewService = svcs.Interview
+	d.SurveyService = svcs.Survey
+	d.ModeratorService = svcs.Moderator
+	d.SubscriptionService = svcs.Subscription
+}
