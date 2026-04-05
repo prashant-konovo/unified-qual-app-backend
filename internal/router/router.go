@@ -38,8 +38,13 @@ func New(hs *handler.Handlers, jwtAuth *middleware.JWTAuth) *chi.Mux {
 
 	// API v1 routes — matches the frontend axios baseURL suffix /v1
 	r.Route("/v1", func(r chi.Router) {
-		registerPublicRoutes(r, hs)
+		// Public routes (no JWT required)
+		registerPublicAuthRoutes(r, hs)
+		registerPublicSurveyRoutes(r, hs)
+		registerPublicTimeslotRoutes(r, hs)
+		registerPublicConferenceRoutes(r, hs)
 
+		// Authenticated routes (JWT required)
 		r.Group(func(r chi.Router) {
 			r.Use(jwtAuth.Middleware)
 			registerAuthRoutes(r, hs)
@@ -52,7 +57,10 @@ func New(hs *handler.Handlers, jwtAuth *middleware.JWTAuth) *chi.Mux {
 			registerSubscriptionRoutes(r, hs)
 			registerConferenceRoutes(r, hs)
 			registerAdminRoutes(r, hs)
-			registerLegacyRoutes(r, hs)
+			registerUserRoutes(r, hs)
+			registerPaymentRoutes(r, hs)
+			registerNotificationRoutes(r, hs)
+			registerMarketRoutes(r, hs)
 		})
 	})
 

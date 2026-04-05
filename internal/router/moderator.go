@@ -38,4 +38,30 @@ func registerModeratorRoutes(r chi.Router, hs *handler.Handlers) {
 		r.Post("/interviews/{id}/cancel", hs.Handler.CancelInterview)
 		r.Post("/interviews/{id}/reschedule", hs.Handler.RescheduleInterview)
 	})
+
+	// ── Moderator availability by subscription (admin + manager + moderator) ──
+	r.Group(func(r chi.Router) {
+		r.Use(adminManagerMod)
+		r.Get("/moderator/{modId}/availability/{subId}", hs.LS.GetModeratorAvailabilityBySub)
+		r.Post("/moderator/{modId}/availability/{subId}", hs.LS.PostModeratorAvailabilityBySub)
+		r.Put("/moderator/availability/{maId}", hs.LS.UpdateModeratorAvailabilityExt)
+		r.Delete("/moderator/availability/{maId}", hs.LS.DeleteModeratorAvailabilityExt)
+	})
+
+	// ── Google Calendar / Import (admin + manager + moderator) ──
+	r.Group(func(r chi.Router) {
+		r.Use(adminManagerMod)
+		r.Post("/moderator/{moderatorId}/import/start", hs.LS.StartModeratorImport)
+		r.Get("/moderator/{moderatorId}/import/availability", hs.LS.GetImportedAvailability)
+		r.Get("/moderator/{moderatorId}/import/status", hs.LS.GetImportStatus)
+		r.Delete("/moderator/{moderatorId}/import/unlink", hs.LS.UnlinkImportedModerator)
+		r.Put("/google-sheet/first-date", hs.LS.UpdateGoogleSheetFirstDate)
+	})
+
+	// ── Self-service (admin + manager + moderator) ──
+	r.Group(func(r chi.Router) {
+		r.Use(adminManagerMod)
+		r.Get("/selfservice/noshow", hs.LS.GetNoShowCheck)
+		r.Put("/selfservice/project/{pid}/timeslot/{tid}", hs.LS.MarkNoShow)
+	})
 }

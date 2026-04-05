@@ -97,4 +97,23 @@ func registerProjectRoutes(r chi.Router, hs *handler.Handlers) {
 		r.Get("/project/{pid}/interview_media/{mediaId}/pages/{page}/img.png", hs.Handler.DownloadMediaPage)
 		r.Delete("/interview_media/{pid}/{mediaId}", hs.Handler.DeleteProjectMedia)
 	})
+
+	// ── Project extensions (admin + manager) ──
+	r.Group(func(r chi.Router) {
+		r.Use(adminManager)
+		r.Post("/project/{projectId}/moderators_reset", hs.LS.ResetProjectModerators)
+		r.Post("/project/{projectId}/handle-export", hs.LS.HandleProjectExport)
+		r.Get("/project/{projectId}/available_moderators_count", hs.LS.GetAvailableModeratorsCount)
+		r.Get("/project/{projectId}/unavailable_moderators", hs.LS.GetUnavailableModerators)
+		r.Get("/project_manager/client", hs.LS.ListProjectManagers)
+		r.Get("/salesforceprojects", hs.Handler.ListSalesforceProjects)
+	})
+
+	// ── Translations (admin + manager) ──
+	r.Group(func(r chi.Router) {
+		r.Use(adminManager)
+		r.Put("/projects/{projectId}/topics/translations", hs.Handler.UpdateTopicTranslations)
+		r.Delete("/projects/{projectId}/topics/translations/{translationKey}", hs.LS.DeleteTopicTranslation)
+		r.Delete("/projects/{projectId}/translations/{langCode}", hs.LS.DeleteTranslation)
+	})
 }

@@ -24,5 +24,8 @@ func registerSubscriptionRoutes(r chi.Router, hs *handler.Handlers) {
 		r.Get("/subscription/{subId}/inquiries", hs.LS.GetSubscriptionInquiries)
 		r.Get("/subscription/{subId}/project/{pid}/inquiry", hs.LS.GetSubscriptionProjectInquiry)
 		r.Get("/subscription/{subId}/project_surveys", hs.LS.GetSubscriptionProjectSurveys)
+		// ── LS Inquiry ──
+		r.Put("/subscription/{subscriptionId}/inquiry_preview", hs.LS.UpdateInquiryPreview)
+		r.Post("/custom_crowd_inquiry", hs.LS.CreateCustomCrowdInquiry)
 	})
 }

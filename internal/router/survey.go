@@ -9,6 +9,13 @@ import (
 // Survey routes
 // ══════════════════════════════════════════════════════════════
 
+// registerPublicSurveyRoutes registers participant-facing survey endpoints (no JWT).
+func registerPublicSurveyRoutes(r chi.Router, hs *handler.Handlers) {
+	r.Get("/survey/{surveyId}/public", hs.Survey.GetPublicSurvey)
+	r.Post("/survey/submit", hs.Survey.SubmitParticipantSurvey)
+	r.Get("/survey/{userId}", hs.Survey.GetParticipantSurveyResponse)
+}
+
 func registerSurveyRoutes(r chi.Router, hs *handler.Handlers) {
 	r.Group(func(r chi.Router) {
 		r.Use(adminManager)
