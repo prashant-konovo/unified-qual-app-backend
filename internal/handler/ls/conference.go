@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 
-	"github.com/InCrowd/unified-qual-api/internal/validate"
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -27,28 +27,28 @@ func (h *Handler) AddConferenceLink(w http.ResponseWriter, r *http.Request) {
 		TimeSlotID     int64  `json:"timeSlotId"`
 		ConferenceHash string `json:"conferenceHash"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 	if req.ConferenceHash == "" {
-		req.ConferenceHash = support.ID()[:12]
+		req.ConferenceHash = httputil.ID()[:12]
 	}
 
 	if h.ConferenceService.Available() {
 		linkID, err := h.ConferenceService.CreateConferenceLink(r.Context(), req.TimeSlotID, projectID, req.ConferenceHash)
 		if err != nil {
 			slog.Error("create conf link failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
-		support.WriteJSON(w, http.StatusCreated, map[string]any{
+		httputil.WriteJSON(w, http.StatusCreated, map[string]any{
 			"id": linkID, "projectId": projectID,
 			"timeSlotId": req.TimeSlotID, "conferenceHash": req.ConferenceHash,
 		})
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 func (h *Handler) UpdateConferenceLinkHandler(w http.ResponseWriter, r *http.Request) {
@@ -57,27 +57,27 @@ func (h *Handler) UpdateConferenceLinkHandler(w http.ResponseWriter, r *http.Req
 		ConferenceHash string `json:"conferenceHash"`
 		Pin            string `json:"pin"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
 	if h.ConferenceService.Available() {
 		if err := h.ConferenceService.UpdateConferenceLink(r.Context(), req.TimeSlotID, req.ConferenceHash, req.Pin); err != nil {
 			slog.Error("update conf link failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "timeSlotId": req.TimeSlotID})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "timeSlotId": req.TimeSlotID})
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 func (h *Handler) GetConferenceLinkByTimeSlot(w http.ResponseWriter, r *http.Request) {
-	tsID, err := validate.ParseIDParam(r, "timeslotId")
+	tsID, err := dto.ParseIDParam(r, "timeslotId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -85,15 +85,15 @@ func (h *Handler) GetConferenceLinkByTimeSlot(w http.ResponseWriter, r *http.Req
 		link, err := h.ConferenceService.GetConferenceLinkByTimeSlotID(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get conf link failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
 			return
 		}
 		if link == nil {
-			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference link not found"})
+			httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference link not found"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, link)
+		httputil.WriteJSON(w, http.StatusOK, link)
 		return
 	}
-	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference link not found"})
+	httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference link not found"})
 }

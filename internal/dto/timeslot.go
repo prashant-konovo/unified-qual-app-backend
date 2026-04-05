@@ -111,3 +111,19 @@ func SlotFromListRowSimple(s qs.TimeSlotListRow) map[string]any {
 	}
 	return item
 }
+
+// BuildTimeSlotResponse returns the timeslot fields matching legacy getTimeSlotByIdForCancelReschedule response.
+func BuildTimeSlotResponse(ts *qs.TimeSlot) map[string]any {
+return map[string]any{
+"id":                     ts.ID,
+"projectId":              ts.ProjectID,
+"isInvalidatedInterview": ts.IsInvalidatedInterview,
+"isInvalidateEmailSent":  ts.IsInvalidateEmailSent,
+"invalidationReasonCode": NullStr(ts.InvalidationReasonCode),
+"startTime":              ts.StartTime,
+"endTime":                ts.EndTime,
+"statusId":               ts.StatusID,
+"duration":               ts.Duration,
+"isInvalid":              ts.IsInvalid,
+}
+}

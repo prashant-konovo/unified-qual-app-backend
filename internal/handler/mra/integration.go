@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 
-	"github.com/InCrowd/unified-qual-api/internal/validate"
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 )
 
 // ──────────────────────────────────────────────
@@ -24,7 +24,7 @@ import (
 
 func (h *Handler) ThirdPartyIntegrateMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ParticipantService.Available() {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "repository not available",
 			"errorMessage": "An error occured in third party integration",
 		})
@@ -49,14 +49,14 @@ func (h *Handler) ThirdPartyIntegrateMRA(w http.ResponseWriter, r *http.Request)
 	)
 	if err != nil {
 		slog.Error("third party integrate mra failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured in third party integration",
 		})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"responder":    insertID,
 		"QContactr6":   fmt.Sprintf("walid.samaha.01+%d@gmail.com", insertID),
 		"QContactr7":   "81702668",
@@ -87,8 +87,8 @@ func (h *Handler) LogFrontEndEventMRA(w http.ResponseWriter, r *http.Request) {
 		QsPath              any    `json:"qsPath"`
 		RespondentIdentifer any    `json:"respondentIdentifer"`
 	}
-	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -118,7 +118,7 @@ func (h *Handler) LogFrontEndEventMRA(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) QualEligibilityMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ParticipantService.TimeSlotAvailable() {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "repository not available",
 			"errorMessage": "repository not available",
 		})
@@ -131,8 +131,8 @@ func (h *Handler) QualEligibilityMRA(w http.ResponseWriter, r *http.Request) {
 		Reason         string `json:"reason"`
 		Status         string `json:"status"`
 	}
-	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -152,7 +152,7 @@ func (h *Handler) QualEligibilityMRA(w http.ResponseWriter, r *http.Request) {
 		validationErrors = append(validationErrors, "status must be ELIGIBLE or INELIGIBLE")
 	}
 	if len(validationErrors) > 0 {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"error": strings.Join(validationErrors, ", "),
 		})
 		return
@@ -196,7 +196,7 @@ func (h *Handler) QualEligibilityMRA(w http.ResponseWriter, r *http.Request) {
 		failedIDs = []any{}
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"success":       len(failedIDs) == 0,
 		"processed_ids": processedIDs,
 		"failed_ids":    failedIDs,

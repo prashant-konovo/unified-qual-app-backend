@@ -6,11 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
-	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
 
 // ──────────────────────────────────────────────
@@ -25,19 +24,19 @@ import (
 // Contract-identical with legacy InCrowdAPI: GET /v1/time_slot/:tsId/moderators
 // Response: flat array of moderator objects
 func (h *Handler) GetTimeslotModerators(w http.ResponseWriter, r *http.Request) {
-	tsID, err := validate.ParseIDParam(r, "tsId")
+	tsID, err := dto.ParseIDParam(r, "tsId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := support.ResolveSource(r)
+	source := httputil.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		mods, err := h.SurveyService.GetModeratorsForTimeSlot(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get ts mods failed", "error", err)
 		}
-		support.WriteJSON(w, http.StatusOK, mods)
+		httputil.WriteJSON(w, http.StatusOK, mods)
 		return
 	}
 	if h.InterviewService.TimeSlotAvailable() {
@@ -45,29 +44,29 @@ func (h *Handler) GetTimeslotModerators(w http.ResponseWriter, r *http.Request) 
 		if err != nil {
 			slog.Error("get qs ts mods failed", "error", err)
 		}
-		support.WriteJSON(w, http.StatusOK, mods)
+		httputil.WriteJSON(w, http.StatusOK, mods)
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, []any{})
+	httputil.WriteJSON(w, http.StatusOK, []any{})
 }
 
 // GetTimeslotModeratorOptionsExt returns possible moderators for a timeslot (extended).
 // Contract-identical with legacy InCrowdAPI: GET /v1/time_slot/:tsId/moderator_options
 // Response: flat array of moderator option objects
 func (h *Handler) GetTimeslotModeratorOptionsExt(w http.ResponseWriter, r *http.Request) {
-	tsID, err := validate.ParseIDParam(r, "tsId")
+	tsID, err := dto.ParseIDParam(r, "tsId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := support.ResolveSource(r)
+	source := httputil.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		mods, err := h.SurveyService.GetPossibleModeratorsForTimeSlot(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get possible mods failed", "error", err)
 		}
-		support.WriteJSON(w, http.StatusOK, mods)
+		httputil.WriteJSON(w, http.StatusOK, mods)
 		return
 	}
 	if h.ModeratorService.QsUserAvailable() {
@@ -89,36 +88,36 @@ func (h *Handler) GetTimeslotModeratorOptionsExt(w http.ResponseWriter, r *http.
 				"isAssigned": assigned[m.ID],
 			})
 		}
-		support.WriteJSON(w, http.StatusOK, result)
+		httputil.WriteJSON(w, http.StatusOK, result)
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, []any{})
+	httputil.WriteJSON(w, http.StatusOK, []any{})
 }
 
 // AssignTimeslotModerator assigns a moderator to a timeslot.
 // Contract-identical with legacy InCrowdAPI: POST /v1/time_slot/:tsId/moderators
 // Response: flat array of moderator objects (200, not 201)
 func (h *Handler) AssignTimeslotModerator(w http.ResponseWriter, r *http.Request) {
-	tsID, err := validate.ParseIDParam(r, "tsId")
+	tsID, err := dto.ParseIDParam(r, "tsId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	var req struct {
 		ModeratorID int64 `json:"moderatorId"`
 		IsHost      bool  `json:"isHost"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
-	source := support.ResolveSource(r)
+	source := httputil.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		_, err := h.SurveyService.AssignModeratorToTimeSlot(r.Context(), tsID, req.ModeratorID, req.IsHost)
 		if err != nil {
 			slog.Error("assign mod failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "assign failed"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "assign failed"})
 			return
 		}
 		// Return updated moderators list (legacy returns array)
@@ -126,19 +125,19 @@ func (h *Handler) AssignTimeslotModerator(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			slog.Error("get mods after assign failed", "error", err)
 		}
-		support.WriteJSON(w, http.StatusOK, mods)
+		httputil.WriteJSON(w, http.StatusOK, mods)
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
 }
 
 // UnassignTimeslotModerator removes a moderator from a timeslot.
 // Contract-identical with legacy InCrowdAPI: DELETE /v1/time_slot/:tsId/moderators/:modId
 // Response: flat array of remaining moderator objects
 func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Request) {
-	tsID, _ := validate.ParseIDParam(r, "tsId")
-	modID, _ := validate.ParseIDParam(r, "modId")
-	source := support.ResolveSource(r)
+	tsID, _ := dto.ParseIDParam(r, "tsId")
+	modID, _ := dto.ParseIDParam(r, "modId")
+	source := httputil.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		// Hook: ModeratorTimeSlot.beforeDeleteHooks — cleanup calendar + invitations
@@ -162,7 +161,7 @@ func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Reque
 
 		if err := h.SurveyService.RemoveModeratorFromTimeSlot(r.Context(), tsID, modID); err != nil {
 			slog.Error("unassign mod failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "unassign failed"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "unassign failed"})
 			return
 		}
 		// Return remaining moderators (legacy returns array)
@@ -170,19 +169,19 @@ func (h *Handler) UnassignTimeslotModerator(w http.ResponseWriter, r *http.Reque
 		if err != nil {
 			slog.Error("get mods after unassign failed", "error", err)
 		}
-		support.WriteJSON(w, http.StatusOK, mods)
+		httputil.WriteJSON(w, http.StatusOK, mods)
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
 }
 
 // GetTimeslotObservers returns observers for a timeslot.
 // Contract-identical with legacy InCrowdAPI: GET /v1/time_slot/:tsId/observers
 // Response: {"observers": [...]}
 func (h *Handler) GetTimeslotObservers(w http.ResponseWriter, r *http.Request) {
-	tsID, err := validate.ParseIDParam(r, "tsId")
+	tsID, err := dto.ParseIDParam(r, "tsId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -197,19 +196,19 @@ func (h *Handler) GetTimeslotObservers(w http.ResponseWriter, r *http.Request) {
 				"id": o.ID, "email": o.Email, "timeSlotId": dto.NullInt64(o.TimeSlotID),
 			})
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"observers": []any{}})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"observers": []any{}})
 }
 
 // UpdateTimeslotObservers adds/removes observers for a timeslot.
 // Contract-identical with legacy InCrowdAPI: PUT /v1/time_slot/:tsId/observers
 // Response: {"observers": [...]}
 func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request) {
-	tsID, err := validate.ParseIDParam(r, "tsId")
+	tsID, err := dto.ParseIDParam(r, "tsId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	var req struct {
@@ -217,8 +216,8 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 		ToAdd     []string `json:"toAdd"`
 		ToDelete  []string `json:"toDelete"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -248,7 +247,7 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 		// Core DB operation: add/remove observers
 		if err := h.SurveyService.PutObserversForTimeSlot(ctx, req.ProjectID, tsID, req.ToAdd, req.ToDelete); err != nil {
 			slog.Error("update observers failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
 
@@ -293,10 +292,10 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 				"id": o.ID, "email": o.Email, "timeSlotId": dto.NullInt64(o.TimeSlotID),
 			})
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"observers": result})
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
 }
 
 // ──────────────────────────────────────────────

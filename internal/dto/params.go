@@ -1,0 +1,44 @@
+package dto
+
+import (
+"net/http"
+"strconv"
+
+"github.com/go-chi/chi/v5"
+)
+
+// ParamError is returned by URL/query param parsing helpers.
+type ParamError struct {
+Param string
+Msg   string
+}
+
+func (e *ParamError) Error() string {
+return e.Param + " " + e.Msg
+}
+
+// ParseIDParam parses a chi URL parameter as int64.
+// Returns 0 and an error if the parameter is missing or not a valid integer.
+func ParseIDParam(r *http.Request, param string) (int64, error) {
+raw := chi.URLParam(r, param)
+if raw == "" {
+return 0, &ParamError{Param: param, Msg: "is required"}
+}
+id, err := strconv.ParseInt(raw, 10, 64)
+if err != nil {
+return 0, &ParamError{Param: param, Msg: "must be a valid integer"}
+}
+if id <= 0 {
+return 0, &ParamError{Param: param, Msg: "must be a positive integer"}
+}
+return id, nil
+}
+
+// ParseStringParam returns a chi URL parameter, or an error if empty.
+func ParseStringParam(r *http.Request, param string) (string, error) {
+raw := chi.URLParam(r, param)
+if raw == "" {
+return "", &ParamError{Param: param, Msg: "is required"}
+}
+return raw, nil
+}

@@ -8,12 +8,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
-	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
 
 // ──────────────────────────────────────────────
@@ -28,25 +27,25 @@ import (
 // Contract-identical with legacy InCrowdAPI: GET /v1/survey/:id
 // Response: flat survey object (not wrapped)
 func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
-	surveyID, err := validate.ParseIDParam(r, "id")
+	surveyID, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := support.ResolveSource(r)
+	source := httputil.ResolveSource(r)
 
 	if source == "iris" && h.SurveyService.IrisAvailable() {
 		s, err := h.SurveyService.GetSurvey(r.Context(), surveyID)
 		if err != nil {
 			slog.Error("iris survey get failed", "id", surveyID, "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if s == nil {
-			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+			httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
 			"id": s.ID, "subscriptionId": dto.NullInt64(s.SubscriptionID),
 			"surveyTypeId": s.SurveyTypeID, "namePublic": s.NamePublic,
 			"namePrivate": dto.NullStr(s.NamePrivate), "topicName": dto.NullStr(s.TopicName),
@@ -64,14 +63,14 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 		s, err := h.SurveyService.GetByID(r.Context(), surveyID)
 		if err != nil {
 			slog.Error("qs survey get failed", "id", surveyID, "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if s == nil {
-			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+			httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
 			"id": s.ID, "projectId": dto.NullInt64(s.ProjectID),
 			"title": s.Title, "status": s.Status,
 			"questions": json.RawMessage(s.Questions), "rules": json.RawMessage(s.Rules),
@@ -80,7 +79,7 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+	httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 }
 
 // ValidateSurvey checks if a survey can be fielded.
@@ -89,16 +88,16 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 // Success: 200 {"error":{"message":"ready","developerMessage":"...","warnings":[...],"status":"OK","code":200}}
 // Failure: 422 {"error":{"developerMessage":"...","errors":[...],"warnings":[...],"status":"EXPECTATION FAILED","code":417}}
 func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
-	surveyID, err := validate.ParseIDParam(r, "id")
+	surveyID, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.SurveyService.IrisAvailable() && support.ResolveSource(r) == "iris" {
+	if h.SurveyService.IrisAvailable() && httputil.ResolveSource(r) == "iris" {
 		errors, err := h.SurveyService.ValidateSurvey(r.Context(), surveyID)
 		if err != nil {
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "validation failed"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "validation failed"})
 			return
 		}
 		warnings := h.SurveyService.ValidateSurveyWarnings(r.Context(), surveyID)
@@ -110,7 +109,7 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if len(errors) == 0 {
-			support.WriteJSON(w, http.StatusOK, map[string]any{
+			httputil.WriteJSON(w, http.StatusOK, map[string]any{
 				"error": map[string]any{
 					"message":          "ready",
 					"developerMessage": "This survey is okay to go live",
@@ -120,7 +119,7 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 				},
 			})
 		} else {
-			support.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			httputil.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{
 				"error": map[string]any{
 					"developerMessage": "this survey is not ready to go live",
 					"errors":           errors,
@@ -137,10 +136,10 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 	if h.SurveyService.QsAvailable() {
 		s, _ := h.SurveyService.GetByID(r.Context(), surveyID)
 		if s == nil {
-			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+			httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
 			"error": map[string]any{
 				"message":          "ready",
 				"developerMessage": "This survey is okay to go live",
@@ -151,21 +150,21 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+	httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 }
 
 // GetSurveyCrowds returns crowds assigned to a survey.
 // Legacy contract: {"surveyId": id, "surveyCrowds": [adminJson|basicHonoJson|...]}
 // Query params: jsonType (admin|hono|subscriber|minimalJson), survey_detail_crowds (true/false)
 func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
-	surveyID, err := validate.ParseIDParam(r, "id")
+	surveyID, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if !h.SurveyService.IrisAvailable() || support.ResolveSource(r) != "iris" {
-		support.WriteJSON(w, http.StatusOK, map[string]any{"surveyId": surveyID, "surveyCrowds": []any{}})
+	if !h.SurveyService.IrisAvailable() || httputil.ResolveSource(r) != "iris" {
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"surveyId": surveyID, "surveyCrowds": []any{}})
 		return
 	}
 
@@ -179,7 +178,7 @@ func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 	surveyCrowds, err := h.SurveyService.GetSurveyCrowds(r.Context(), surveyID)
 	if err != nil {
 		slog.Error("get survey crowds failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 
@@ -207,7 +206,7 @@ func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 		items = append(items, item)
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"surveyId":     surveyID,
 		"surveyCrowds": items,
 	})
@@ -496,19 +495,19 @@ func (h *Handler) buildCrowdAdminJSONAvailable(ctx context.Context, crowdID, sur
 // Contract-identical with legacy InCrowdAPI: PUT /v1/survey/:id/close
 // Response: flat survey object (survey.refresh.adminJson)
 func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
-	surveyID, err := validate.ParseIDParam(r, "id")
+	surveyID, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.SurveyService.IrisAvailable() && support.ResolveSource(r) == "iris" {
+	if h.SurveyService.IrisAvailable() && httputil.ResolveSource(r) == "iris" {
 		if err := h.SurveyService.CloseSurvey(r.Context(), surveyID); err != nil {
 			slog.Error("close survey failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"closed": true, "id": surveyID, "source": "iris"})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"closed": true, "id": surveyID, "source": "iris"})
 		return
 	}
 
@@ -516,13 +515,13 @@ func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
 	if h.SurveyService.QsAvailable() {
 		if err := h.SurveyService.Update(r.Context(), surveyID, "", "closed", nil, nil); err != nil {
 			slog.Error("qs close survey failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"closed": true, "id": surveyID, "source": "qs"})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"closed": true, "id": surveyID, "source": "qs"})
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 // ToggleSurveyFavorite toggles favorite status on a survey.
@@ -530,9 +529,9 @@ func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
 // Request: {"favorite": true/false}  (userId derived from JWT)
 // Response: full survey subscriberJson object
 func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
-	surveyID, err := validate.ParseIDParam(r, "id")
+	surveyID, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -540,13 +539,13 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Favorite bool `json:"favorite"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
 	if !h.SurveyService.IrisAvailable() {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "database unavailable"})
+		httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "database unavailable"})
 		return
 	}
 
@@ -560,7 +559,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if callerUserID == 0 {
-		support.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "could not resolve user identity"})
+		httputil.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "could not resolve user identity"})
 		return
 	}
 
@@ -568,11 +567,11 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	s, err := h.SurveyService.GetSurvey(r.Context(), surveyID)
 	if err != nil {
 		slog.Error("get survey failed", "id", surveyID, "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 	if s == nil {
-		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": fmt.Sprintf("survey not found: %d", surveyID)})
+		httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": fmt.Sprintf("survey not found: %d", surveyID)})
 		return
 	}
 
@@ -589,7 +588,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	if !isAdmin {
 		canRead, _ := h.SurveyService.UserCanReadProject(r.Context(), callerUserID, s.ProjectID)
 		if !canRead {
-			support.WriteJSON(w, http.StatusForbidden, map[string]any{
+			httputil.WriteJSON(w, http.StatusForbidden, map[string]any{
 				"error": map[string]any{
 					"userMessage":      "You're not allowed to adjust other peoples favorites",
 					"developerMessage": "Access is denied to users who don't have the correct permissions to perform a task.",
@@ -604,7 +603,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	// Toggle the favorite
 	if err := h.SurveyService.ToggleFavorite(r.Context(), surveyID, callerUserID, req.Favorite); err != nil {
 		slog.Error("toggle favorite failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to toggle favorite"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to toggle favorite"})
 		return
 	}
 
@@ -612,7 +611,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	s, _ = h.SurveyService.GetSurvey(r.Context(), surveyID)
 
 	// Build subscriberJson-equivalent response
-	support.WriteJSON(w, http.StatusOK, h.buildSubscriberJSON(r, s, callerUserID))
+	httputil.WriteJSON(w, http.StatusOK, h.buildSubscriberJSON(r, s, callerUserID))
 }
 
 // buildSubscriberJSON builds a legacy-compatible subscriberJson response for a survey.

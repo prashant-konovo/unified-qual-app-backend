@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/service"
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 )
 
 // Handler holds the remaining (non-auth) handler methods.
@@ -33,7 +33,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	support.WriteJSON(w, httpCode, map[string]any{
+	httputil.WriteJSON(w, httpCode, map[string]any{
 		"status":      status,
 		"version":     "1.2.0",
 		"environment": h.Cfg.Environment,

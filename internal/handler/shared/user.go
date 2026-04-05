@@ -5,11 +5,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
-	"github.com/InCrowd/unified-qual-api/internal/validate"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -25,26 +24,26 @@ import (
 // Contract-identical with legacy QS Tool: GET /user/user-info/{user_id}
 // Response: flat user object with account/client selections
 func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
-	userID, err := validate.ParseIDParam(r, "id")
+	userID, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
 		return
 	}
-	source := support.ResolveSource(r)
+	source := httputil.ResolveSource(r)
 
 	if source == "iris" && h.UserService.IrisAvailable() {
 		u, err := h.UserService.GetIrisUserByID(r.Context(), userID)
 		if err != nil || u == nil {
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        "An error occured while fetching user info",
 				"errorMessage": "An error occured while fetching user info",
 			})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
 			"id": u.ID, "first_name": u.FirstName, "last_name": u.LastName,
 			"email": dto.NullStr(u.Email), "source": "iris",
 		})
@@ -54,7 +53,7 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	if h.UserService.QsAvailable() {
 		u, err := h.UserService.GetByID(r.Context(), userID)
 		if err != nil || u == nil {
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        "An error occured while fetching user info",
 				"errorMessage": "An error occured while fetching user info",
 			})
@@ -109,10 +108,10 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		support.WriteJSON(w, http.StatusOK, resp)
+		httputil.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
-	support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+	httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 		"error":        "An error occured while fetching user info",
 		"errorMessage": "An error occured while fetching user info",
 	})
@@ -122,9 +121,9 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: PUT /v1/user/:id
 // Response: flat user object
 func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
-	userID, err := validate.ParseIDParam(r, "id")
+	userID, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	var req struct {
@@ -133,23 +132,23 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		TimeZone  string `json:"timeZone"`
 		Source    string `json:"source"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
 	if req.Source == "qs" && h.UserService.QsAvailable() {
 		if err := h.UserService.Update(r.Context(), userID, req.FirstName, req.LastName, req.TimeZone); err != nil {
 			slog.Error("update qs user failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": userID, "source": "qs"})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": userID, "source": "qs"})
 		return
 	}
 
 	// IRIS user update not yet supported via this endpoint
-	support.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": userID, "source": "iris"})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": userID, "source": "iris"})
 }
 
 // CheckPasswordMatches validates a password hash (stub — real check via Cognito).
@@ -157,7 +156,7 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 // Response: {"passwordMatches": bool}
 func (h *Handler) CheckPasswordMatches(w http.ResponseWriter, r *http.Request) {
 	// Password matching is handled by Cognito, not by direct DB comparison
-	support.WriteJSON(w, http.StatusOK, map[string]any{"passwordMatch": true})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"passwordMatch": true})
 }
 
 // ──────────────────────────────────────────────
@@ -180,8 +179,8 @@ func (h *Handler) CreateEventLog(w http.ResponseWriter, r *http.Request) {
 		TimeSlotID  int64  `json:"timeSlotId"`
 		MetaData    string `json:"metaData"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -206,7 +205,7 @@ func (h *Handler) CreateEventLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("event logged", "type", req.EventType, "userId", req.UserID, "projectId", req.ProjectID)
-	support.WriteJSON(w, http.StatusOK, map[string]any{"message": "Event Logs send successfully"})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"message": "Event Logs send successfully"})
 }
 
 // ──────────────────────────────────────────────
@@ -232,7 +231,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 	if v := q.Get("accountId"); v != "" {
 		aid, err := strconv.ParseInt(v, 10, 64)
 		if err != nil {
-			support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid accountId"})
+			httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid accountId"})
 			return
 		}
 		filter.AccountID = aid
@@ -256,7 +255,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 	// The route is already behind RequireRoles("admin","manager") so that's covered.
 	// Legacy controller: if no ?id and no ?accountId → return empty.
 	if filter.ID == "" && filter.AccountID == 0 {
-		support.WriteJSON(w, http.StatusOK, []map[string]any{})
+		httputil.WriteJSON(w, http.StatusOK, []map[string]any{})
 		return
 	}
 
@@ -266,7 +265,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 		sfProjects, err := h.SurveyService.ListSalesforceProjects(r.Context(), filter)
 		if err != nil {
 			slog.Error("iris sf projects failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		for _, s := range sfProjects {
@@ -299,7 +298,7 @@ func (h *Handler) ListSalesforceProjects(w http.ResponseWriter, r *http.Request)
 	if result == nil {
 		result = []map[string]any{}
 	}
-	support.WriteJSON(w, http.StatusOK, result)
+	httputil.WriteJSON(w, http.StatusOK, result)
 }
 
 // ──────────────────────────────────────────────
@@ -316,7 +315,7 @@ func (h *Handler) GetUserEmail(w http.ResponseWriter, r *http.Request) {
 	cognitoID := chi.URLParam(r, "id")
 
 	if !h.UserService.QsAvailable() {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "no database available",
 		})
@@ -325,14 +324,14 @@ func (h *Handler) GetUserEmail(w http.ResponseWriter, r *http.Request) {
 
 	email, err := h.UserService.GetEmailByCognitoID(r.Context(), cognitoID)
 	if err != nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"email": email,
 	})
 }
@@ -354,13 +353,13 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 		UserID               int64  `json:"userId"`
 		UserSelectedTimeZone string `json:"userSelectedTimeZone"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
 	if !h.UserService.QsAvailable() {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "An error occured while creating a new user",
 		})
@@ -368,7 +367,7 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.UserService.UpdateTimeZone(r.Context(), req.UserID, req.UserSelectedTimeZone); err != nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while creating a new user",
 		})
@@ -376,5 +375,5 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy returns {data: result["records"]} but UPDATE has no records → empty object
-	support.WriteJSON(w, http.StatusOK, map[string]any{})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{})
 }

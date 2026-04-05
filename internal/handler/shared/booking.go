@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 
-	"github.com/InCrowd/unified-qual-api/internal/validate"
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -24,7 +24,7 @@ import (
 func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.BookingService.Available() {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
@@ -49,7 +49,7 @@ func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
 	slots, total, err := h.BookingService.ListTimeSlots(ctx, page, pageSize, projectID, nil, nil, nil, nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "list bookings failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list bookings"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list bookings"})
 		return
 	}
 
@@ -84,7 +84,7 @@ func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
 		result = append(result, item)
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    result,
 		"meta": map[string]any{
@@ -97,19 +97,19 @@ func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 	// Booking creation is handled via ScheduleInterview which links respondent to timeslot
-	support.WriteJSON(w, http.StatusCreated, map[string]any{"message": "use POST /interviews/schedule to create bookings"})
+	httputil.WriteJSON(w, http.StatusCreated, map[string]any{"message": "use POST /interviews/schedule to create bookings"})
 }
 
 func (h *Handler) GetBookingsByUser(w http.ResponseWriter, r *http.Request) {
 	// This returns timeslots linked to a specific respondent
 	if !h.BookingService.Available() {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	// userId here would be a responder ID in the QS context
 	userID := chi.URLParam(r, "userId")
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    []map[string]any{},
 		"message": fmt.Sprintf("bookings for user %s — respondent-level lookup pending", userID),
@@ -120,21 +120,21 @@ func (h *Handler) UpdateBooking(w http.ResponseWriter, r *http.Request) {
 	// Booking update is a timeslot status change
 	ctx := r.Context()
 	if !h.BookingService.Available() {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
-	tsID, err := validate.ParseIDParam(r, "id")
+	tsID, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	var body struct {
 		StatusID *int `json:"statusId"`
 	}
-	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -145,30 +145,30 @@ func (h *Handler) UpdateBooking(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.BookingService.UpdateTimeSlot(ctx, tsID, fields); err != nil {
 		slog.ErrorContext(ctx, "update booking failed", "error", err, "id", tsID)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{"id": tsID, "updated": true, "source": "qs"})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"id": tsID, "updated": true, "source": "qs"})
 }
 
 func (h *Handler) UpdateBookingReward(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.BookingService.Available() {
-		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
-	bookingID, err := validate.ParseIDParam(r, "id")
+	bookingID, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	var req struct {
 		RewardPoints int    `json:"rewardPoints"`
 		RewardStatus string `json:"rewardStatus"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 	if req.RewardStatus == "" {
@@ -176,10 +176,10 @@ func (h *Handler) UpdateBookingReward(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.BookingService.UpsertReward(ctx, bookingID, req.RewardPoints, req.RewardStatus); err != nil {
 		slog.Error("update booking reward", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to update reward"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to update reward"})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"id":           bookingID,
 		"rewardPoints": req.RewardPoints,
 		"rewardStatus": req.RewardStatus,

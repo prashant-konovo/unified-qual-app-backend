@@ -5,11 +5,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
-	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
 
 // ──────────────────────────────────────────────
@@ -25,7 +24,7 @@ import (
 // Query params: brandId, subscriptionId, accountId, includeAnyProfession, lang, limit, offset
 func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 	if !h.SurveyService.IrisAvailable() {
-		support.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}, "limit": nil, "offset": nil, "totalCount": 0})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}, "limit": nil, "offset": nil, "totalCount": 0})
 		return
 	}
 
@@ -83,7 +82,7 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 	markets, totalCount, err := h.SurveyService.ListMarkets(r.Context(), filter)
 	if err != nil {
 		slog.Error("list markets failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 
@@ -121,7 +120,7 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"markets":    result,
 		"limit":      limitVal,
 		"offset":     offsetVal,
@@ -138,7 +137,7 @@ func (h *Handler) ListMarketsNPI(w http.ResponseWriter, r *http.Request) {
 		markets, err := h.SurveyService.ListMarketsWithNPI(r.Context())
 		if err != nil {
 			slog.Error("list npi markets failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(markets))
@@ -147,19 +146,19 @@ func (h *Handler) ListMarketsNPI(w http.ResponseWriter, r *http.Request) {
 				"id": m.ID, "name": m.Name, "canInterview": m.CanInterview,
 			})
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"markets": result})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"markets": result})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}})
 }
 
 // GetCrowdableAttributes returns crowdable attributes for a market.
 // Contract-identical with legacy InCrowdAPI: GET /v1/market/:id/crowdable_attributes
 // Response: {"attributes": [...]}
 func (h *Handler) GetCrowdableAttributes(w http.ResponseWriter, r *http.Request) {
-	marketID, err := validate.ParseIDParam(r, "id")
+	marketID, err := dto.ParseIDParam(r, "id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -167,13 +166,13 @@ func (h *Handler) GetCrowdableAttributes(w http.ResponseWriter, r *http.Request)
 		attrs, err := h.SurveyService.GetCrowdableAttributes(r.Context(), marketID)
 		if err != nil {
 			slog.Error("crowdable attrs failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"attributes": attrs})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"attributes": attrs})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"attributes": []any{}})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"attributes": []any{}})
 }
 
 // ──────────────────────────────────────────────

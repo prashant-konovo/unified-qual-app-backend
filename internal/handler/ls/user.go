@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 
-	"github.com/InCrowd/unified-qual-api/internal/validate"
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -25,8 +25,8 @@ func (h *Handler) SendPasswordResetEmail(w http.ResponseWriter, r *http.Request)
 	var req struct {
 		Email string `json:"email" validate:"required,email"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -55,7 +55,7 @@ func (h *Handler) SendPasswordResetEmail(w http.ResponseWriter, r *http.Request)
 
 	// Return legacy Lambda proxy result shape
 	slog.Info("password reset requested", "email", req.Email)
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":          200,
 		"headers":         map[string]string{"Content-Type": "application/json"},
 		"body":            map[string]any{"message": "Password reset email sent"},
@@ -67,8 +67,8 @@ func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request)
 	var req struct {
 		Email string `json:"email"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -76,14 +76,14 @@ func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request)
 		result, err := h.UserService.CheckUserIsQsToolAndI2(r.Context(), req.Email)
 		if err != nil {
 			slog.Error("check qs/i2 failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": err.Error(),
 			})
 			return
 		}
 		// Return legacy Lambda proxy result shape
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
 			"status":          200,
 			"headers":         map[string]string{"Content-Type": "application/json"},
 			"body":            result,
@@ -91,7 +91,7 @@ func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request)
 		})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":          200,
 		"headers":         map[string]string{"Content-Type": "application/json"},
 		"body":            map[string]any{"isQsTool": false, "isI2": false, "exists": false},
@@ -100,14 +100,14 @@ func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) CheckUserCommPreference(w http.ResponseWriter, r *http.Request) {
-	userID, err := validate.ParseIDParam(r, "userId")
+	userID, err := dto.ParseIDParam(r, "userId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if !h.UserService.QsAvailable() {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "no database available",
 		})
@@ -118,7 +118,7 @@ func (h *Handler) CheckUserCommPreference(w http.ResponseWriter, r *http.Request
 	pref, err := h.UserService.GetUserCommPreference(r.Context(), userID)
 	if err != nil {
 		slog.Error("get comm pref failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
@@ -126,7 +126,7 @@ func (h *Handler) CheckUserCommPreference(w http.ResponseWriter, r *http.Request
 	}
 
 	// Legacy returns {data: records} where records = [{allow_contact_by_email: 0/1}]
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"data": pref,
 	})
 }
@@ -138,8 +138,8 @@ func (h *Handler) UnsubscribeUser(w http.ResponseWriter, r *http.Request) {
 		PmUserID            string `json:"pmUserId"`
 		AllowContactByEmail int    `json:"allowContactByEmail"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -149,7 +149,7 @@ func (h *Handler) UnsubscribeUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !h.UserService.QsAvailable() {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
 			"errorMessage": "no database available",
 		})
@@ -160,7 +160,7 @@ func (h *Handler) UnsubscribeUser(w http.ResponseWriter, r *http.Request) {
 	result, err := h.UserService.UpdateUserCommPreference(r.Context(), userIDStr, req.PmUserID, req.AllowContactByEmail)
 	if err != nil {
 		slog.Error("unsubscribe failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
@@ -168,5 +168,5 @@ func (h *Handler) UnsubscribeUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy returns full transaction result array
-	support.WriteJSON(w, http.StatusOK, result)
+	httputil.WriteJSON(w, http.StatusOK, result)
 }

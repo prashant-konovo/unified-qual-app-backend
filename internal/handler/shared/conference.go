@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
-	"github.com/InCrowd/unified-qual-api/internal/validate"
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -29,7 +29,7 @@ import (
 // Contract-identical with legacy InCrowdAPI: POST /v1/conf/:confId/login
 // Response: flat conference data object
 func (h *Handler) ConferenceLogin(w http.ResponseWriter, r *http.Request) {
-	confHashStr, _ := validate.ParseStringParam(r, "confId")
+	confHashStr, _ := dto.ParseStringParam(r, "confId")
 	var req struct {
 		Pin string `json:"pin"`
 	}
@@ -39,20 +39,20 @@ func (h *Handler) ConferenceLogin(w http.ResponseWriter, r *http.Request) {
 		data, err := h.ConferenceService.Login(r.Context(), confHashStr, req.Pin)
 		if err != nil {
 			if strings.Contains(err.Error(), "invalid pin") {
-				support.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid pin"})
+				httputil.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid pin"})
 				return
 			}
 			if strings.Contains(err.Error(), "not found") {
-				support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
+				httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 				return
 			}
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "login failed"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "login failed"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, data)
+		httputil.WriteJSON(w, http.StatusOK, data)
 		return
 	}
-	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
+	httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 }
 
 // GetConferenceParticipants returns participants in a conference.
@@ -60,18 +60,18 @@ func (h *Handler) ConferenceLogin(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: GET /v1/conf/:confId/participants
 // Response: {"participants": [...], "timeSlot": {startTime, endTime, conferencePin, projectId, id}}
 func (h *Handler) GetConferenceParticipants(w http.ResponseWriter, r *http.Request) {
-	confHashStr, _ := validate.ParseStringParam(r, "confId")
+	confHashStr, _ := dto.ParseStringParam(r, "confId")
 
 	if h.ConferenceService.Available() {
 		ci, err := h.ConferenceService.GetByHash(r.Context(), confHashStr)
 		if err != nil || ci == nil {
-			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
+			httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 			return
 		}
 		participants, err := h.ConferenceService.GetParticipants(r.Context(), ci.TimeSlotID)
 		if err != nil {
 			slog.Error("get participants failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if participants == nil {
@@ -93,13 +93,13 @@ func (h *Handler) GetConferenceParticipants(w http.ResponseWriter, r *http.Reque
 			}
 		}
 
-		support.WriteJSON(w, http.StatusOK, map[string]any{
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
 			"participants": participants,
 			"timeSlot":     tsObj,
 		})
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, map[string]any{"participants": []any{}, "timeSlot": nil})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"participants": []any{}, "timeSlot": nil})
 }
 
 // GetMeetingMetadata returns meeting metadata.
@@ -107,19 +107,19 @@ func (h *Handler) GetConferenceParticipants(w http.ResponseWriter, r *http.Reque
 // Response: flat meeting metadata object
 func (h *Handler) GetMeetingMetadata(w http.ResponseWriter, r *http.Request) {
 	hash := r.URL.Query().Get("hash")
-	bearerToken := support.ExtractBearerToken(r)
+	bearerToken := httputil.ExtractBearerToken(r)
 
 	// Try Conference Service for live metadata
 	if hash == "" && h.ConferenceService.ConferenceConfigured() {
 		meta, err := h.ConferenceService.GetConferenceMetadata(r.Context(), bearerToken)
 		if err == nil && meta != nil {
-			support.WriteJSON(w, http.StatusOK, meta)
+			httputil.WriteJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
 
 	if hash == "" {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "hash parameter required"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "hash parameter required"})
 		return
 	}
 
@@ -127,26 +127,26 @@ func (h *Handler) GetMeetingMetadata(w http.ResponseWriter, r *http.Request) {
 		meta, err := h.ConferenceService.GetMeetingMetadata(r.Context(), hash)
 		if err != nil {
 			slog.Error("get meeting metadata failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if meta == nil {
-			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "meeting not found"})
+			httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "meeting not found"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, meta)
+		httputil.WriteJSON(w, http.StatusOK, meta)
 		return
 	}
-	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "meeting not found"})
+	httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "meeting not found"})
 }
 
 // MeetingJoin handles join meeting by join ID.
 // Contract-identical with legacy InCrowdAPI: POST /v1/meeting/:joinId/join
 // Response: flat meeting metadata object
 func (h *Handler) MeetingJoin(w http.ResponseWriter, r *http.Request) {
-	joinID, err := validate.ParseStringParam(r, "joinId")
+	joinID, err := dto.ParseStringParam(r, "joinId")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -154,25 +154,25 @@ func (h *Handler) MeetingJoin(w http.ResponseWriter, r *http.Request) {
 	if h.ConferenceService.Available() {
 		meta, err := h.ConferenceService.GetMeetingMetadata(r.Context(), joinID)
 		if err == nil && meta != nil {
-			support.WriteJSON(w, http.StatusOK, meta)
+			httputil.WriteJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
-	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "meeting not found"})
+	httputil.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "meeting not found"})
 }
 
 // GetAttendeesByMeetingID returns attendees for a meeting.
 // Contract-identical with legacy InCrowdAPI: GET /v1/meeting/:meetingId/attendees
 // Response: passthrough from conference service
 func (h *Handler) GetAttendeesByMeetingID(w http.ResponseWriter, r *http.Request) {
-	meetingID, _ := validate.ParseStringParam(r, "meetingId")
-	bearerToken := support.ExtractBearerToken(r)
+	meetingID, _ := dto.ParseStringParam(r, "meetingId")
+	bearerToken := httputil.ExtractBearerToken(r)
 
 	// Try Conference Service for live attendee data
 	if h.ConferenceService.ConferenceConfigured() {
 		attendees, err := h.ConferenceService.GetConferenceAttendees(r.Context(), meetingID, bearerToken)
 		if err == nil && attendees != nil {
-			support.WriteJSON(w, http.StatusOK, attendees)
+			httputil.WriteJSON(w, http.StatusOK, attendees)
 			return
 		}
 		slog.Warn("conference service get attendees failed, falling back to DB", "error", err)
@@ -182,28 +182,28 @@ func (h *Handler) GetAttendeesByMeetingID(w http.ResponseWriter, r *http.Request
 		attendees, err := h.ConferenceService.GetAttendeesByMeetingID(r.Context(), meetingID)
 		if err != nil {
 			slog.Error("get attendees failed", "error", err)
-			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, attendees)
+		httputil.WriteJSON(w, http.StatusOK, attendees)
 		return
 	}
-	support.WriteJSON(w, http.StatusOK, []any{})
+	httputil.WriteJSON(w, http.StatusOK, []any{})
 }
 
 // GetRecordingStatus returns recording status for a meeting.
 // Contract-identical with legacy InCrowdAPI: GET /v1/meeting/:meetingId/recording
 // Response: passthrough from conference service
 func (h *Handler) GetRecordingStatus(w http.ResponseWriter, r *http.Request) {
-	meetingID, _ := validate.ParseStringParam(r, "meetingId")
-	bearerToken := support.ExtractBearerToken(r)
+	meetingID, _ := dto.ParseStringParam(r, "meetingId")
+	bearerToken := httputil.ExtractBearerToken(r)
 
 	// Call Conference Service for real recording status
 	if h.ConferenceService.ConferenceConfigured() {
 		status, err := h.ConferenceService.GetConferenceRecordingStatus(r.Context(), meetingID, bearerToken)
 		if err == nil && status != nil {
 			status["meetingId"] = meetingID
-			support.WriteJSON(w, http.StatusOK, status)
+			httputil.WriteJSON(w, http.StatusOK, status)
 			return
 		}
 		slog.Warn("conference service recording status failed", "meetingId", meetingID, "error", err)
@@ -213,7 +213,7 @@ func (h *Handler) GetRecordingStatus(w http.ResponseWriter, r *http.Request) {
 	if h.ConferenceService.Available() {
 		meta, _ := h.ConferenceService.GetMeetingMetadata(r.Context(), meetingID)
 		if meta != nil {
-			support.WriteJSON(w, http.StatusOK, map[string]any{
+			httputil.WriteJSON(w, http.StatusOK, map[string]any{
 				"meetingId":      meetingID,
 				"recording":      false,
 				"status":         "not_started",
@@ -224,7 +224,7 @@ func (h *Handler) GetRecordingStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"meetingId":     meetingID,
 		"recording":     false,
 		"status":        "not_started",
@@ -282,7 +282,7 @@ func (h *Handler) RecordingUploadCallback(w http.ResponseWriter, r *http.Request
 		_ = h.ConferenceService.UpdateRecordingStatus(r.Context(), meetingID, "available", req.Bucket, req.Key)
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"meetingId":    meetingID,
 		"recorded":     true,
 		"status":       "available",
@@ -296,7 +296,7 @@ func (h *Handler) RecordingUploadCallback(w http.ResponseWriter, r *http.Request
 // ──────────────────────────────────────────────
 
 func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
-	bearerToken := support.ExtractBearerToken(r)
+	bearerToken := httputil.ExtractBearerToken(r)
 
 	var req struct {
 		ProjectID      int64  `json:"projectId"`
@@ -305,8 +305,8 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 		TimeSlotID     int64  `json:"timeSlotId"`
 		ExternalID     string `json:"externalMeetingId"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -322,7 +322,7 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 		resp, err := h.ConferenceService.CreateConferenceMeeting(r.Context(), createReq, bearerToken)
 		if err != nil {
 			slog.Error("conference create meeting failed", "error", err)
-			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to create meeting: " + err.Error()})
+			httputil.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to create meeting: " + err.Error()})
 			return
 		}
 
@@ -331,7 +331,7 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 			_, _ = h.ConferenceService.CreateConferenceLink(r.Context(), req.TimeSlotID, req.ProjectID, resp.MeetingID)
 		}
 
-		support.WriteJSON(w, http.StatusCreated, map[string]any{
+		httputil.WriteJSON(w, http.StatusCreated, map[string]any{
 			"meetingId":         resp.MeetingID,
 			"joinUrl":           resp.JoinURL,
 			"phoneNumber":       resp.PhoneNumber,
@@ -341,7 +341,7 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "conference service not configured"})
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "conference service not configured"})
 }
 
 // ──────────────────────────────────────────────
@@ -354,8 +354,8 @@ func (h *Handler) CreateTranscriptionOrder(w http.ResponseWriter, r *http.Reques
 		MeetingID string `json:"meetingId"`
 		AudioURL  string `json:"audioUrl"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -363,17 +363,17 @@ func (h *Handler) CreateTranscriptionOrder(w http.ResponseWriter, r *http.Reques
 		order, err := h.ConferenceService.CreateTranscriptionOrder(r.Context(), req.AudioURL)
 		if err != nil {
 			slog.Error("castingwords create order failed", "error", err)
-			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "transcription order failed: " + err.Error()})
+			httputil.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "transcription order failed: " + err.Error()})
 			return
 		}
-		support.WriteJSON(w, http.StatusCreated, map[string]any{
+		httputil.WriteJSON(w, http.StatusCreated, map[string]any{
 			"orderId":   order.OrderID,
 			"meetingId": req.MeetingID,
 			"status":    order.Status,
 		})
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
 }
 
 func (h *Handler) GetTranscriptionStatus(w http.ResponseWriter, r *http.Request) {
@@ -382,13 +382,13 @@ func (h *Handler) GetTranscriptionStatus(w http.ResponseWriter, r *http.Request)
 	if h.ConferenceService.CastingWordsConfigured() {
 		order, err := h.ConferenceService.GetTranscriptionStatus(r.Context(), orderID)
 		if err != nil {
-			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to get status"})
+			httputil.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to get status"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, order)
+		httputil.WriteJSON(w, http.StatusOK, order)
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
 }
 
 func (h *Handler) GetTranscript(w http.ResponseWriter, r *http.Request) {
@@ -397,13 +397,13 @@ func (h *Handler) GetTranscript(w http.ResponseWriter, r *http.Request) {
 	if h.ConferenceService.CastingWordsConfigured() {
 		transcript, err := h.ConferenceService.GetTranscript(r.Context(), orderID)
 		if err != nil {
-			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to get transcript"})
+			httputil.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "failed to get transcript"})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"orderId": orderID, "transcript": transcript})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"orderId": orderID, "transcript": transcript})
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "transcription service not configured"})
 }
 
 // ──────────────────────────────────────────────
@@ -418,8 +418,8 @@ func (h *Handler) SendNotificationEmail(w http.ResponseWriter, r *http.Request) 
 		Type       string   `json:"type"`
 		ProjectID  int64    `json:"projectId"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -436,7 +436,7 @@ func (h *Handler) SendNotificationEmail(w http.ResponseWriter, r *http.Request) 
 		} else {
 			slog.Info("notification email sent via service",
 				"type", req.Type, "recipients", len(req.Recipients), "projectId", req.ProjectID)
-			support.WriteJSON(w, http.StatusOK, map[string]any{
+			httputil.WriteJSON(w, http.StatusOK, map[string]any{
 				"sent": true, "recipientCount": len(req.Recipients),
 				"type": req.Type, "projectId": req.ProjectID, "via": "notification-service",
 			})
@@ -447,7 +447,7 @@ func (h *Handler) SendNotificationEmail(w http.ResponseWriter, r *http.Request) 
 	// Fallback: log-only
 	slog.Info("notification email logged (service not configured or failed)",
 		"type", req.Type, "recipients", len(req.Recipients), "projectId", req.ProjectID)
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"sent": true, "recipientCount": len(req.Recipients),
 		"type": req.Type, "projectId": req.ProjectID,
 	})
@@ -464,27 +464,27 @@ func (h *Handler) SendSMS(w http.ResponseWriter, r *http.Request) {
 		From    string `json:"from"`
 		Message string `json:"message"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
 	if h.ConferenceService.SMSConfigured() {
 		if err := h.ConferenceService.SendSMS(r.Context(), req.To, req.From, req.Message); err != nil {
 			slog.Error("sms send failed", "error", err)
-			support.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "sms send failed: " + err.Error()})
+			httputil.WriteJSON(w, http.StatusBadGateway, map[string]any{"error": "sms send failed: " + err.Error()})
 			return
 		}
-		support.WriteJSON(w, http.StatusOK, map[string]any{"sent": true, "to": req.To})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"sent": true, "to": req.To})
 		return
 	}
-	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "sms service not configured"})
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "sms service not configured"})
 }
 
 func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 	meetingID := chi.URLParam(r, "meetingId")
 	action := chi.URLParam(r, "action")
-	bearerToken := support.ExtractBearerToken(r)
+	bearerToken := httputil.ExtractBearerToken(r)
 
 	// Log meeting action
 	if h.SurveyService.IrisAvailable() {
@@ -516,8 +516,8 @@ func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 		if err == nil && meta != nil {
 			meta["action"] = action
 			meta["actionResult"] = "success"
-			meta["actionTimestamp"] = support.Now()
-			support.WriteJSON(w, http.StatusOK, meta)
+			meta["actionTimestamp"] = httputil.Now()
+			httputil.WriteJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
@@ -528,15 +528,15 @@ func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 		if meta != nil {
 			meta["action"] = action
 			meta["actionResult"] = "success"
-			meta["actionTimestamp"] = support.Now()
-			support.WriteJSON(w, http.StatusOK, meta)
+			meta["actionTimestamp"] = httputil.Now()
+			httputil.WriteJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"meetingId": meetingID, "action": action,
-		"result": "success", "timestamp": support.Now(),
+		"result": "success", "timestamp": httputil.Now(),
 	})
 }
 
@@ -549,14 +549,14 @@ func (h *Handler) MeetingAction(w http.ResponseWriter, r *http.Request) {
 // Response: passthrough from conference service
 func (h *Handler) MeetingUniversalJoin(w http.ResponseWriter, r *http.Request) {
 	meetingID := chi.URLParam(r, "meetingId")
-	bearerToken := support.ExtractBearerToken(r)
+	bearerToken := httputil.ExtractBearerToken(r)
 
 	// Call Conference Service for real universal join
 	if h.ConferenceService.ConferenceConfigured() {
 		joinResp, err := h.ConferenceService.ConferenceUniversalJoin(r.Context(), meetingID, bearerToken)
 		if err == nil && joinResp != nil {
-			joinResp["joinTimestamp"] = support.Now()
-			support.WriteJSON(w, http.StatusOK, joinResp)
+			joinResp["joinTimestamp"] = httputil.Now()
+			httputil.WriteJSON(w, http.StatusOK, joinResp)
 			return
 		}
 		slog.Warn("conference universal join failed", "meetingId", meetingID, "error", err)
@@ -567,16 +567,16 @@ func (h *Handler) MeetingUniversalJoin(w http.ResponseWriter, r *http.Request) {
 		meta, err := h.ConferenceService.GetMeetingMetadata(r.Context(), meetingID)
 		if err == nil && meta != nil {
 			meta["joinUrl"] = fmt.Sprintf("https://chime.aws/join/%s", meetingID)
-			meta["joinTimestamp"] = support.Now()
-			support.WriteJSON(w, http.StatusOK, meta)
+			meta["joinTimestamp"] = httputil.Now()
+			httputil.WriteJSON(w, http.StatusOK, meta)
 			return
 		}
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"meetingId":     meetingID,
 		"joinUrl":       fmt.Sprintf("https://chime.aws/join/%s", meetingID),
-		"attendeeId":    "att-" + support.ID()[:8],
-		"joinTimestamp": support.Now(),
+		"attendeeId":    "att-" + httputil.ID()[:8],
+		"joinTimestamp": httputil.Now(),
 	})
 }

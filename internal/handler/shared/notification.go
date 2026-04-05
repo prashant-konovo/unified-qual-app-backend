@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 )
@@ -22,7 +22,7 @@ import (
 func (h *Handler) GetEmailTemplate(w http.ResponseWriter, r *http.Request) {
 	projectIDStr := r.URL.Query().Get("projectId")
 	templateType := r.URL.Query().Get("type")
-	source := support.ResolveSource(r)
+	source := httputil.ResolveSource(r)
 
 	if projectIDStr != "" {
 		projectID, _ := strconv.ParseInt(projectIDStr, 10, 64)
@@ -34,7 +34,7 @@ func (h *Handler) GetEmailTemplate(w http.ResponseWriter, r *http.Request) {
 			if tpl != nil {
 				tpl["source"] = "iris"
 				tpl["templateType"] = templateType
-				support.WriteJSON(w, http.StatusOK, tpl)
+				httputil.WriteJSON(w, http.StatusOK, tpl)
 				return
 			}
 		}
@@ -47,7 +47,7 @@ func (h *Handler) GetEmailTemplate(w http.ResponseWriter, r *http.Request) {
 		}
 		tpl, _ := h.NotificationService.GetCommunicationTemplate(r.Context(), name)
 		if tpl != nil {
-			support.WriteJSON(w, http.StatusOK, map[string]any{
+			httputil.WriteJSON(w, http.StatusOK, map[string]any{
 				"subject": tpl.Subject, "body": tpl.Body,
 				"templateType": name, "source": "qs",
 			})
@@ -55,7 +55,7 @@ func (h *Handler) GetEmailTemplate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"subject":      "Your Interview Has Been Rescheduled",
 		"body":         "<html><body><p>Dear {{.Name}}, your interview has been rescheduled.</p></body></html>",
 		"templateType": templateType,
@@ -73,7 +73,7 @@ func (h *Handler) SendReminder(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		// If no body, treat as simple reminder
-		support.WriteJSON(w, http.StatusOK, map[string]any{"sent": true, "recipientCount": 0})
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{"sent": true, "recipientCount": 0})
 		return
 	}
 
@@ -97,7 +97,7 @@ func (h *Handler) SendReminder(w http.ResponseWriter, r *http.Request) {
 			"type", req.Type, "recipients", len(req.Recipients), "projectId", req.ProjectID)
 	}
 
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"sent": true, "recipientCount": len(req.Recipients),
 		"type": req.Type, "projectId": req.ProjectID,
 	})

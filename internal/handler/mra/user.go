@@ -4,9 +4,9 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 
-	"github.com/InCrowd/unified-qual-api/internal/validate"
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -21,9 +21,9 @@ import (
 // ──────────────────────────────────────────────
 
 func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
-	userID, err := validate.ParseIDParam(r, "user_id")
+	userID, err := dto.ParseIDParam(r, "user_id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
@@ -34,8 +34,8 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 		Token    string `json:"token"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -44,7 +44,7 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 
 	// Legacy returns parsedJson[0] on Lambda proxy result object → undefined → empty body.
 	// Match with empty response for contract-identical compliance.
-	support.WriteJSON(w, http.StatusOK, map[string]any{})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{})
 }
 
 // ──────────────────────────────────────────────
@@ -55,9 +55,9 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
-	userID, err := validate.ParseIDParam(r, "user_id")
+	userID, err := dto.ParseIDParam(r, "user_id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
@@ -67,8 +67,8 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Password string `json:"password"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -77,7 +77,7 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 	slog.Info("patch user password requested (profile)", "userId", userID)
 
 	// Legacy returns full Lambda proxy result: {status, headers, body, isBase64Encoded}
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":          200,
 		"headers":         map[string]string{"Content-Type": "application/json"},
 		"body":            map[string]any{"message": "Password updated"},
@@ -95,16 +95,16 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 // Response: Lambda proxy {status, headers, body:{passwordMatch:bool}, isBase64Encoded}
 func (h *Handler) CheckPasswordMatchesMRA(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "user_id")
-	if _, err := validate.ParseIDParam(r, "user_id"); err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+	if _, err := dto.ParseIDParam(r, "user_id"); err != nil {
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	var req struct {
 		Password string `json:"password"`
 	}
-	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -112,7 +112,7 @@ func (h *Handler) CheckPasswordMatchesMRA(w http.ResponseWriter, r *http.Request
 	slog.Info("check password matches requested", "userId", userIDStr)
 
 	// Return legacy Lambda proxy result shape
-	support.WriteJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":          200,
 		"headers":         map[string]string{"Content-Type": "application/json"},
 		"body":            map[string]any{"passwordMatch": true},

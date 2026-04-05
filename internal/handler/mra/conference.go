@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
+	"github.com/InCrowd/unified-qual-api/internal/handler/httputil"
 
-	"github.com/InCrowd/unified-qual-api/internal/validate"
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 )
 
 // ──────────────────────────────────────────────
@@ -19,22 +19,22 @@ import (
 // updates project.modified_on. All side effects fully implemented.
 func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ConferenceService.Available() {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "conference repository not available",
 			"errorMessage": "conference repository not available",
 		})
 		return
 	}
 
-	projectID, err := validate.ParseIDParam(r, "project_id")
+	projectID, err := dto.ParseIDParam(r, "project_id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	participantGroupID, err := validate.ParseIDParam(r, "participant_group_id")
+	participantGroupID, err := dto.ParseIDParam(r, "participant_group_id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -43,8 +43,8 @@ func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 		MeetingInformation [][]any `json:"meetingInformation"`
 		UserID             any     `json:"userId"`
 	}
-	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -61,7 +61,7 @@ func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		slog.Error("add conference link failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
@@ -69,7 +69,7 @@ func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy returns the result of the last addMeetingInfo transaction call
-	support.WriteJSON(w, http.StatusOK, result)
+	httputil.WriteJSON(w, http.StatusOK, result)
 }
 
 // UpdateConferenceLinkMRA handles PUT /update-conference-link/project/{project_id}/participant-group/{participant_group_id} (MRA).
@@ -78,22 +78,22 @@ func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 // Legacy also updates pending timeslot calendar events (external Lambda call) — logged but requires integration.
 func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ConferenceService.Available() {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "conference repository not available",
 			"errorMessage": "conference repository not available",
 		})
 		return
 	}
 
-	projectID, err := validate.ParseIDParam(r, "project_id")
+	projectID, err := dto.ParseIDParam(r, "project_id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	participantGroupID, err := validate.ParseIDParam(r, "participant_group_id")
+	participantGroupID, err := dto.ParseIDParam(r, "participant_group_id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -102,8 +102,8 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 		MeetingInformation [][]any `json:"meetingInformation"`
 		UserID             any     `json:"userId"`
 	}
-	if errs := validate.DecodeAndValidate(r, &body); errs != nil {
-		validate.WriteError(w, errs)
+	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
+		dto.WriteError(w, errs)
 		return
 	}
 
@@ -119,7 +119,7 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 	existingLangs, err := h.ConferenceService.GetExistingMeetingLanguagesMRA(r.Context(), projectID)
 	if err != nil {
 		slog.Error("get existing meeting languages failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
@@ -131,7 +131,7 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 		r.Context(), projectID, participantGroupID, userID, body.ConferenceLink, body.MeetingInformation, existingLangs,
 	); err != nil {
 		slog.Error("update conference link failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
@@ -148,7 +148,7 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 	}
 
 	// Legacy returns JSON.stringify("Done") which serializes as the string "Done"
-	support.WriteJSON(w, http.StatusOK, "Done")
+	httputil.WriteJSON(w, http.StatusOK, "Done")
 }
 
 // GetConferenceLinkMRA handles GET /get-conference-link/{participant_group_id} (MRA).
@@ -157,7 +157,7 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 // Response: {conference_link, meetingInformation: [["en_us","info"],["fr_fr","info"]]}
 func (h *Handler) GetConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ConferenceService.Available() {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "conference repository not available",
 			"errorMessage": "conference repository not available",
 		})
@@ -165,16 +165,16 @@ func (h *Handler) GetConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy: participant_group_id from path but used as project_id in query
-	projectID, err := validate.ParseIDParam(r, "participant_group_id")
+	projectID, err := dto.ParseIDParam(r, "participant_group_id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	records, err := h.ConferenceService.GetConferenceLinkByProjectMRA(r.Context(), projectID)
 	if err != nil {
 		slog.Error("get conference link failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
@@ -194,7 +194,7 @@ func (h *Handler) GetConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 	}
 	resObj["meetingInformation"] = meetingInformation
 
-	support.WriteJSON(w, http.StatusOK, resObj)
+	httputil.WriteJSON(w, http.StatusOK, resObj)
 }
 
 // GetConfLinkByTimeSlotMRA handles GET /get-conf-link-time-slot-id/{timeslot_id} (MRA).
@@ -202,23 +202,23 @@ func (h *Handler) GetConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 // No side effects — pure read API.
 func (h *Handler) GetConfLinkByTimeSlotMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ConferenceService.Available() {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "conference repository not available",
 			"errorMessage": "An error occured while getting conference link by timeslot id",
 		})
 		return
 	}
 
-	tsID, err := validate.ParseIDParam(r, "timeslot_id")
+	tsID, err := dto.ParseIDParam(r, "timeslot_id")
 	if err != nil {
-		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	result, err := h.ConferenceService.GetConferenceLinkByTimeSlotMRA(r.Context(), tsID)
 	if err != nil {
 		slog.Error("get conference link by timeslot failed", "error", err)
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while getting conference link by timeslot id",
 		})
@@ -229,12 +229,12 @@ func (h *Handler) GetConfLinkByTimeSlotMRA(w http.ResponseWriter, r *http.Reques
 	// If no records, records[0] would be undefined → JSON.stringify(undefined) = undefined
 	// But legacy would throw at .records[0] access, caught → 500
 	if result == nil {
-		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "conference link not found",
 			"errorMessage": "An error occured while getting conference link by timeslot id",
 		})
 		return
 	}
 
-	support.WriteJSON(w, http.StatusOK, result)
+	httputil.WriteJSON(w, http.StatusOK, result)
 }
