@@ -7,6 +7,28 @@ import (
 	"time"
 )
 
+// ConferenceRepository defines the contract for ConferenceRepo.
+type ConferenceRepository interface {
+	GetByHash(ctx context.Context, hash string) (*ConferenceInvitation, error)
+	GetParticipants(ctx context.Context, timeSlotID int64) ([]map[string]any, error)
+	GetAttendeesByMeetingID(ctx context.Context, meetingID string) ([]map[string]any, error)
+	GetMeetingMetadata(ctx context.Context, conferenceHash string) (map[string]any, error)
+	Login(ctx context.Context, conferenceHash, pin string) (map[string]any, error)
+	CreateConferenceLink(ctx context.Context, timeSlotID, projectID int64, conferenceHash string) (int64, error)
+	UpdateConferenceLink(ctx context.Context, timeSlotID int64, conferenceHash, pin string) error
+	GetConferenceLinkByTimeSlotID(ctx context.Context, timeSlotID int64) (map[string]any, error)
+	UpdateRecordingStatus(ctx context.Context, meetingID, status, bucket, key string) error
+	AddConferenceLinkMRA(ctx context.Context, projectID int64, participantGroupID int64, userID int64, conferenceLink string, meetingInformation [][]any) (map[string]any, error)
+	GetExistingMeetingLanguagesMRA(ctx context.Context, projectID int64) (map[string]bool, error)
+	UpdateConferenceLinkMRA(ctx context.Context, projectID, participantGroupID int64, userID int64, conferenceLink string, meetingInformation [][]any, existingLangs map[string]bool) error
+	GetPendingTimeSlotsCountMRA(ctx context.Context, projectID int64) (int64, error)
+	GetConferenceLinkByProjectMRA(ctx context.Context, projectID int64) ([]map[string]any, error)
+	GetConferenceLinkByTimeSlotMRA(ctx context.Context, timeSlotID int64) (map[string]any, error)
+}
+
+// Compile-time interface satisfaction check.
+var _ ConferenceRepository = (*ConferenceRepo)(nil)
+
 // ConferenceInvitation maps to the QS conference_invitation table.
 type ConferenceInvitation struct {
 	ID             int64          `json:"id"`

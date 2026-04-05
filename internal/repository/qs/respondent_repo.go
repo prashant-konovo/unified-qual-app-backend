@@ -8,6 +8,23 @@ import (
 	"time"
 )
 
+// RespondentRepository defines the contract for RespondentRepo.
+type RespondentRepository interface {
+	List(ctx context.Context, page, pageSize int, search string) ([]RespondentListRow, int, error)
+	GetByID(ctx context.Context, id int64) (*Respondent, error)
+	GetCommunicationAddresses(ctx context.Context, responderID int64) ([]RespondentCommunicationAddress, error)
+	Create(ctx context.Context, r *Respondent) (int64, error)
+	CreateCommunicationAddress(ctx context.Context, responderID int64, transportTypeID int, address string) (int64, error)
+	Update(ctx context.Context, id int64, fields map[string]any) error
+	GetRespondentByExternalIdMRA(ctx context.Context, externalResponderID string, projectID int64) ([]map[string]any, error)
+	GetRescheduleTokenMRA(ctx context.Context, projectID, responderID int64) (string, error)
+	GetParticipantIdMRA(ctx context.Context, timeslotID int64) ([]map[string]any, error)
+	CreateRespondentMRA(ctx context.Context, firstName, lastName, title, extID, sessKey, tz, tzAbbr, lang string) (int64, error)
+}
+
+// Compile-time interface satisfaction check.
+var _ RespondentRepository = (*RespondentRepo)(nil)
+
 // Respondent maps to the QS `responder` table (10 columns verified).
 type Respondent struct {
 	ID                  int64          `json:"id"`

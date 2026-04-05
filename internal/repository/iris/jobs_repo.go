@@ -8,6 +8,47 @@ import (
 	"time"
 )
 
+// JobsRepository defines DB operations for scheduled background jobs.
+type JobsRepository interface {
+	// IssueQualHonorarium
+	GetPayableTimeSlots(ctx context.Context) ([]PayableTimeSlot, error)
+	GrantCredit(ctx context.Context, params CreditParams) (int64, error)
+	MarkHonorariumPaid(ctx context.Context, timeSlotID, creditID int64) error
+
+	// CompleteProjects
+	GetProjectsToComplete(ctx context.Context) ([]ProjectToComplete, error)
+	CompleteProject(ctx context.Context, projectID int64) error
+
+	// EndConferences
+	GetStaleConferenceHashes(ctx context.Context, hashes []string) ([]string, error)
+
+	// CloseSurveyJob
+	GetSurveysToClose(ctx context.Context) ([]SurveyToClose, error)
+	CloseSurveyByJob(ctx context.Context, surveyID int64) error
+	SetSurveyToInReview(ctx context.Context, surveyID int64) error
+	GetSurveyCrowdTypes(ctx context.Context, surveyID int64) ([]int64, error)
+	LogActivity(ctx context.Context, params ActivityLogParams) error
+	GetFeatureFlag(ctx context.Context, key string) (int64, error)
+
+	// MonthlyTranscriptsJob
+	GetPreviousMonthTranscripts(ctx context.Context) ([]TranscriptRecord, error)
+	UpdateTranscriptTotal(ctx context.Context, id int64, total float64) error
+
+	// RemindIntervieweesDayBefore + 30MinBefore
+	GetTomorrowInterviews(ctx context.Context) ([]InterviewReminder, error)
+	GetUpcomingInterviews(ctx context.Context) ([]InterviewReminder, error)
+
+	// RemindToConfirmSchedule
+	GetUnconfirmedAnswers(ctx context.Context) ([]UnconfirmedAnswer, error)
+
+	// UpdateCalendarPushWatch
+	GetCalendarWatchConfig(ctx context.Context) (*CalendarWatch, error)
+	UpdateCalendarWatch(ctx context.Context, watchID, resourceID string, expiration time.Time) error
+}
+
+// Compile-time interface satisfaction check.
+var _ JobsRepository = (*JobsRepo)(nil)
+
 // ══════════════════════════════════════════════════════════════════
 // Jobs Repository — DB operations for scheduled background jobs.
 // Matches InCrowdAPI Scala actor queries (PaymentManager, QualInterviewManager,

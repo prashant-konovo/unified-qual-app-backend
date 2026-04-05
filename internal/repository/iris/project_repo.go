@@ -9,6 +9,17 @@ import (
 	"time"
 )
 
+// ProjectRepository defines the contract for ProjectRepo.
+type ProjectRepository interface {
+	List(ctx context.Context, page, pageSize int, statusID *int, search string) ([]ProjectListRow, int, error)
+	GetByID(ctx context.Context, id int64) (*Project, error)
+	Create(ctx context.Context, p *Project) (int64, error)
+	Update(ctx context.Context, id int64, fields map[string]any) error
+}
+
+// Compile-time interface satisfaction check.
+var _ ProjectRepository = (*ProjectRepo)(nil)
+
 // Project maps to the IRIS `project` table (21 columns verified).
 type Project struct {
 	ID                         int64          `json:"id"`

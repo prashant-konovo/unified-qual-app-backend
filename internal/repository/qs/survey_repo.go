@@ -8,6 +8,20 @@ import (
 	"time"
 )
 
+// SurveyRepository defines the contract for SurveyRepo.
+type SurveyRepository interface {
+	EnsureTable(ctx context.Context) error
+	List(ctx context.Context, search string) ([]SurveyRow, error)
+	GetByID(ctx context.Context, id int64) (*SurveyRow, error)
+	Create(ctx context.Context, projectID *int64, title, status string, questions, rules json.RawMessage) (int64, error)
+	Update(ctx context.Context, id int64, title, status string, questions, rules json.RawMessage) error
+	Delete(ctx context.Context, id int64) error
+	GetSurveyByIdMRA(ctx context.Context, surveyID int64) (map[string]any, error)
+}
+
+// Compile-time interface satisfaction check.
+var _ SurveyRepository = (*SurveyRepo)(nil)
+
 // SurveyRow represents a survey stored in the QS database.
 type SurveyRow struct {
 	ID          int64          `json:"id"`

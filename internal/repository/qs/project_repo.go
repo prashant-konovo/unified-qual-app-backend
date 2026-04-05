@@ -9,6 +9,63 @@ import (
 	"time"
 )
 
+// ProjectRepository defines the contract for ProjectRepo.
+type ProjectRepository interface {
+	List(ctx context.Context, page, pageSize int, statusID *int, search string) ([]ProjectListRow, int, error)
+	GetByID(ctx context.Context, id int64) (*Project, error)
+	GetTopics(ctx context.Context, projectID int64) ([]Topic, error)
+	Create(ctx context.Context, p *Project) (int64, error)
+	CreateProjectFull(ctx context.Context, req map[string]any) (map[string]any, error)
+	GetSalesForceJobNumberText(ctx context.Context, sfProjectID string) (string, error)
+	GetProjectDetailsMRA(ctx context.Context, projectID int64) (map[string]any, error)
+	GetProjectsMRA(ctx context.Context, creatorID, status int, sort, search string, externalClientIDs []string) ([]map[string]any, error)
+	GetProjectsForModsMRA(ctx context.Context, clientID int64) ([]map[string]any, error)
+	SaveUserSelection(ctx context.Context, userID int64, accountIDs, clientIDs []string) error
+	UpdateSchedulerGenerated(ctx context.Context, projectID int64) error
+	UpdatePostScreenInBuffer(ctx context.Context, projectID int64, buffer float64) error
+	UpdateModeratorBufferMRA(ctx context.Context, projectID int64, buffer float64) error
+	UpdateExternalSurveyID(ctx context.Context, projectID int64, surveyID string) error
+	GetProjectModeratorIDs(ctx context.Context, projectID int64) ([]int64, error)
+	ResetProjectModeratorsMRA(ctx context.Context, projectID int64, newIDs, existingIDs []int64) error
+	UnassignModeratorFromProject(ctx context.Context, userID, projectID int64) error
+	GetModeratorsList(ctx context.Context, projectID int64) ([]map[string]any, error)
+	GetEmailTemplateMRA(ctx context.Context, typeID int, language string) (map[string]any, error)
+	HandleProjectExportMRA(ctx context.Context, projectID int64, pmTimeZone, pmTimeZoneAbbr, rescheduleLinkPrefix string) ([][]string, error)
+	HandleProjectNoTimeslotExportMRA(ctx context.Context, projectID int64, pmTimeZone, pmTimeZoneAbbr string) ([][]string, error)
+	GetProjectName(ctx context.Context, projectID int64) (string, error)
+	Update(ctx context.Context, id int64, fields map[string]any) error
+	TimeSlotCounts(ctx context.Context, projectID int64) (scheduled, completed int, err error)
+	UpdateSampleSizeMRA(ctx context.Context, projectID int64, sampleSize int64) error
+	UpdateSampleSizeProjectStatusMRA(ctx context.Context, projectID int64, sampleSize int64, projectStatusID int64) error
+	GetModeratorsTimeRangePerProject(ctx context.Context, projectID int64) ([]ModeratorTimeRange, error)
+	GetAllModeratorsAvailabilityPerClient(ctx context.Context, clientID int64, projectID int64) ([]ModeratorAvailability, error)
+	GetProjectStatusByID(ctx context.Context, projectID int64) (int64, error)
+	UpsertModeratorTimeRangePerProject(ctx context.Context, projectID, moderatorID int64, startTime, endTime, timezone string) error
+	GetAllModeratorsAvailabilityPerRole(ctx context.Context, projectID int64) ([]ModeratorAvailability, error)
+	GetModeratorsTimeRangePerProjectMRA(ctx context.Context, projectID int64) ([]map[string]any, error)
+	GetProjectsForModeratorMRA(ctx context.Context, clientID, moderatorID int64) ([]map[string]any, error)
+	GetAllAccountsMRA(ctx context.Context) ([]map[string]any, error)
+	GetSalesforceClientsMRA(ctx context.Context) ([]map[string]any, error)
+	GetSalesforceProjectsMRA(ctx context.Context, salesforceClientID string) ([]map[string]any, error)
+	GetSalesforceClientsWithFilterMRA(ctx context.Context, projectAccountID int) ([]map[string]any, error)
+	GetTopicsByProjectMRA(ctx context.Context, projectID int64) ([]map[string]any, error)
+	GetProjectStatusByIdMRA(ctx context.Context, projectID int64) (int64, error)
+	GetRespondersLanguagesByProjectIdMRA(ctx context.Context, projectID int64) ([]string, error)
+	GetTopicsByProjectIdAndLanguageIdMRA(ctx context.Context, projectID, languageID int64) (bool, error)
+	AddTopicByProjectAndLanguageMRA(ctx context.Context, topicName string, languageID, projectID int64, userID any) error
+	UpdateTopicByProjectAndLanguageMRA(ctx context.Context, topicName string, languageID, projectID int64, userID any) error
+	DeleteTopicByProjectAndLanguageMRA(ctx context.Context, projectID, languageID int64) error
+	GetAllLanguageLocalisationsMRA(ctx context.Context) ([]map[string]any, error)
+	GetDataFromLanguageLocalisationsMRA(ctx context.Context) ([]map[string]any, error)
+	GetCountriesWithLocalisationsMRA(ctx context.Context) ([]map[string]any, error)
+	DeleteMeetingInformationTranslationMRA(ctx context.Context, projectID, languageID int64) (map[string]any, error)
+	AddHonorariumAmountMRA(ctx context.Context, projectID int64, honorarium int64, currency, sessKey string, extProjectID, extUserSurveyID, extUserID, extCreditOrderID, extCountryID string) error
+	GetHonoValueUpdateReasonListMRA(ctx context.Context) ([]map[string]any, error)
+}
+
+// Compile-time interface satisfaction check.
+var _ ProjectRepository = (*ProjectRepo)(nil)
+
 // Project maps to the QS `project` table (18 columns verified).
 type Project struct {
 	ID                    int64          `json:"id"`

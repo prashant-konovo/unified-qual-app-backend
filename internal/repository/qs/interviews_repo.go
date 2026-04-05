@@ -7,6 +7,23 @@ import (
 	"strings"
 )
 
+// InterviewsRepository defines the contract for InterviewsRepo.
+type InterviewsRepository interface {
+	GetAllInterviewsByOffsetAndActiveTab(
+		ctx context.Context,
+		clientID int64,
+		externalClientsIDs []string,
+		projectsIDs []string,
+		search string,
+		offset int,
+		activeTab string,
+		paymentStatusCode string,
+	) ([]map[string]any, error)
+}
+
+// Compile-time interface satisfaction check.
+var _ InterviewsRepository = (*InterviewsRepo)(nil)
+
 // InterviewsRepo provides queries for the PM interviews dashboard.
 type InterviewsRepo struct {
 	db *sql.DB

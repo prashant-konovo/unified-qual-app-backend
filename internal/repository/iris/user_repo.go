@@ -9,6 +9,17 @@ import (
 	"time"
 )
 
+// UserRepository defines the contract for UserRepo.
+type UserRepository interface {
+	List(ctx context.Context, page, pageSize int, roleID *int64, search string) ([]ICUserListRow, int, error)
+	GetByID(ctx context.Context, id int64) (*ICUserWithRoles, error)
+	GetByEmail(ctx context.Context, email string) (*ICUserWithRoles, error)
+	Update(ctx context.Context, id int64, firstName, lastName, timeZone string) error
+}
+
+// Compile-time interface satisfaction check.
+var _ UserRepository = (*UserRepo)(nil)
+
 // ICUser maps to the IRIS `ic_user` table (key columns for admin/moderator use).
 type ICUser struct {
 	ID               int64          `json:"id"`

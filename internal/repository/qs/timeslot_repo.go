@@ -9,6 +9,62 @@ import (
 	"time"
 )
 
+// TimeSlotRepository defines the contract for TimeSlotRepo.
+type TimeSlotRepository interface {
+	List(ctx context.Context, page, pageSize int, projectID *int64, statusID *int, moderatorID *int64, from *time.Time, to *time.Time) ([]TimeSlotListRow, int, error)
+	GetByID(ctx context.Context, id int64) (*TimeSlot, error)
+	GetModerators(ctx context.Context, timeSlotID int64) ([]ModeratorTimeSlot, error)
+	GetRespondent(ctx context.Context, timeSlotID int64) (*Respondent, error)
+	Create(ctx context.Context, ts *TimeSlot) (int64, error)
+	AssignModerator(ctx context.Context, moderatorID, timeSlotID int64, isHost bool) (int64, error)
+	Update(ctx context.Context, id int64, fields map[string]any) error
+	Delete(ctx context.Context, id int64) error
+	ListByModerator(ctx context.Context, moderatorID int64, page, pageSize int) ([]TimeSlotListRow, int, error)
+	ListByProject(ctx context.Context, projectID int64, page, pageSize int) ([]TimeSlotListRow, int, error)
+	ListStatuses(ctx context.Context) ([]TimeSlotStatus, error)
+	GetReward(ctx context.Context, timeSlotID int64) (*BookingReward, error)
+	UpsertReward(ctx context.Context, timeSlotID int64, points int, status string) error
+	InvalidateInterviewMRA(ctx context.Context, timeSlotID int64, reasonCode string, reasonText *string, invalidatedByUserID int64) error
+	HasCompletedPaymentMRA(ctx context.Context, timeSlotID int64) (bool, error)
+	GetInvalidTimeSlotStatusMRA(ctx context.Context, externalResponderID string, projectID int64) ([]map[string]any, error)
+	GetInvalidTimeSlotStatusForRespRescMRA(ctx context.Context, externalResponderID string, projectID int64) ([]map[string]any, error)
+	GetPendingTimeslotByProjectAndResponderMRA(ctx context.Context, projectID, responderID int64) ([]map[string]any, error)
+	GetModeratorTimeSlotsMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error)
+	GetModeratorTimeSlotsWithFilterMRA(ctx context.Context, moderatorID, clientID int64, excludeProjectIDs []int64) ([]map[string]any, error)
+	GetAllInterviewsMRA(ctx context.Context, moderatorID int64, search string, excludeProjectIDs []int64, paymentStatusCode string) ([]map[string]any, error)
+	GetModeratorsForTimeSlotMRA(ctx context.Context, timeslotID int64) ([]map[string]any, error)
+	GetStartEndTimeBySlotIdMRA(ctx context.Context, timeslotID int64) (string, string, error)
+	GetModeratorsInfoForSlotMRA(ctx context.Context, timeslotID int64) ([]ModeratorInfoForSlotMRA, error)
+	GetModeratorConflictForSlotMRA(ctx context.Context, moderatorID int64, startTime, endTime string, timeslotID int64) (int, error)
+	GetPMTimeSlotsByClientIdMRA(ctx context.Context, clientID int64) ([]map[string]any, error)
+	GetPMTimeSlotsByClientIdWithProjectFilterMRA(ctx context.Context, clientID int64, projectIDs []int64) ([]map[string]any, error)
+	GetPMTimeSlotsByClientIdWithModeratorFilterMRA(ctx context.Context, clientID int64, moderatorIDs []int64) ([]map[string]any, error)
+	GetAllPendingInterviewsPerProjectMRA(ctx context.Context, projectID, clientID int64) ([]map[string]any, error)
+	UpsertEligibilityStatusMRA(ctx context.Context, participantID string, isEligible bool, reason, updatedBy string) error
+	ResetIneligibleMailSentMRA(ctx context.Context, externalResponderID string) error
+	GetPaymentInfoByTimeSlotIdsMRA(ctx context.Context, timeSlotIDs []int64) ([]map[string]any, error)
+	GetTimeSlotPaymentTypeListMRA(ctx context.Context) ([]map[string]any, error)
+	AddQSTimeSlotPaymentsMRA(ctx context.Context, payments []map[string]any) error
+	AddExternalTimeSlotPaymentsMRA(ctx context.Context, payments []map[string]any) error
+	GetUserByEmailMRA(ctx context.Context, email string) (int64, error)
+	AddTimeSlotCustomHonorariumMRA(ctx context.Context, timeSlotID int64, oldValue, newValue float64, reasonID, createdBy int64) error
+	GetExternalSurveyIdByTimeSlotIdMRA(ctx context.Context, timeSlotID int64) (string, error)
+	GetTimeSlotPaymentStatusListMRA(ctx context.Context) ([]map[string]any, error)
+	GetProjectModeratorsIdsMRA(ctx context.Context, projectID int64) ([]int64, error)
+	ResetProjectModeratorsMRA(ctx context.Context, projectID int64, newModIDs, existingModIDs []int64) error
+	UnassignModeratorFromProjectMRA(ctx context.Context, moderatorID, projectID int64) error
+	GetPendingPaymentsMRA(ctx context.Context, tx *sql.Tx, timeSlotIDs []int64) ([]PendingPaymentRecord, error)
+	UpdateCompletedPaymentHistoryMRA(ctx context.Context, tx *sql.Tx, timeSlotIDs []int64, paymentHistoryIDs []int64) error
+	UpdateCanceledPaymentHistoryMRA(ctx context.Context, tx *sql.Tx, timeSlotIDs []int64, paymentHistoryIDs []int64) error
+	UpdateFailedPaymentHistoryMRA(ctx context.Context, timeSlotIDs []int64) error
+	BeginTx(ctx context.Context) (*sql.Tx, error)
+	DeleteModeratorTimeSlotsByProject(ctx context.Context, projectID int64) (int64, error)
+	GetAvailableModeratorsCountByProject(ctx context.Context, projectID int64) (int, error)
+}
+
+// Compile-time interface satisfaction check.
+var _ TimeSlotRepository = (*TimeSlotRepo)(nil)
+
 // TimeSlot maps to the QS `time_slot` table (25 columns verified).
 type TimeSlot struct {
 	ID                       int64          `json:"id"`

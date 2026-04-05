@@ -7,6 +7,35 @@ import (
 	"time"
 )
 
+// AnswerRepository defines the contract for AnswerRepo.
+type AnswerRepository interface {
+	ListByTimeSlot(ctx context.Context, timeSlotID int64) ([]map[string]any, error)
+	GetDetails(ctx context.Context, answerID int64) ([]AnswerDetail, error)
+	ListTopics(ctx context.Context, projectID int64) ([]Topic, error)
+	ListLocales(ctx context.Context) ([]LanguageLocalisation, error)
+	ListHonorariumAmounts(ctx context.Context) ([]HonorariumAmount, error)
+	ListPaymentHistory(ctx context.Context, timeSlotID int64) ([]PaymentHistory, error)
+	CreatePaymentRecord(ctx context.Context, timeSlotID int64, amount int, paymentType, status string) (int64, error)
+	CreateCustomHonorarium(ctx context.Context, timeSlotID int64, amount int, reason string) (int64, error)
+	ListSalesforceProjects(ctx context.Context) ([]QSSalesforceProject, error)
+	ListSalesforceAccounts(ctx context.Context) ([]QSSalesforceAccount, error)
+	ListExternalClients(ctx context.Context) ([]ExternalClient, error)
+	ListProjectsUsers(ctx context.Context, projectID int64) ([]map[string]any, error)
+	GetCommunicationTemplate(ctx context.Context, name string) (*CommunicationTemplate, error)
+	ListCommunicationTemplates(ctx context.Context) ([]CommunicationTemplate, error)
+	GetParticipantEligibility(ctx context.Context, responderID, projectID int64) (map[string]any, error)
+	ListNativeSurveysByProject(ctx context.Context, projectID int64) ([]NativeSurvey, error)
+	UpdateTopicTranslation(ctx context.Context, projectID int64, topicID int64, languageCode, translatedName string) error
+	DeleteTopicTranslation(ctx context.Context, topicID int64, languageCode string) error
+	DeleteTranslation(ctx context.Context, projectID int64, languageCode string) error
+	ListHonorariumReasons(ctx context.Context) ([]map[string]any, error)
+	CreateExternalPayment(ctx context.Context, timeSlotID int64, amount int, paymentType, status, externalRef string) (int64, error)
+	ListInterviewPaymentStatuses(ctx context.Context) ([]map[string]any, error)
+}
+
+// Compile-time interface satisfaction check.
+var _ AnswerRepository = (*AnswerRepo)(nil)
+
 // Answer maps to the QS answer table.
 type Answer struct {
 	ID           int64     `json:"id"`

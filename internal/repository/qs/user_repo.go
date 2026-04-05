@@ -9,6 +9,96 @@ import (
 	"time"
 )
 
+// UserRepository defines the contract for UserRepo.
+type UserRepository interface {
+	List(ctx context.Context, page, pageSize int, roleID *int, search string) ([]UserListRow, int, error)
+	GetByID(ctx context.Context, id int64) (*UserWithRoles, error)
+	GetByEmail(ctx context.Context, email string) (*UserWithRoles, error)
+	GetModerators(ctx context.Context) ([]UserListRow, error)
+	ListModeratorAvailability(ctx context.Context, moderatorID int64, clientID *int64, startDate, endDate string) ([]ModeratorAvailability, error)
+	CreateModeratorAvailability(ctx context.Context, moderatorID, clientID int64, startTime, endTime time.Time) (*ModeratorAvailability, error)
+	DeleteModeratorAvailability(ctx context.Context, id int64) error
+	Update(ctx context.Context, id int64, firstName, lastName, timeZone string) error
+	UpdateTimeZone(ctx context.Context, userID int64, timeZone string) error
+	UpdateModeratorBuffer(ctx context.Context, id int64, buffer int) error
+	Create(ctx context.Context, firstName, lastName, email, timeZone string, roleIDs []int) (int64, error)
+	SoftDelete(ctx context.Context, id int64) error
+	AddRoles(ctx context.Context, userID int64, roleIDs []int) error
+	DeleteRoles(ctx context.Context, userID int64, roleIDs []int) error
+	GetRoles(ctx context.Context, userID int64) ([]int, error)
+	GetUserCommPreference(ctx context.Context, userID int64) ([]map[string]any, error)
+	UpdateUserCommPreference(ctx context.Context, cognitoUserID string, pmUserID string, allowContactByEmail int) ([]map[string]any, error)
+	AcceptTerms(ctx context.Context, userID int64) error
+	ListByRole(ctx context.Context, roleID int, page, pageSize int) ([]UserListRow, int, error)
+	UpdateModeratorAvailability(ctx context.Context, id int64, startTime, endTime time.Time) error
+	GetByEmailIncludeDeleted(ctx context.Context, email string) (*UserWithRoles, error)
+	RestoreByEmail(ctx context.Context, email string) error
+	AddUserClient(ctx context.Context, userID, clientID int64) error
+	CreateUserCommPrefs(ctx context.Context, userID int64, email, cognitoUserID string) error
+	CreateUserCommPrefsAdmin(ctx context.Context, userID int64, email string) error
+	GetEmailByCognitoID(ctx context.Context, cognitoID string) (string, error)
+	CheckUserIsQsToolAndI2(ctx context.Context, email string) (map[string]any, error)
+	GetAllUsersAdmin(ctx context.Context, cognitoUserID string) ([]map[string]any, error)
+	GetAllModeratorsListMRA(ctx context.Context, clientID int64) ([]map[string]any, error)
+	FetchUserInfoByUserIdMRA(ctx context.Context, userID int64) (int, int64, error)
+	UpdateModeratorBufferMRA(ctx context.Context, userID int64, buffer int) error
+	GetFutureModeratorTimeslotsMRA(ctx context.Context, moderatorID, clientID int64) ([]ModeratorTimeslotMRA, error)
+	GetFutureAvailsWithProximityMRA(ctx context.Context, moderatorID, clientID int64) ([]AvailWithProximityMRA, error)
+	GetFutureImportedAvailsWithProximityMRA(ctx context.Context, moderatorID, clientID int64) ([]AvailWithProximityMRA, error)
+	GetModeratorAvailabilityLengthMRA(ctx context.Context, availID int64) (*AvailLengthMRA, error)
+	GetImportedModeratorAvailabilityLengthMRA(ctx context.Context, availID int64) (*AvailLengthMRA, error)
+	DeleteModeratorAvailabilityByIdMRA(ctx context.Context, id int64) error
+	DeleteImportedModeratorAvailabilityByIdMRA(ctx context.Context, id int64) error
+	UpdateModeratorAvailabilityStartTimeMRA(ctx context.Context, id int64, startTime time.Time) error
+	UpdateModeratorAvailabilityEndTimeMRA(ctx context.Context, id int64, endTime time.Time) error
+	UpdateImportedModeratorAvailabilityStartTimeMRA(ctx context.Context, id int64, startTime time.Time) error
+	UpdateImportedModeratorAvailabilityEndTimeMRA(ctx context.Context, id int64, endTime time.Time) error
+	CleanUpAvailabilitiesByModeratorIdMRA(ctx context.Context, moderatorID int64) error
+	RemoveNestedAvailabilitiesMRA(ctx context.Context, moderatorID int64) error
+	GetModeratorBufferMRA(ctx context.Context, moderatorID int64) (int, error)
+	GetModExternalCalendarStatusMRA(ctx context.Context, moderatorID int64) (string, error)
+	IsValidAvailabilityMRA(ctx context.Context, moderatorID int64, startTime, endTime string, buffer int) (int64, error)
+	OverlappingAvailabilitiesMRA(ctx context.Context, moderatorID int64, startTime, endTime string) ([]map[string]any, error)
+	GetAllModeratorAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error)
+	GetNonOverlappingManualAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error)
+	GetNonOverlappingImportedAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error)
+	GetAllOverlappingManualAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error)
+	GetAllOverlappingImportedAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error)
+	FindModeratorAvailabilityByIdMRA(ctx context.Context, id int64) (map[string]any, error)
+	GetModeratorsInfoByAvailabilityIdMRA(ctx context.Context, availabilityID int64) (map[string]any, error)
+	GetAllModeratorAvailabilityWithUserMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error)
+	GetOverlappingImportedAvailabilityMRA(ctx context.Context, moderatorID, clientID int64, startTime, endTime string) ([]map[string]any, error)
+	AddModeratorAvailabilityFromImportedMRA(ctx context.Context, moderatorID, clientID int64, startTime, endTime string) error
+	GetAllModeratorsAvailabilityPerClientMRA(ctx context.Context, clientID, projectID int64) ([]map[string]any, error)
+	GetModeratorsListMRA(ctx context.Context, projectID int64) ([]map[string]any, error)
+	GetAllProjectManagersListMRA(ctx context.Context) ([]map[string]any, error)
+	GetAllModeratorsAvailabilityForPMMRA(ctx context.Context, clientID int64) ([]map[string]any, error)
+	GetAllModeratorsAvailabilityForPMWithProjectFilterMRA(ctx context.Context, clientID int64, projectIDs []int64) ([]map[string]any, error)
+	GetAllModeratorsAvailabilityForPMWithModeratorFilterMRA(ctx context.Context, clientID int64, moderatorIDs []int64) ([]map[string]any, error)
+	UpdateModExternalCalendarUrlMRA(ctx context.Context, moderatorID int64, url, key string) error
+	UpdateModExternalCalendarStatusMRA(ctx context.Context, moderatorID int64, status string) error
+	DeleteImportedModeratorAvailabilityByModeratorMRA(ctx context.Context, moderatorID, clientID int64) error
+	GetImportedModeratorAvailabilityMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error)
+	GetModeratorExternalCalendarMRA(ctx context.Context, moderatorID int64) ([]map[string]any, error)
+	GetRunningImportProcessCountMRA(ctx context.Context) (int64, error)
+	DeleteExternalCalStatusMRA(ctx context.Context, moderatorID int64) error
+	GetImportedModeratorAvailabilityListMRA(ctx context.Context, moderatorID, clientID int64) ([]map[string]any, error)
+	GetOverlappingManualAvailabilityMRA(ctx context.Context, moderatorID, clientID int64, startTime, endTime string) ([]map[string]any, error)
+	DeleteImportedAvailByModAndIdMRA(ctx context.Context, moderatorID, id int64) error
+	DeleteManualAvailByModAndIdMRA(ctx context.Context, moderatorID, id int64) error
+	AddManualAvailabilityMRA(ctx context.Context, moderatorID, clientID int64, startTime, endTime string) error
+
+	// --- Migrated from handler raw DB calls ---
+	GetUserClientID(ctx context.Context, userID int64) (int64, error)
+	GetUserAccountSelection(ctx context.Context, userID int64) (string, error)
+	GetUserClientSelections(ctx context.Context, userID int64) ([]string, error)
+	CreateEventLog(ctx context.Context, eventType, description string, userID, projectID, timeSlotID int64, metaData string) error
+	DeleteGoogleCalendarImport(ctx context.Context, moderatorID int64) error
+}
+
+// Compile-time interface satisfaction check.
+var _ UserRepository = (*UserRepo)(nil)
+
 // User maps to the QS `user` table (11 columns verified).
 type User struct {
 	ID                      int64          `json:"id"`
