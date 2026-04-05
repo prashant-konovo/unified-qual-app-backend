@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/InCrowd/unified-qual-api/internal/service"
 	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
@@ -14,7 +15,7 @@ import (
 )
 
 // InterviewHandler handles timeslot and interview scheduling endpoints.
-type InterviewHandler struct{ *support.Deps }
+type InterviewHandler struct{ *service.Deps }
 
 // ──────────────────────────────────────────────
 // Timeslots

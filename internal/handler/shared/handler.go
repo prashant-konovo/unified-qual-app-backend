@@ -5,12 +5,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/InCrowd/unified-qual-api/internal/service"
 	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 )
 
 // Handler holds the remaining (non-auth) handler methods.
 // It embeds *Deps so all promoted fields (cfg, db, repos, etc.) are accessible.
-type Handler struct{ *support.Deps }
+type Handler struct{ *service.Deps }
 
 // ──────────────────────────────────────────────
 // Health

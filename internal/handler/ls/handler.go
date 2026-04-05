@@ -1,6 +1,6 @@
 package ls
 
-import "github.com/InCrowd/unified-qual-api/internal/handler/support"
+import "github.com/InCrowd/unified-qual-api/internal/service"
 
 // Handler handles LS (Life Sciences / IRIS) brand-specific endpoints.
-type Handler struct{ *support.Deps }
+type Handler struct{ *service.Deps }

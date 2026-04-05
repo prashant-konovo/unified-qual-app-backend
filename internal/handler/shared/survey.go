@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/InCrowd/unified-qual-api/internal/service"
 	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
@@ -14,7 +15,7 @@ import (
 )
 
 // SurveyHandler handles survey CRUD endpoints.
-type SurveyHandler struct{ *support.Deps }
+type SurveyHandler struct{ *service.Deps }
 
 // ──────────────────────────────────────────────
 // Surveys

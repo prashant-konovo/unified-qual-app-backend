@@ -5,7 +5,6 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/handler/ls"
 	"github.com/InCrowd/unified-qual-api/internal/handler/mra"
 	"github.com/InCrowd/unified-qual-api/internal/handler/shared"
-	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 	"github.com/InCrowd/unified-qual-api/internal/service"
 )
 
@@ -23,7 +22,7 @@ type Handlers struct {
 // NewHandlers creates all domain handlers by wiring config, DB, and services
 // into the shared Deps container.
 func NewHandlers(cfg *config.Config, db *config.DBPair, svcs *service.Services) *Handlers {
-	d := &support.Deps{
+	d := &service.Deps{
 		Cfg:                 cfg,
 		DB:                  db,
 		AuthService:         svcs.Auth,

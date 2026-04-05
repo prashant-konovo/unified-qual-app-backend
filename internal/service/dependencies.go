@@ -7,6 +7,30 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
 
+// Deps holds shared dependencies injected into all domain handlers.
+// Handlers access business logic exclusively through service fields.
+// DB is retained solely for the Health endpoint.
+type Deps struct {
+	Cfg *config.Config
+	DB  *config.DBPair // used only by Health endpoint
+
+	AuthService         *AuthService
+	ProjectService      *ProjectService
+	ParticipantService  *ParticipantService
+	BookingService      *BookingService
+	TranslationService  *TranslationService
+	AdminService        *AdminService
+	ConferenceService   *ConferenceService
+	PaymentService      *PaymentService
+	NotificationService *NotificationService
+	MediaService        *MediaService
+	UserService         *UserService
+	InterviewService    *InterviewService
+	SurveyService       *SurveyService
+	ModeratorService    *ModeratorService
+	SubscriptionService *SubscriptionService
+}
+
 // Services holds all service layer instances.
 type Services struct {
 	Auth         *AuthService

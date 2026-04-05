@@ -12,7 +12,7 @@ import (
 )
 
 // ProjectHandler handles project CRUD endpoints.
-type ProjectHandler struct{ *support.Deps }
+type ProjectHandler struct{ *service.Deps }
 
 func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	pg := validate.ParsePagination(r, 20, 100)

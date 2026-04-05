@@ -6,13 +6,14 @@ import (
 "strings"
 
 "github.com/InCrowd/unified-qual-api/internal/dto"
-"github.com/InCrowd/unified-qual-api/internal/handler/support"
+"github.com/InCrowd/unified-qual-api/internal/service"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 "github.com/InCrowd/unified-qual-api/internal/middleware"
 "github.com/InCrowd/unified-qual-api/internal/validate"
 )
 
 // AuthHandler handles authentication and authorization endpoints.
-type AuthHandler struct{ *support.Deps }
+type AuthHandler struct{ *service.Deps }
 
 // ──────────────────────────────────────────────
 // Auth — delegates to AuthService for business logic
