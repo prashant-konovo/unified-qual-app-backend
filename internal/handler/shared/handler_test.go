@@ -8,14 +8,14 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/service"
-	"github.com/InCrowd/unified-qual-api/internal/testutil"
+	"github.com/InCrowd/unified-qual-api/internal/unittests"
 	"github.com/stretchr/testify/assert"
 )
 
 // newHandler returns a Handler backed by testutil defaults.
 // The DBPair has nil databases so HealthCheck reports "not_configured".
 func newHandler() *Handler {
-	return &Handler{testutil.TestDeps()}
+	return &Handler{unittests.TestDeps()}
 }
 
 func callHealth(h *Handler) *httptest.ResponseRecorder {
@@ -31,10 +31,10 @@ func TestHealth_AllDBsHealthy(t *testing.T) {
 	h := newHandler()
 	rec := callHealth(h)
 
-	testutil.AssertStatus(t, rec, http.StatusOK)
+	unittests.AssertStatus(t, rec, http.StatusOK)
 
 	var body map[string]any
-	testutil.DecodeJSON(t, rec, &body)
+	unittests.DecodeJSON(t, rec, &body)
 	assert.Equal(t, "healthy", body["status"])
 
 	checks, ok := body["checks"].(map[string]any)
@@ -47,32 +47,32 @@ func TestHealth_AllDBsHealthy(t *testing.T) {
 // TestHealth_NoDB confirms that a completely empty DBPair (all nil) is treated
 // as healthy because "not_configured" is an acceptable status.
 func TestHealth_NoDB(t *testing.T) {
-	deps := testutil.TestDeps()
+	deps := unittests.TestDeps()
 	deps.DB = &database.DBPair{} // all nil
 	h := &Handler{deps}
 
 	rec := callHealth(h)
 
-	testutil.AssertStatus(t, rec, http.StatusOK)
+	unittests.AssertStatus(t, rec, http.StatusOK)
 
 	var body map[string]any
-	testutil.DecodeJSON(t, rec, &body)
+	unittests.DecodeJSON(t, rec, &body)
 	assert.Equal(t, "healthy", body["status"])
 }
 
 // TestHealth_IncludesEnvironment verifies that the response contains the
 // environment value from the injected config.
 func TestHealth_IncludesEnvironment(t *testing.T) {
-	deps := testutil.TestDeps()
+	deps := unittests.TestDeps()
 	deps.Cfg = &config.Config{Environment: "staging"}
 	h := &Handler{deps}
 
 	rec := callHealth(h)
 
-	testutil.AssertStatus(t, rec, http.StatusOK)
+	unittests.AssertStatus(t, rec, http.StatusOK)
 
 	var body map[string]any
-	testutil.DecodeJSON(t, rec, &body)
+	unittests.DecodeJSON(t, rec, &body)
 	assert.Equal(t, "staging", body["environment"])
 }
 
@@ -82,10 +82,10 @@ func TestHealth_IncludesVersion(t *testing.T) {
 	h := newHandler()
 	rec := callHealth(h)
 
-	testutil.AssertStatus(t, rec, http.StatusOK)
+	unittests.AssertStatus(t, rec, http.StatusOK)
 
 	var body map[string]any
-	testutil.DecodeJSON(t, rec, &body)
+	unittests.DecodeJSON(t, rec, &body)
 	assert.Equal(t, "1.2.0", body["version"])
 }
 

@@ -8,7 +8,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
-	mocks "github.com/InCrowd/unified-qual-api/internal/testutil/mocks"
+	mocks "github.com/InCrowd/unified-qual-api/internal/unittests/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

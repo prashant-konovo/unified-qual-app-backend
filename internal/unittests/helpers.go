@@ -1,5 +1,5 @@
 // Package testutil provides shared test helpers and mock constructors for unit tests.
-package testutil
+package unittests
 
 import (
 	"bytes"

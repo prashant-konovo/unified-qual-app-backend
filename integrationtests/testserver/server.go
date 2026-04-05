@@ -22,7 +22,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/InCrowd/unified-qual-api/internal/router"
 	"github.com/InCrowd/unified-qual-api/internal/service"
-	mocks "github.com/InCrowd/unified-qual-api/internal/testutil/mocks"
+	mocks "github.com/InCrowd/unified-qual-api/internal/unittests/mocks"
 	"github.com/golang-jwt/jwt/v5"
 )
 

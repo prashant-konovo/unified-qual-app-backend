@@ -12,8 +12,8 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/InCrowd/unified-qual-api/internal/service"
-	"github.com/InCrowd/unified-qual-api/internal/testutil"
-	"github.com/InCrowd/unified-qual-api/internal/testutil/mocks"
+	"github.com/InCrowd/unified-qual-api/internal/unittests"
+	"github.com/InCrowd/unified-qual-api/internal/unittests/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -55,7 +55,7 @@ func sampleQSRow(id int64, name string) qs.ProjectListRow {
 }
 
 func TestListProjects_BothSources(t *testing.T) {
-	deps := testutil.TestDeps()
+	deps := unittests.TestDeps()
 
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	qsRepo := new(mocks.MockQsProjectRepository)
@@ -73,10 +73,10 @@ func TestListProjects_BothSources(t *testing.T) {
 
 	handler.ListProjects(rec, req)
 
-	testutil.AssertStatus(t, rec, http.StatusOK)
+	unittests.AssertStatus(t, rec, http.StatusOK)
 
 	var resp listResponse
-	testutil.DecodeJSON(t, rec, &resp)
+	unittests.DecodeJSON(t, rec, &resp)
 
 	assert.True(t, resp.Success)
 	assert.Len(t, resp.Data, 2)
@@ -101,7 +101,7 @@ func TestListProjects_BothSources(t *testing.T) {
 }
 
 func TestListProjects_IRISOnly(t *testing.T) {
-	deps := testutil.TestDeps()
+	deps := unittests.TestDeps()
 
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	qsRepo := new(mocks.MockQsProjectRepository)
@@ -117,10 +117,10 @@ func TestListProjects_IRISOnly(t *testing.T) {
 
 	handler.ListProjects(rec, req)
 
-	testutil.AssertStatus(t, rec, http.StatusOK)
+	unittests.AssertStatus(t, rec, http.StatusOK)
 
 	var resp listResponse
-	testutil.DecodeJSON(t, rec, &resp)
+	unittests.DecodeJSON(t, rec, &resp)
 
 	assert.True(t, resp.Success)
 	assert.Len(t, resp.Data, 1)
@@ -133,7 +133,7 @@ func TestListProjects_IRISOnly(t *testing.T) {
 }
 
 func TestListProjects_QSOnly(t *testing.T) {
-	deps := testutil.TestDeps()
+	deps := unittests.TestDeps()
 
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	qsRepo := new(mocks.MockQsProjectRepository)
@@ -149,10 +149,10 @@ func TestListProjects_QSOnly(t *testing.T) {
 
 	handler.ListProjects(rec, req)
 
-	testutil.AssertStatus(t, rec, http.StatusOK)
+	unittests.AssertStatus(t, rec, http.StatusOK)
 
 	var resp listResponse
-	testutil.DecodeJSON(t, rec, &resp)
+	unittests.DecodeJSON(t, rec, &resp)
 
 	assert.True(t, resp.Success)
 	assert.Len(t, resp.Data, 1)
@@ -166,7 +166,7 @@ func TestListProjects_QSOnly(t *testing.T) {
 }
 
 func TestListProjects_EmptyResult(t *testing.T) {
-	deps := testutil.TestDeps()
+	deps := unittests.TestDeps()
 
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	qsRepo := new(mocks.MockQsProjectRepository)
@@ -184,10 +184,10 @@ func TestListProjects_EmptyResult(t *testing.T) {
 
 	handler.ListProjects(rec, req)
 
-	testutil.AssertStatus(t, rec, http.StatusOK)
+	unittests.AssertStatus(t, rec, http.StatusOK)
 
 	var resp listResponse
-	testutil.DecodeJSON(t, rec, &resp)
+	unittests.DecodeJSON(t, rec, &resp)
 
 	assert.True(t, resp.Success)
 	assert.NotNil(t, resp.Data, "data should be an empty array, not null")
@@ -199,7 +199,7 @@ func TestListProjects_EmptyResult(t *testing.T) {
 }
 
 func TestListProjects_IRISError(t *testing.T) {
-	deps := testutil.TestDeps()
+	deps := unittests.TestDeps()
 
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	qsRepo := new(mocks.MockQsProjectRepository)
@@ -217,10 +217,10 @@ func TestListProjects_IRISError(t *testing.T) {
 
 	handler.ListProjects(rec, req)
 
-	testutil.AssertStatus(t, rec, http.StatusOK)
+	unittests.AssertStatus(t, rec, http.StatusOK)
 
 	var resp listResponse
-	testutil.DecodeJSON(t, rec, &resp)
+	unittests.DecodeJSON(t, rec, &resp)
 
 	assert.True(t, resp.Success)
 	assert.Len(t, resp.Data, 1, "should contain only QS results when IRIS errors")
@@ -233,7 +233,7 @@ func TestListProjects_IRISError(t *testing.T) {
 }
 
 func TestListProjects_NilRepos(t *testing.T) {
-	deps := testutil.TestDeps()
+	deps := unittests.TestDeps()
 	deps.ProjectService = service.NewProjectService(nil, nil, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
@@ -242,10 +242,10 @@ func TestListProjects_NilRepos(t *testing.T) {
 
 	handler.ListProjects(rec, req)
 
-	testutil.AssertStatus(t, rec, http.StatusOK)
+	unittests.AssertStatus(t, rec, http.StatusOK)
 
 	var resp listResponse
-	testutil.DecodeJSON(t, rec, &resp)
+	unittests.DecodeJSON(t, rec, &resp)
 
 	assert.True(t, resp.Success)
 	assert.NotNil(t, resp.Data, "data should be an empty array, not null")
