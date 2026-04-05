@@ -129,9 +129,7 @@ func (h *Handler) UpdateBooking(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		StatusID *int `json:"statusId"`
-	}
+	var body dto.UpdateBookingRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -162,10 +160,7 @@ func (h *Handler) UpdateBookingReward(w http.ResponseWriter, r *http.Request) {
 		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	var req struct {
-		RewardPoints int    `json:"rewardPoints"`
-		RewardStatus string `json:"rewardStatus"`
-	}
+	var req dto.UpdateBookingRewardRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

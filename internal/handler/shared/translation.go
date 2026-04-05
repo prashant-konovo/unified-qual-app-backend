@@ -36,13 +36,7 @@ func (h *Handler) UpdateTopicTranslations(w http.ResponseWriter, r *http.Request
 	pidStr := chi.URLParam(r, "projectId")
 	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
 
-	var req struct {
-		Translations []struct {
-			TopicID        int64  `json:"topicId"`
-			LanguageCode   string `json:"languageCode"`
-			TranslatedName string `json:"translatedName"`
-		} `json:"translations"`
-	}
+	var req dto.UpdateTopicTranslationsRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

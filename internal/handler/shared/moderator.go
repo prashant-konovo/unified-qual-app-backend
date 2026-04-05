@@ -59,12 +59,7 @@ func (h *Handler) CreateModerator(w http.ResponseWriter, r *http.Request) {
 		dto.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
-	var req struct {
-		FirstName string `json:"firstName"`
-		LastName  string `json:"lastName"`
-		Email     string `json:"email"    validate:"required,email"`
-		TimeZone  string `json:"timeZone"`
-	}
+	var req dto.CreateModeratorRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -168,12 +163,7 @@ func (h *Handler) UpdateModerator(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		FirstName string `json:"firstName"`
-		LastName  string `json:"lastName"`
-		TimeZone  string `json:"timezone"`
-		Source    string `json:"source"`
-	}
+	var body dto.UpdateModeratorRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -365,11 +355,7 @@ func (h *Handler) PostModeratorAvailability(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var body struct {
-		ClientID  int64  `json:"clientId"`
-		StartTime string `json:"startTime"`
-		EndTime   string `json:"endTime"`
-	}
+	var body dto.PostModeratorAvailabilityRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return

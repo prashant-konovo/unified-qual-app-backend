@@ -26,11 +26,7 @@ func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		TimeSlotID  int64 `json:"timeSlotId"  validate:"required,gt=0"`
-		ModeratorID int64 `json:"moderatorId"`
-		ResponderID int64 `json:"responderId"`
-	}
+	var body dto.ScheduleInterviewRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -71,9 +67,7 @@ func (h *Handler) CancelInterview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		Reason string `json:"reason"`
-	}
+	var body dto.CancelInterviewRequest
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
 	user := middleware.GetUser(r)
@@ -117,11 +111,7 @@ func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		NewStartTime string `json:"newStartTime"`
-		NewEndTime   string `json:"newEndTime"`
-		Reason       string `json:"reason"`
-	}
+	var body dto.RescheduleInterviewRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return

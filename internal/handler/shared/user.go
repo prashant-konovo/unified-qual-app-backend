@@ -125,12 +125,7 @@ func (h *Handler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	var req struct {
-		FirstName string `json:"firstName"`
-		LastName  string `json:"lastName"`
-		TimeZone  string `json:"timeZone"`
-		Source    string `json:"source"`
-	}
+	var req dto.UpdateUserRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -170,14 +165,7 @@ func (h *Handler) CheckPasswordMatches(w http.ResponseWriter, r *http.Request) {
 // Contract-identical with legacy InCrowdAPI: POST /v1/event_log
 // Response: {"message": "Event Logs send successfully"}
 func (h *Handler) CreateEventLog(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		EventType   string `json:"eventType"`
-		Description string `json:"description"`
-		UserID      int64  `json:"userId"`
-		ProjectID   int64  `json:"projectId"`
-		TimeSlotID  int64  `json:"timeSlotId"`
-		MetaData    string `json:"metaData"`
-	}
+	var req dto.CreateEventLogRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -348,10 +336,7 @@ func (h *Handler) GetUserEmail(w http.ResponseWriter, r *http.Request) {
 // Request: {userId, userSelectedTimeZone}
 // Response: {} (legacy UPDATE returns no records)
 func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		UserID               int64  `json:"userId"`
-		UserSelectedTimeZone string `json:"userSelectedTimeZone"`
-	}
+	var req dto.UpsertUserTimeZoneRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

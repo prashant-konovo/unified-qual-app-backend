@@ -64,13 +64,7 @@ func (h *Handler) GetEmailTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) SendReminder(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Recipients []string `json:"recipients"`
-		Subject    string   `json:"subject"`
-		Body       string   `json:"body"`
-		Type       string   `json:"type"`
-		ProjectID  int64    `json:"projectId"`
-	}
+	var req dto.SendReminderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		// If no body, treat as simple reminder
 		dto.WriteJSON(w, http.StatusOK, map[string]any{"sent": true, "recipientCount": 0})

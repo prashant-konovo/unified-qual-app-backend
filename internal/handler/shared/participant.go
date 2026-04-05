@@ -91,15 +91,7 @@ func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		FirstName           string `json:"firstName"           validate:"required"`
-		LastName            string `json:"lastName"            validate:"required"`
-		Title               string `json:"title"`
-		Email               string `json:"email"`
-		Phone               string `json:"phone"`
-		ExternalResponderID string `json:"externalResponderId"`
-		TimeZone            string `json:"timeZone"`
-	}
+	var body dto.CreateParticipantRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return

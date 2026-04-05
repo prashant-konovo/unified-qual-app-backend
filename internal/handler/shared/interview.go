@@ -95,13 +95,7 @@ func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var body struct {
-		ProjectID   int64  `json:"projectId"  validate:"required,gt=0"`
-		StartTime   string `json:"startTime"  validate:"required"`
-		EndTime     string `json:"endTime"    validate:"required"`
-		Duration    int    `json:"duration"`
-		ModeratorID int64  `json:"moderatorId"`
-	}
+	var body dto.CreateTimeslotRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -211,14 +205,7 @@ func (h *InterviewHandler) UpdateTimeslot(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var body struct {
-		StatusID  *int   `json:"statusId"`
-		Confirmed *bool  `json:"confirmed"`
-		IsInvalid *int   `json:"isInvalid"`
-		StartTime string `json:"startTime"`
-		EndTime   string `json:"endTime"`
-		Duration  *int   `json:"duration"`
-	}
+	var body dto.UpdateTimeslotRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return

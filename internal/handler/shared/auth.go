@@ -86,13 +86,7 @@ _, _ = w.Write(result.RawBody)
 }
 
 func (h *AuthHandler) AuthPassword(w http.ResponseWriter, r *http.Request) {
-var req struct {
-OldPassword string `json:"currentPassword"`
-NewPassword string `json:"newPassword"`
-Password    string `json:"password"`
-Token       string `json:"token"`
-UserID      int64  `json:"userId"`
-}
+var req dto.ChangePasswordRequest
 if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 dto.WriteError(w, errs)
 return
@@ -154,10 +148,7 @@ dto.WriteJSON(w, http.StatusOK, map[string]any{
 
 // AuthLogout revokes the user's session via AuthService.
 func (h *AuthHandler) AuthLogout(w http.ResponseWriter, r *http.Request) {
-var req struct {
-ICUserID    int64  `json:"icUserId"`
-ICAuthToken string `json:"icAuthToken"`
-}
+var req dto.LogoutRequest
 _ = json.NewDecoder(r.Body).Decode(&req)
 
 h.AuthService.Logout(r.Context(), req.ICUserID, req.ICAuthToken)
@@ -166,9 +157,7 @@ dto.WriteJSON(w, http.StatusOK, map[string]any{"message": "logged out"})
 
 // AuthAcceptTerms proxies terms acceptance to AuthService.
 func (h *AuthHandler) AuthAcceptTerms(w http.ResponseWriter, r *http.Request) {
-var req struct {
-UserID int64 `json:"userId" validate:"required,gt=0"`
-}
+var req dto.AcceptTermsRequest
 if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 dto.WriteError(w, errs)
 return
@@ -199,10 +188,7 @@ dto.WriteJSON(w, http.StatusOK, map[string]any{
 }
 
 func (h *AuthHandler) AuthSSOCallback(w http.ResponseWriter, r *http.Request) {
-var req struct {
-Code        string `json:"code"        validate:"required"`
-RedirectURI string `json:"redirectUri" validate:"required"`
-}
+var req dto.SSOCallbackRequest
 if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 dto.WriteError(w, errs)
 return

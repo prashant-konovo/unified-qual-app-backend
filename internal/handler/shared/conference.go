@@ -29,9 +29,7 @@ import (
 // Response: flat conference data object
 func (h *Handler) ConferenceLogin(w http.ResponseWriter, r *http.Request) {
 	confHashStr, _ := dto.ParseStringParam(r, "confId")
-	var req struct {
-		Pin string `json:"pin"`
-	}
+	var req dto.ConferenceLoginRequest
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
 	if h.ConferenceService.Available() {
@@ -249,13 +247,7 @@ func (h *Handler) RecordingUploadCallback(w http.ResponseWriter, r *http.Request
 	subscriptionIDStr := r.URL.Query().Get("subscriptionId")
 	chimeMeetingID := r.URL.Query().Get("chimeMeetingId")
 
-	var req struct {
-		RecordingURL string `json:"recordingUrl"`
-		Bucket       string `json:"bucket"`
-		Key          string `json:"key"`
-		Duration     int    `json:"duration"`
-		Size         int64  `json:"size"`
-	}
+	var req dto.RecordingUploadCallbackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		// Some callbacks come with empty body — just the query params
 		slog.Info("recording callback with empty body", "meetingId", meetingID)
@@ -297,13 +289,7 @@ func (h *Handler) RecordingUploadCallback(w http.ResponseWriter, r *http.Request
 func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 	bearerToken := dto.ExtractBearerToken(r)
 
-	var req struct {
-		ProjectID      int64  `json:"projectId"`
-		SubscriptionID int64  `json:"subscriptionId"`
-		ModeratorID    int64  `json:"moderatorId"`
-		TimeSlotID     int64  `json:"timeSlotId"`
-		ExternalID     string `json:"externalMeetingId"`
-	}
+	var req dto.CreateMeetingRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -349,10 +335,7 @@ func (h *Handler) CreateMeeting(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) CreateTranscriptionOrder(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		MeetingID string `json:"meetingId"`
-		AudioURL  string `json:"audioUrl"`
-	}
+	var req dto.CreateTranscriptionOrderRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -410,13 +393,7 @@ func (h *Handler) GetTranscript(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) SendNotificationEmail(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Recipients []string `json:"recipients"`
-		Subject    string   `json:"subject"`
-		Body       string   `json:"body"`
-		Type       string   `json:"type"`
-		ProjectID  int64    `json:"projectId"`
-	}
+	var req dto.SendNotificationEmailRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -458,11 +435,7 @@ func (h *Handler) SendNotificationEmail(w http.ResponseWriter, r *http.Request) 
 // ──────────────────────────────────────────────
 
 func (h *Handler) SendSMS(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		To      string `json:"to"`
-		From    string `json:"from"`
-		Message string `json:"message"`
-	}
+	var req dto.SendSMSRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

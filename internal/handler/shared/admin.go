@@ -84,13 +84,7 @@ func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		FirstName string `json:"firstName"`
-		LastName  string `json:"lastName"`
-		Email     string `json:"email"     validate:"required,email"`
-		TimeZone  string `json:"timeZone"`
-		RoleIDs   []int  `json:"roleIds"`
-	}
+	var req dto.CreateAdminUserRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        errs,
