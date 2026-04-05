@@ -75,17 +75,7 @@ func (h *Handler) ThirdPartyIntegrateMRA(w http.ResponseWriter, r *http.Request)
 // ──────────────────────────────────────────────
 
 func (h *Handler) LogFrontEndEventMRA(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		EventName           string `json:"eventName"`
-		Error               any    `json:"error"`
-		StatusCode          any    `json:"statusCode"`
-		SurveyID            any    `json:"surveyId"`
-		DecipherSurveyID    any    `json:"decipherSurveyId"`
-		ProjectID           any    `json:"projectId"`
-		ShgHash             any    `json:"shgHash"`
-		QsPath              any    `json:"qsPath"`
-		RespondentIdentifer any    `json:"respondentIdentifer"`
-	}
+	var body dto.MraLogFrontEndEventRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -124,12 +114,7 @@ func (h *Handler) QualEligibilityMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		ParticipantIDs []any  `json:"participant_ids"`
-		UpdatedBy      string `json:"updated_by"`
-		Reason         string `json:"reason"`
-		Status         string `json:"status"`
-	}
+	var body dto.MraQualEligibilityRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return

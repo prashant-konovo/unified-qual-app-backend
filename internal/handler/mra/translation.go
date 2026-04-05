@@ -97,10 +97,7 @@ func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var req struct {
-		TopicInfo [][]any `json:"topicInfo"`
-		UserID    any     `json:"userId"`
-	}
+	var req dto.MraUpdateTopicTranslationRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

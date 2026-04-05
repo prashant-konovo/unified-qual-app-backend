@@ -23,17 +23,7 @@ import (
 // ──────────────────────────────────────────────────────────────────────────────
 
 func (h *Handler) AddHonorariumAmountMRA(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		ProjectID             json.Number `json:"projectId"`
-		Honorarium            json.Number `json:"honorarium"`
-		Currency              string      `json:"currency"`
-		SessKey               string      `json:"sessKey"`
-		ExternalProjectID     string      `json:"externalProjectId"`
-		ExternalUserSurveyID  string      `json:"externalUserSurveyId"`
-		ExternalUserID        string      `json:"externalUserId"`
-		ExternalCreditOrderID string      `json:"externalCreditOrderId"`
-		ExternalCountryID     string      `json:"externalCountryId"`
-	}
+	var body dto.MraAddHonorariumAmountRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -97,9 +87,7 @@ func (h *Handler) GetHonoValueUpdateReasonListMRA(w http.ResponseWriter, r *http
 // ──────────────────────────────────────────────────────────────────────────────
 
 func (h *Handler) AddTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		TimeSlotIDs []int64 `json:"timeSlotIds"`
-	}
+	var body dto.MraAddTimeSlotPaymentsRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -342,16 +330,7 @@ func (h *Handler) processPendingPaymentsForTimeslotIdsMRA(ctx context.Context, p
 // ──────────────────────────────────────────────────────────────────────────────
 
 func (h *Handler) AddExternalTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.Request) {
-	var body []struct {
-		Amount                json.Number `json:"amount"`
-		Currency              string      `json:"currency"`
-		Source                string      `json:"source"`
-		PaymentDate           string      `json:"paymentDate"`
-		PaymentUserID         json.Number `json:"paymentUserId"`
-		ExternalUserSurveyID  string      `json:"externalUserSurveyId"`
-		ExternalCreditOrderID string      `json:"externalCreditOrderId"`
-		PaymentTypeCode       string      `json:"paymentTypeCode"`
-	}
+	var body []dto.MraExternalTimeSlotPaymentItem
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -432,12 +411,7 @@ func (h *Handler) AddExternalTimeSlotPaymentsMRA(w http.ResponseWriter, r *http.
 // ──────────────────────────────────────────────────────────────────────────────
 
 func (h *Handler) AddTimeSlotCustomHonorariumMRA(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		TimeSlotID int64   `json:"timeSlotId"`
-		OldValue   float64 `json:"oldValue"`
-		NewValue   float64 `json:"newValue"`
-		ReasonCode string  `json:"reasonCode"`
-	}
+	var body dto.MraAddTimeSlotCustomHonorariumRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return

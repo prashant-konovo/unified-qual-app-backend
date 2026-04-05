@@ -67,6 +67,13 @@ type MraUnlinkImportedModeratorRequest struct {
 	ClientID int64 `json:"clientId"`
 }
 
+// MraUpsertModeratorTimeRangeRequest is the request body for upserting a moderator time range (MRA).
+type MraUpsertModeratorTimeRangeRequest struct {
+	StartTime string `json:"startTime"`
+	EndTime   string `json:"endTime"`
+	Timezone  string `json:"timezone"`
+}
+
 // MraModTimeRange holds a moderator's time-range window (MRA).
 type MraModTimeRange struct {
 	StartTime string

@@ -59,12 +59,7 @@ func (h *Handler) PostModeratorAvailabilityMRA(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	var body struct {
-		ModeratorID int64  `json:"moderatorId"`
-		ClientID    int64  `json:"clientId"`
-		StartTime   string `json:"startTime" validate:"required"`
-		EndTime     string `json:"endTime" validate:"required"`
-	}
+	var body dto.MraPostModeratorAvailabilityRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -336,10 +331,7 @@ func (h *Handler) UpdateModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 	}
 
 	// Decode request body
-	var req struct {
-		StartTime string `json:"startTime"`
-		EndTime   string `json:"endTime"`
-	}
+	var req dto.MraUpdateModeratorAvailabilityRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -722,18 +714,14 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	type modTimeRange struct {
-		startTime string
-		endTime   string
-		timezone  string
-	}
+	type modTimeRange = dto.MraModTimeRange
 	moderatorsWithTimeRangeMap := make(map[int64]modTimeRange)
 	for _, tr := range moderatorsTimeRange {
 		modID, _ := tr["moderator_id"].(int64)
 		moderatorsWithTimeRangeMap[modID] = modTimeRange{
-			startTime: fmt.Sprint(tr["start_time"]),
-			endTime:   fmt.Sprint(tr["end_time"]),
-			timezone:  fmt.Sprint(tr["timezone"]),
+			StartTime: fmt.Sprint(tr["start_time"]),
+			EndTime:   fmt.Sprint(tr["end_time"]),
+			Timezone:  fmt.Sprint(tr["timezone"]),
 		}
 	}
 
@@ -807,7 +795,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 			// Check moderator working hours
 			isWithinTimeRangeCondition := true
 			if tr, ok := moderatorsWithTimeRangeMap[modID]; ok {
-				isWithinTimeRangeCondition = isWithinModeratorTimeRange(tr.startTime, tr.endTime, tr.timezone, newStartTime, newEndTime)
+				isWithinTimeRangeCondition = isWithinModeratorTimeRange(tr.StartTime, tr.EndTime, tr.Timezone, newStartTime, newEndTime)
 			}
 
 			if !newStartTime.Before(currentTime) && !newEndTime.After(endTime) && respectsTimeBuffer && isWithinTimeRangeCondition {
@@ -897,9 +885,7 @@ func (h *Handler) GetModeratorTimeslotsMRA(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Parse optional body for projectsToFilter
-	var body struct {
-		ProjectsToFilter []int64 `json:"projectsToFilter"`
-	}
+	var body dto.MraGetModeratorTimeslotsRequest
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 	}
@@ -936,10 +922,7 @@ func (h *Handler) GetModeratorInterviewsMRA(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Parse body
-	var body struct {
-		ProjectsIDs       string `json:"projectsIds"`
-		PaymentStatusCode string `json:"paymentStatusCode"`
-	}
+	var body dto.MraGetModeratorInterviewsRequest
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 	}
@@ -1052,10 +1035,7 @@ func (h *Handler) UpdateModeratorMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		ModeratorBuffer      int   `json:"moderatorBuffer"`
-		UpdateAvailabilities *bool `json:"updateAvailabilities,omitempty"`
-	}
+	var body dto.MraUpdateModeratorBufferRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -1425,11 +1405,7 @@ func (h *Handler) UpsertModeratorTimeRangeMRA(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var body struct {
-		StartTime string `json:"startTime"`
-		EndTime   string `json:"endTime"`
-		Timezone  string `json:"timezone"`
-	}
+	var body dto.MraUpsertModeratorTimeRangeRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -1525,12 +1501,7 @@ func (h *Handler) StartModeratorImportMRA(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var body struct {
-		ExternalCalendarInput    string `json:"externalCalendarInput"`
-		ExternalCalendarKeyInput string `json:"externalCalendarKeyInput"`
-		ForceUpdate              bool   `json:"forceUpdate"`
-		UserID                   any    `json:"userId"`
-	}
+	var body dto.MraStartModeratorImportRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -1685,9 +1656,7 @@ func (h *Handler) UnlinkImportedModeratorMRA(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var req struct {
-		ClientID int64 `json:"clientId"`
-	}
+	var req dto.MraUnlinkImportedModeratorRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

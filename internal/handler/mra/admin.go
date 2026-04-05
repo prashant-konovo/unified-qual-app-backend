@@ -86,12 +86,7 @@ func (h *Handler) GetPMTimeslotsMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		Pending       bool    `json:"pending"`
-		ProjectID     int64   `json:"projectId"`
-		FilterBy      string  `json:"filterBy"`
-		FilteredItems []int64 `json:"filteredItems"`
-	}
+	var body dto.MraGetPMTimeslotsRequest
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 	}
@@ -148,10 +143,7 @@ func (h *Handler) GetAvailabilitiesForPMMRA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var body struct {
-		FilterBy      string  `json:"filterBy"`
-		FilteredItems []int64 `json:"filteredItems"`
-	}
+	var body dto.MraGetAvailabilitiesForPMRequest
 	if r.Body != nil {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 	}

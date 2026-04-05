@@ -280,9 +280,7 @@ func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var body struct {
-		ExternalSurveyID string `json:"externalSurveyId"`
-	}
+	var body dto.MraUpdateExternalSurveyIDRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -324,9 +322,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 		mode = r.Header.Get("X-Mode")
 	}
 
-	var body struct {
-		ModeratorIDs []int64 `json:"moderatorIds"`
-	}
+	var body dto.MraResetProjectModeratorsRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -461,10 +457,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var body struct {
-		PMTimeZone     string `json:"pmTimeZone"`
-		PMTimeZoneAbbr string `json:"pmTimeZoneAbbr"`
-	}
+	var body dto.MraHandleProjectExportRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		body.PMTimeZone = "America/New_York"
 		body.PMTimeZoneAbbr = "EDT"
@@ -579,9 +572,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		SampleSize int64 `json:"sampleSize"`
-	}
+	var body dto.MraUpdateSampleSizeRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return

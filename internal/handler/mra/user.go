@@ -29,10 +29,7 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Password string `json:"password"`
-		Token    string `json:"token"`
-	}
+	var req dto.MraPatchUserRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -63,9 +60,7 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Password string `json:"password"`
-	}
+	var req dto.MraPasswordRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -99,9 +94,7 @@ func (h *Handler) CheckPasswordMatchesMRA(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var req struct {
-		Password string `json:"password"`
-	}
+	var req dto.MraPasswordRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

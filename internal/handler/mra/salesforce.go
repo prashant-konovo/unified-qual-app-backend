@@ -77,9 +77,7 @@ func (h *Handler) GetSalesforceClientsWithFilterMRA(w http.ResponseWriter, r *ht
 		return
 	}
 
-	var body struct {
-		ProjectAccountID int `json:"projectAccountId"`
-	}
+	var body dto.MraGetSalesforceClientsWithFilterRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return

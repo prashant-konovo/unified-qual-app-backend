@@ -37,11 +37,7 @@ func (h *Handler) AddConferenceLinkMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		ConferenceLink     string  `json:"conferenceLink"`
-		MeetingInformation [][]any `json:"meetingInformation"`
-		UserID             any     `json:"userId"`
-	}
+	var body dto.MraConferenceLinkRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -96,11 +92,7 @@ func (h *Handler) UpdateConferenceLinkMRA(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var body struct {
-		ConferenceLink     string  `json:"conferenceLink"`
-		MeetingInformation [][]any `json:"meetingInformation"`
-		UserID             any     `json:"userId"`
-	}
+	var body dto.MraConferenceLinkRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return

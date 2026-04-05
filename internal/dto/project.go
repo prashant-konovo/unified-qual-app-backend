@@ -122,3 +122,24 @@ type UpdateProjectRequest struct {
 	IsArchived          *bool  `json:"isArchived"`
 	Source              string `json:"source"`
 }
+
+// MraUpdateExternalSurveyIDRequest is the request body for updating the external survey ID (MRA).
+type MraUpdateExternalSurveyIDRequest struct {
+	ExternalSurveyID string `json:"externalSurveyId"`
+}
+
+// MraResetProjectModeratorsRequest is the request body for resetting project moderators (MRA).
+type MraResetProjectModeratorsRequest struct {
+	ModeratorIDs []int64 `json:"moderatorIds"`
+}
+
+// MraHandleProjectExportRequest is the request body for project export (MRA).
+type MraHandleProjectExportRequest struct {
+	PMTimeZone     string `json:"pmTimeZone"`
+	PMTimeZoneAbbr string `json:"pmTimeZoneAbbr"`
+}
+
+// MraUpdateSampleSizeRequest is the request body for updating a project's sample size (MRA).
+type MraUpdateSampleSizeRequest struct {
+	SampleSize int64 `json:"sampleSize"`
+}

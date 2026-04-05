@@ -33,16 +33,7 @@ func (h *Handler) GetAllInterviewsMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		ExternalClientsIDs []string `json:"externalClientsIds"`
-		ProjectsIDs        []string `json:"projectsIds"`
-		ProjectAccountID   any      `json:"projectAccountId"`
-		UserID             any      `json:"userId"`
-		Offset             int      `json:"offset"`
-		ActiveTab          string   `json:"activeTab"`
-		HandleScroll       any      `json:"handleScroll"`
-		PaymentStatusCode  string   `json:"paymentStatusCode"`
-	}
+	var body dto.MraGetAllInterviewsRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -112,27 +103,7 @@ func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var body struct {
-		SurveyID             int64  `json:"surveyId"`
-		ResponderLanguage    string `json:"responderLanguage"`
-		IsReschedule         bool   `json:"isReschedule"`
-		RescheduleToken      string `json:"rescheduleToken"`
-		UserTimeZone         string `json:"userTimeZone"`
-		TimeZoneAbbr         string `json:"timeZoneAbbr"`
-		QsPath               any    `json:"qsPath"`
-		IsUATTesting         bool   `json:"isUATTesting"`
-		ShgHash              string `json:"shgHash"`
-		StartedAt            string `json:"startedAt"`
-		FinishedAt           string `json:"finishedAt"`
-		Comment              string `json:"comment"`
-		InvalidateReschedule any    `json:"invalidateReschedule"`
-		Slot                 *struct {
-			StartTime               string `json:"startTime"`
-			EndTime                 string `json:"endTime"`
-			ModeratorAvailabilityID int64  `json:"moderatorAvailabilityId"`
-			HasImportedOverlap      any    `json:"hasImportedOverlap"`
-		} `json:"slot"`
-	}
+	var body dto.MraScheduleInterviewRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -189,28 +160,7 @@ func (h *Handler) RespondentRescheduleMRA(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var body struct {
-		TimeSlotID           int64  `json:"timeSlotId"`
-		ResponderLanguage    string `json:"responderLanguage"`
-		InvalidateReschedule any    `json:"invalidateReschedule"`
-		RespondentIdentifer  string `json:"respondentIdentifer"`
-		RescheduleToken      string `json:"rescheduleToken"`
-		SurveyID             int64  `json:"surveyId"`
-		IsReschedule         bool   `json:"isReschedule"`
-		UserTimeZone         string `json:"userTimeZone"`
-		TimeZoneAbbr         string `json:"timeZoneAbbr"`
-		QsPath               any    `json:"qsPath"`
-		ShgHash              string `json:"shgHash"`
-		StartedAt            string `json:"startedAt"`
-		FinishedAt           string `json:"finishedAt"`
-		Comment              string `json:"comment"`
-		Slot                 *struct {
-			StartTime               string `json:"startTime"`
-			EndTime                 string `json:"endTime"`
-			ModeratorAvailabilityID int64  `json:"moderatorAvailabilityId"`
-			HasImportedOverlap      any    `json:"hasImportedOverlap"`
-		} `json:"slot"`
-	}
+	var body dto.MraRespondentRescheduleRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -261,13 +211,7 @@ func (h *Handler) InvalidateInterviewMRA(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var body struct {
-		TimeSlotID             any    `json:"timeSlotId"`
-		InvalidationReasonCode string `json:"invalidationReasonCode"`
-		InvalidationReasonText string `json:"invalidationReasonText"`
-		InvalidatedByUserID    any    `json:"invalidatedByUserId"`
-		IsInvalidateEmailSent  *bool  `json:"isInvalidateEmailSent"`
-	}
+	var body dto.MraInvalidateInterviewRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -387,11 +331,7 @@ func (h *Handler) SendInvalidateRescheduleMailMRA(w http.ResponseWriter, r *http
 		return
 	}
 
-	var body struct {
-		TimeSlotID       any   `json:"timeSlotId"`
-		ParticipantID    any   `json:"participantId"`
-		IsIneligibleMail *bool `json:"isIneligibleMail"`
-	}
+	var body dto.MraSendInvalidateRescheduleMailRequest
 	if errs := dto.DecodeAndValidate(r, &body); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -539,9 +479,7 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 	// Full implementation requires moderator_external_calendar table query.
 
 	// Parse request body (legacy parses body for responderLanguage etc.)
-	var body struct {
-		ResponderLanguage string `json:"responderLanguage"`
-	}
+	var body dto.MraCancelRescheduleActionRequest
 	_ = json.NewDecoder(r.Body).Decode(&body)
 
 	// Update status_id
