@@ -1,12 +1,12 @@
-package qualapi
+package support
 
 import (
+	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )

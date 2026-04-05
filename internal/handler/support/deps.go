@@ -1,4 +1,4 @@
-package qualapi
+package support
 
 import (
 	"github.com/InCrowd/unified-qual-api/internal/config"

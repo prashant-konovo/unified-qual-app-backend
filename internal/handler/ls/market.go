@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	qualapi "github.com/InCrowd/unified-qual-api"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
@@ -25,7 +25,7 @@ import (
 // Query params: brandId, subscriptionId, accountId, includeAnyProfession, lang, limit, offset
 func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 	if h.IrisSurveyRepo == nil {
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}, "limit": nil, "offset": nil, "totalCount": 0})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}, "limit": nil, "offset": nil, "totalCount": 0})
 		return
 	}
 
@@ -83,7 +83,7 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 	markets, totalCount, err := h.IrisSurveyRepo.ListMarkets(r.Context(), filter)
 	if err != nil {
 		slog.Error("list markets failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 
@@ -121,7 +121,7 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"markets":    result,
 		"limit":      limitVal,
 		"offset":     offsetVal,
@@ -138,7 +138,7 @@ func (h *Handler) ListMarketsNPI(w http.ResponseWriter, r *http.Request) {
 		markets, err := h.IrisSurveyRepo.ListMarketsWithNPI(r.Context())
 		if err != nil {
 			slog.Error("list npi markets failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(markets))
@@ -147,10 +147,10 @@ func (h *Handler) ListMarketsNPI(w http.ResponseWriter, r *http.Request) {
 				"id": m.ID, "name": m.Name, "canInterview": m.CanInterview,
 			})
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"markets": result})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"markets": result})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}})
 }
 
 // GetCrowdableAttributes returns crowdable attributes for a market.
@@ -159,7 +159,7 @@ func (h *Handler) ListMarketsNPI(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetCrowdableAttributes(w http.ResponseWriter, r *http.Request) {
 	marketID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -167,13 +167,13 @@ func (h *Handler) GetCrowdableAttributes(w http.ResponseWriter, r *http.Request)
 		attrs, err := h.IrisSurveyRepo.GetCrowdableAttributes(r.Context(), marketID)
 		if err != nil {
 			slog.Error("crowdable attrs failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"attributes": attrs})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"attributes": attrs})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"attributes": []any{}})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"attributes": []any{}})
 }
 
 // ──────────────────────────────────────────────

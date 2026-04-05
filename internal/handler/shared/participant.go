@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	qualapi "github.com/InCrowd/unified-qual-api"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
@@ -25,7 +25,7 @@ import (
 func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsRespondentRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
@@ -42,7 +42,7 @@ func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 	respondents, total, err := h.QsRespondentRepo.List(ctx, page, pageSize, search)
 	if err != nil {
 		slog.ErrorContext(ctx, "list participants failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list participants"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list participants"})
 		return
 	}
 
@@ -75,7 +75,7 @@ func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 		result = append(result, item)
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    result,
 		"meta": map[string]any{
@@ -89,7 +89,7 @@ func (h *Handler) ListParticipants(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsRespondentRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
@@ -118,7 +118,7 @@ func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 	respID, err := h.QsRespondentRepo.Create(ctx, resp)
 	if err != nil {
 		slog.ErrorContext(ctx, "create participant failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create participant"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create participant"})
 		return
 	}
 
@@ -135,30 +135,30 @@ func (h *Handler) CreateParticipant(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	qualapi.WriteJSON(w, http.StatusCreated, map[string]any{"id": respID, "source": "qs"})
+	support.WriteJSON(w, http.StatusCreated, map[string]any{"id": respID, "source": "qs"})
 }
 
 func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsRespondentRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	respID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	resp, err := h.QsRespondentRepo.GetByID(ctx, respID)
 	if err != nil {
 		slog.ErrorContext(ctx, "get participant failed", "error", err, "id", respID)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 	if resp == nil {
-		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "participant not found"})
+		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "participant not found"})
 		return
 	}
 
@@ -209,5 +209,5 @@ func (h *Handler) GetParticipant(w http.ResponseWriter, r *http.Request) {
 		result["contacts"] = contacts
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, result)
+	support.WriteJSON(w, http.StatusOK, result)
 }

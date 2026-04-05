@@ -6,13 +6,13 @@ import (
 	"strings"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	qualapi "github.com/InCrowd/unified-qual-api"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 	"github.com/InCrowd/unified-qual-api/internal/service"
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
 
 // ProjectHandler handles project CRUD endpoints.
-type ProjectHandler struct{ *qualapi.Deps }
+type ProjectHandler struct{ *support.Deps }
 
 func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	pg := validate.ParsePagination(r, 20, 100)
@@ -30,7 +30,7 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := h.ProjectService.ListProjects(r.Context(), pg.Page, pg.PageSize, source, search, statusID)
-	qualapi.WriteJSON(w, http.StatusOK, dto.NewPaginated(result.Projects, pg.Page, pg.PageSize, result.Total))
+	support.WriteJSON(w, http.StatusOK, dto.NewPaginated(result.Projects, pg.Page, pg.PageSize, result.Total))
 }
 
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
@@ -42,10 +42,10 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.ProjectService.CreateProject(r.Context(), req)
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create project"})
+		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create project"})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusCreated, dto.MutationResult{
+	support.WriteJSON(w, http.StatusCreated, dto.MutationResult{
 		ID: result.ID, Source: result.Source, ServiceCategory: result.ServiceCategory,
 	})
 }
@@ -53,26 +53,26 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 
 	result, err := h.ProjectService.GetProject(r.Context(), projectID, r.URL.Query().Get("source"))
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "database error"})
+		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "database error"})
 		return
 	}
 	if !result.Found {
-		qualapi.WriteJSON(w, http.StatusNotFound, dto.ErrorBody{Error: "project not found"})
+		support.WriteJSON(w, http.StatusNotFound, dto.ErrorBody{Error: "project not found"})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusOK, result.Project)
+	support.WriteJSON(w, http.StatusOK, result.Project)
 }
 
 func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 
@@ -84,23 +84,23 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.ProjectService.UpdateProject(r.Context(), projectID, req)
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "update failed"})
+		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "update failed"})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusOK, result)
+	support.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 
 	result, err := h.ProjectService.DeleteProject(r.Context(), projectID, r.URL.Query().Get("source"))
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "archive failed"})
+		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "archive failed"})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusOK, result)
+	support.WriteJSON(w, http.StatusOK, result)
 }

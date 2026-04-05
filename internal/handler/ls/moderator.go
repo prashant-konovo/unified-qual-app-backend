@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	qualapi "github.com/InCrowd/unified-qual-api"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
@@ -31,7 +31,7 @@ import (
 func (h *Handler) GetModeratorAvailabilityBySub(w http.ResponseWriter, r *http.Request) {
 	modID, _ := validate.ParseIDParam(r, "modId")
 	subID, _ := validate.ParseIDParam(r, "subId")
-	source := qualapi.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		avails, err := h.IrisSurveyRepo.ListModeratorAvailability(r.Context(), modID, subID)
@@ -47,7 +47,7 @@ func (h *Handler) GetModeratorAvailabilityBySub(w http.ResponseWriter, r *http.R
 				"endTime":        a.EndTime.Format(time.RFC3339),
 			})
 		}
-		qualapi.WriteJSON(w, http.StatusOK, result)
+		support.WriteJSON(w, http.StatusOK, result)
 		return
 	}
 
@@ -65,10 +65,10 @@ func (h *Handler) GetModeratorAvailabilityBySub(w http.ResponseWriter, r *http.R
 				"endTime":   a.EndTime.Format(time.RFC3339),
 			})
 		}
-		qualapi.WriteJSON(w, http.StatusOK, result)
+		support.WriteJSON(w, http.StatusOK, result)
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusOK, []any{})
+	support.WriteJSON(w, http.StatusOK, []any{})
 }
 
 // PostModeratorAvailabilityBySub creates moderator availability for a subscription.
@@ -88,13 +88,13 @@ func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.
 	}
 	startTime, _ := time.Parse(time.RFC3339, req.StartTime)
 	endTime, _ := time.Parse(time.RFC3339, req.EndTime)
-	source := qualapi.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		_, err := h.IrisSurveyRepo.CreateModeratorAvailability(r.Context(), modID, subID, startTime, endTime)
 		if err != nil {
 			slog.Error("create iris avail failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
 		// Return updated availability list (legacy returns array)
@@ -111,7 +111,7 @@ func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.
 				"endTime":        a.EndTime.Format(time.RFC3339),
 			})
 		}
-		qualapi.WriteJSON(w, http.StatusOK, result)
+		support.WriteJSON(w, http.StatusOK, result)
 		return
 	}
 
@@ -119,7 +119,7 @@ func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.
 		_, err := h.QsUserRepo.CreateModeratorAvailability(r.Context(), modID, subID, startTime, endTime)
 		if err != nil {
 			slog.Error("create qs avail failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
 		// Return updated availability list (legacy returns array)
@@ -135,10 +135,10 @@ func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.
 				"endTime":   a.EndTime.Format(time.RFC3339),
 			})
 		}
-		qualapi.WriteJSON(w, http.StatusOK, result)
+		support.WriteJSON(w, http.StatusOK, result)
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 // UpdateModeratorAvailabilityExt updates a moderator availability slot.
@@ -157,27 +157,27 @@ func (h *Handler) UpdateModeratorAvailabilityExt(w http.ResponseWriter, r *http.
 	}
 	startTime, _ := time.Parse(time.RFC3339, req.StartTime)
 	endTime, _ := time.Parse(time.RFC3339, req.EndTime)
-	source := qualapi.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		if err := h.IrisSurveyRepo.UpdateModeratorAvailability(r.Context(), maID, startTime, endTime); err != nil {
 			slog.Error("update iris avail failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": maID})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": maID})
 		return
 	}
 	if h.QsUserRepo != nil {
 		if err := h.QsUserRepo.UpdateModeratorAvailability(r.Context(), maID, startTime, endTime); err != nil {
 			slog.Error("update qs avail failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": maID})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": maID})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
+	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
 }
 
 // DeleteModeratorAvailabilityExt deletes a moderator availability slot.
@@ -185,27 +185,27 @@ func (h *Handler) UpdateModeratorAvailabilityExt(w http.ResponseWriter, r *http.
 // Response: flat array of availability objects
 func (h *Handler) DeleteModeratorAvailabilityExt(w http.ResponseWriter, r *http.Request) {
 	maID, _ := validate.ParseIDParam(r, "maId")
-	source := qualapi.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		if err := h.IrisSurveyRepo.DeleteModeratorAvailability(r.Context(), maID); err != nil {
 			slog.Error("delete iris avail failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": maID})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": maID})
 		return
 	}
 	if h.QsUserRepo != nil {
 		if err := h.QsUserRepo.DeleteModeratorAvailability(r.Context(), maID); err != nil {
 			slog.Error("delete qs avail failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": maID})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": maID})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
+	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "not available"})
 }
 
 // ──────────────────────────────────────────────
@@ -225,13 +225,13 @@ func (h *Handler) GetNoShowCheck(w http.ResponseWriter, r *http.Request) {
 		data, err := h.IrisSurveyRepo.GetNoShowCheck(r.Context())
 		if err != nil {
 			slog.Error("noshow check failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, data)
+		support.WriteJSON(w, http.StatusOK, data)
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"timeSlot": nil, "interviewee": nil})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"timeSlot": nil, "interviewee": nil})
 }
 
 // MarkNoShow marks a timeslot as no-show.
@@ -244,7 +244,7 @@ func (h *Handler) MarkNoShow(w http.ResponseWriter, r *http.Request) {
 	if h.IrisSurveyRepo != nil {
 		if err := h.IrisSurveyRepo.MarkNoShow(r.Context(), projectID, timeSlotID); err != nil {
 			slog.Error("mark noshow failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "mark failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "mark failed"})
 			return
 		}
 		// Hook: TimeSlot.afterUpdateHooks — assignConferenceHashAndPin
@@ -264,12 +264,12 @@ func (h *Handler) MarkNoShow(w http.ResponseWriter, r *http.Request) {
 	if h.IrisSurveyRepo != nil {
 		ts, err := h.IrisSurveyRepo.GetTimeSlotAdminJSON(r.Context(), timeSlotID)
 		if err == nil && ts != nil {
-			qualapi.WriteJSON(w, http.StatusOK, ts)
+			support.WriteJSON(w, http.StatusOK, ts)
 			return
 		}
 	}
 	// Fallback: minimal timeslot shape
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"id": timeSlotID, "projectId": projectID, "statusId": 10,
 		"stopPayment": true,
 	})
@@ -293,9 +293,9 @@ func (h *Handler) StartModeratorImport(w http.ResponseWriter, r *http.Request) {
 		events, err := h.Services.GoogleCal.ListEvents(r.Context(), "", now, now.AddDate(0, 3, 0))
 		if err != nil {
 			slog.Warn("google calendar list events failed", "moderatorId", moderatorID, "error", err)
-			qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+			support.WriteJSON(w, http.StatusOK, map[string]any{
 				"moderatorId": moderatorID,
-				"importId":    qualapi.ID()[:8],
+				"importId":    support.ID()[:8],
 				"status":      "error",
 				"message":     fmt.Sprintf("Google Calendar import failed: %v", err),
 			})
@@ -303,9 +303,9 @@ func (h *Handler) StartModeratorImport(w http.ResponseWriter, r *http.Request) {
 		}
 		slog.Info("google calendar events fetched for import",
 			"moderatorId", moderatorID, "eventCount", len(events))
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"moderatorId": moderatorID,
-			"importId":    qualapi.ID()[:8],
+			"importId":    support.ID()[:8],
 			"status":      "completed",
 			"eventsFound": len(events),
 			"message":     "Calendar events imported successfully.",
@@ -313,9 +313,9 @@ func (h *Handler) StartModeratorImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"moderatorId": moderatorID,
-		"importId":    qualapi.ID()[:8],
+		"importId":    support.ID()[:8],
 		"status":      "not_configured",
 		"message":     "External calendar import requires Google Calendar API credentials.",
 	})
@@ -341,7 +341,7 @@ func (h *Handler) GetImportedAvailability(w http.ResponseWriter, r *http.Request
 					"source":      "google_calendar",
 				})
 			}
-			qualapi.WriteJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": result, "importSource": "google_calendar"})
+			support.WriteJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": result, "importSource": "google_calendar"})
 			return
 		}
 	}
@@ -358,10 +358,10 @@ func (h *Handler) GetImportedAvailability(w http.ResponseWriter, r *http.Request
 				"source":    "database",
 			})
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": result, "importSource": "database"})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": result, "importSource": "database"})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": []any{}, "importSource": "none"})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"moderatorId": moderatorID, "availabilities": []any{}, "importSource": "none"})
 }
 
 func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
@@ -369,7 +369,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 	moderatorID, _ := strconv.ParseInt(modStr, 10, 64)
 
 	if h.Services.GoogleCal.Configured() {
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"moderatorId": moderatorID,
 			"status":      "configured",
 			"message":     "Google Calendar integration is configured and active.",
@@ -377,7 +377,7 @@ func (h *Handler) GetImportStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"moderatorId": moderatorID,
 		"status":      "not_configured",
 		"message":     "Google Calendar import not yet configured. Use manual availability entry.",
@@ -393,7 +393,7 @@ func (h *Handler) UnlinkImportedModerator(w http.ResponseWriter, r *http.Request
 			`DELETE FROM google_calendar_import WHERE moderator_id = ?`, moderatorID)
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, "Imported Moderator calendar has been unlinked")
+	support.WriteJSON(w, http.StatusOK, "Imported Moderator calendar has been unlinked")
 }
 
 func (h *Handler) UpdateGoogleSheetFirstDate(w http.ResponseWriter, r *http.Request) {
@@ -416,17 +416,17 @@ func (h *Handler) UpdateGoogleSheetFirstDate(w http.ResponseWriter, r *http.Requ
 		}
 		if err := h.Services.GoogleSheets.UpdateFirstDate(r.Context(), req.SheetName, req.CellRange, req.Value); err != nil {
 			slog.Warn("google sheets update failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "google sheets update failed: " + err.Error()})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "google sheets update failed: " + err.Error()})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"updated": true,
 			"message": "Google Sheets first date updated successfully.",
 		})
 		return
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"updated": false,
 		"message": "Google Sheets integration not configured.",
 	})

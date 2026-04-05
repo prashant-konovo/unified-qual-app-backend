@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	qualapi "github.com/InCrowd/unified-qual-api"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/InCrowd/unified-qual-api/internal/validate"
@@ -34,7 +34,7 @@ func (h *Handler) CreateProjectMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
 		return
 	}
 
@@ -52,11 +52,11 @@ func (h *Handler) CreateProjectMRA(w http.ResponseWriter, r *http.Request) {
 	record, err := h.QsProjectRepo.CreateProjectFull(r.Context(), body)
 	if err != nil {
 		slog.Error("create project failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, record)
+	support.WriteJSON(w, http.StatusOK, record)
 }
 
 // GetProjectMRA handles GET /project/get-project-details/{project_id} (MRA).
@@ -65,27 +65,27 @@ func (h *Handler) CreateProjectMRA(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetProjectMRA(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
 		return
 	}
 
 	record, err := h.QsProjectRepo.GetProjectDetailsMRA(r.Context(), projectID)
 	if err != nil {
 		slog.Error("get project details failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 	if record == nil {
-		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "project not found"})
+		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "project not found"})
 		return
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, record)
+	support.WriteJSON(w, http.StatusOK, record)
 }
 
 // ListProjectsMRA handles POST /project/get-projects/client/{client_id} (MRA).
@@ -98,7 +98,7 @@ func (h *Handler) ListProjectsMRA(w http.ResponseWriter, r *http.Request) {
 	clientIDStr := chi.URLParam(r, "client_id")
 
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database not configured"})
 		return
 	}
 
@@ -155,7 +155,7 @@ func (h *Handler) ListProjectsMRA(w http.ResponseWriter, r *http.Request) {
 		records, err = h.QsProjectRepo.GetProjectsMRA(r.Context(), creatorID, status, sort, search, externalIDs)
 		if err != nil {
 			slog.Error("get projects mra failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 			return
 		}
 
@@ -189,7 +189,7 @@ func (h *Handler) ListProjectsMRA(w http.ResponseWriter, r *http.Request) {
 		records, err = h.QsProjectRepo.GetProjectsForModsMRA(r.Context(), clientID)
 		if err != nil {
 			slog.Error("get projects for mods mra failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 			return
 		}
 	}
@@ -198,7 +198,7 @@ func (h *Handler) ListProjectsMRA(w http.ResponseWriter, r *http.Request) {
 		"clientId": clientIDStr,
 		"data":     records,
 	}
-	qualapi.WriteJSON(w, http.StatusOK, output)
+	support.WriteJSON(w, http.StatusOK, output)
 }
 
 // UpdateProjectMRA handles PUT /project/update-project-details/{project_id} (MRA).
@@ -210,12 +210,12 @@ func (h *Handler) ListProjectsMRA(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while updating project details",
 		})
@@ -252,7 +252,7 @@ func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		slog.Error("update project mra failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while updating project details",
 		})
@@ -260,7 +260,7 @@ func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Legacy response: {data: undefined} → JSON.stringify → {}
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{})
+	support.WriteJSON(w, http.StatusOK, map[string]any{})
 }
 
 // UpdateExternalSurveyIDMRA handles PUT /project/update-external-survey-id/{project_id} (MRA).
@@ -269,12 +269,12 @@ func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while updating external survey id",
 		})
@@ -291,14 +291,14 @@ func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Reque
 
 	if err := h.QsProjectRepo.UpdateExternalSurveyID(r.Context(), projectID, body.ExternalSurveyID); err != nil {
 		slog.Error("update external survey id failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while updating external survey id",
 		})
 		return
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{})
+	support.WriteJSON(w, http.StatusOK, map[string]any{})
 }
 
 // ResetProjectModeratorsMRA handles POST /project/{project_id}/moderators_reset (MRA).
@@ -308,12 +308,12 @@ func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Reque
 func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while trying to reset project moderators",
 		})
@@ -337,7 +337,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 		existingIDs, err := h.QsProjectRepo.GetProjectModeratorIDs(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get project mod ids failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while trying to reset project moderators",
 			})
@@ -346,7 +346,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 
 		if err := h.QsProjectRepo.ResetProjectModeratorsMRA(r.Context(), projectID, body.ModeratorIDs, existingIDs); err != nil {
 			slog.Error("reset project mods failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while trying to reset project moderators",
 			})
@@ -354,10 +354,10 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 		}
 
 		// Legacy returns transaction result array
-		qualapi.WriteJSON(w, http.StatusOK, []map[string]any{})
+		support.WriteJSON(w, http.StatusOK, []map[string]any{})
 	} else if mode == "unassign" {
 		if len(body.ModeratorIDs) == 0 {
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        "no moderator id provided",
 				"errorMessage": "An error occured while trying to reset project moderators",
 			})
@@ -366,7 +366,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 		modID := body.ModeratorIDs[0]
 		if err := h.QsProjectRepo.UnassignModeratorFromProject(r.Context(), modID, projectID); err != nil {
 			slog.Error("unassign moderator failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while trying to reset project moderators",
 			})
@@ -376,15 +376,15 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 		mods, err := h.QsProjectRepo.GetModeratorsList(r.Context(), projectID)
 		if err != nil {
 			slog.Error("get moderators list failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while trying to reset project moderators",
 			})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, mods)
+		support.WriteJSON(w, http.StatusOK, mods)
 	} else {
-		qualapi.WriteJSON(w, 422, map[string]any{
+		support.WriteJSON(w, 422, map[string]any{
 			"errorMessage": "Missing mode in request",
 		})
 	}
@@ -396,7 +396,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 // Response: {body_content: "..."} (records[0]).
 func (h *Handler) GetEmailTemplateMRA(w http.ResponseWriter, r *http.Request) {
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while getting the email template",
 		})
@@ -424,14 +424,14 @@ func (h *Handler) GetEmailTemplateMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if typeID == 0 {
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{})
+		support.WriteJSON(w, http.StatusOK, map[string]any{})
 		return
 	}
 
 	record, err := h.QsProjectRepo.GetEmailTemplateMRA(r.Context(), typeID, responderLanguage)
 	if err != nil {
 		slog.Error("get email template failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while getting the email template",
 		})
@@ -441,7 +441,7 @@ func (h *Handler) GetEmailTemplateMRA(w http.ResponseWriter, r *http.Request) {
 		record = map[string]any{}
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, record)
+	support.WriteJSON(w, http.StatusOK, record)
 }
 
 // HandleProjectExportMRA handles POST /project/{project_id}/handle-export (MRA).
@@ -450,12 +450,12 @@ func (h *Handler) GetEmailTemplateMRA(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while exporting project",
 		})
@@ -482,7 +482,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 	exportRows, err := h.QsProjectRepo.HandleProjectExportMRA(r.Context(), projectID, body.PMTimeZone, body.PMTimeZoneAbbr, rescheduleLinkPrefix)
 	if err != nil {
 		slog.Error("export query failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while exporting project",
 		})
@@ -526,7 +526,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 		buf, err := f.WriteToBuffer()
 		if err != nil {
 			slog.Error("excel write failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while exporting project",
 			})
@@ -537,7 +537,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 		_, err = h.Services.S3.UploadFile(r.Context(), bucket, s3Key, buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 		if err != nil {
 			slog.Error("s3 upload failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while exporting project",
 			})
@@ -547,18 +547,18 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 		presignedURL, err := h.Services.S3.GetPresignedURL(r.Context(), bucket, s3Key, 15*time.Minute)
 		if err != nil {
 			slog.Error("presign failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while exporting project",
 			})
 			return
 		}
 
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"fileURL": presignedURL})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"fileURL": presignedURL})
 		return
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"fileURL": "", "rows": len(allRows)})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"fileURL": "", "rows": len(allRows)})
 }
 
 // UpdateSampleSizeMRA handles PUT /project/{project_id}/update-sample-size (MRA).
@@ -568,12 +568,12 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while updating project sample size",
 		})
@@ -591,7 +591,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 	// Get current project details to validate
 	project, err := h.QsProjectRepo.GetProjectDetailsMRA(r.Context(), projectID)
 	if err != nil || project == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "project not found",
 			"errorMessage": "An error occured while updating project sample size",
 		})
@@ -605,7 +605,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 
 	// Validation: sampleSize must differ from current and > 0
 	if body.SampleSize == currentSampleSize || body.SampleSize == 0 {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"errorMessage": "Updated sample size must be greater than 0 and different than the original sample size",
 		})
 		return
@@ -613,7 +613,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 
 	// Validation: sampleSize must be >= scheduled + completed
 	if body.SampleSize < scheduled+completed {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"errorMessage": "Condition newSampleSize >= shceduled+completed interviews not verified",
 		})
 		return
@@ -627,7 +627,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 		// InProgress → Completed
 		if err := h.QsProjectRepo.UpdateSampleSizeProjectStatusMRA(r.Context(), projectID, body.SampleSize, projectStatusCompleted); err != nil {
 			slog.Error("update sample size with status failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while updating project sample size",
 			})
@@ -637,7 +637,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 		// Completed → InProgress
 		if err := h.QsProjectRepo.UpdateSampleSizeProjectStatusMRA(r.Context(), projectID, body.SampleSize, projectStatusInProgress); err != nil {
 			slog.Error("update sample size with status failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while updating project sample size",
 			})
@@ -647,7 +647,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 		// Just update sample_size
 		if err := h.QsProjectRepo.UpdateSampleSizeMRA(r.Context(), projectID, body.SampleSize); err != nil {
 			slog.Error("update sample size failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while updating project sample size",
 			})
@@ -667,12 +667,12 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while getting available and unavailable moderators assigned to the project",
 		})
@@ -682,7 +682,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 	// 1. Get project details
 	project, err := h.QsProjectRepo.GetProjectDetailsMRA(r.Context(), projectID)
 	if err != nil || project == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"errorMessage": "An error occured while getting project details",
 		})
 		return
@@ -710,7 +710,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 	// 3. Get project moderator IDs
 	modIDs, err := h.QsProjectRepo.GetProjectModeratorIDs(r.Context(), projectID)
 	if err != nil || len(modIDs) == 0 {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{
 			"errorMessage": "No moderators assigned to the project ",
 		})
 		return
@@ -720,7 +720,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 	availabilities, err := h.QsProjectRepo.GetAllModeratorsAvailabilityPerClient(r.Context(), clientID, projectID)
 	if err != nil {
 		slog.Error("get moderator availability failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while getting available and unavailable moderators assigned to the project",
 		})
@@ -734,7 +734,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 
 	if len(availabilities) == 0 {
 		output["displayError"] = true
-		qualapi.WriteJSON(w, http.StatusOK, output)
+		support.WriteJSON(w, http.StatusOK, output)
 		return
 	}
 
@@ -774,13 +774,13 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 
 	if len(availableMods) == 0 {
 		output["displayError"] = true
-		qualapi.WriteJSON(w, http.StatusOK, output)
+		support.WriteJSON(w, http.StatusOK, output)
 		return
 	}
 
 	if len(unavailableMods) > 0 {
 		output["displayWarning"] = true
-		qualapi.WriteJSON(w, http.StatusOK, output)
+		support.WriteJSON(w, http.StatusOK, output)
 		return
 	}
 
@@ -792,7 +792,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 		}
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, output)
+	support.WriteJSON(w, http.StatusOK, output)
 }
 
 // isWithinTimeRange checks if a time slot falls within a moderator's configured time range.
@@ -824,17 +824,17 @@ func isWithinTimeRange(tr qs.ModeratorTimeRange, newStart, newEnd time.Time) boo
 func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	sampleSize, err := validate.ParseIDParam(r, "sample_size")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
 			"errorMessage": "An error occured while getting the number of available moderators",
 		})
@@ -845,7 +845,7 @@ func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) 
 	availabilities, err := h.QsProjectRepo.GetAllModeratorsAvailabilityPerRole(r.Context(), projectID)
 	if err != nil {
 		slog.Error("get moderator availability per role failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while getting the number of available moderators",
 		})
@@ -855,7 +855,7 @@ func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) 
 	// Get project details for interviewLength and completed count
 	project, err := h.QsProjectRepo.GetProjectDetailsMRA(r.Context(), projectID)
 	if err != nil || project == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"errorMessage": "An error occured while getting project details",
 		})
 		return
@@ -880,7 +880,7 @@ func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) 
 		displayWarning = true
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"avModCount":     modIdAvailabilitiesCount,
 		"displayWarning": displayWarning,
 	})

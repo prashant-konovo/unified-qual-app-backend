@@ -1,4 +1,4 @@
-package qualapi
+package support
 
 import (
 	"encoding/json"

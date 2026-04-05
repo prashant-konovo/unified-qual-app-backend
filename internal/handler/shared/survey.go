@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	qualapi "github.com/InCrowd/unified-qual-api"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/validate"
@@ -14,7 +14,7 @@ import (
 )
 
 // SurveyHandler handles survey CRUD endpoints.
-type SurveyHandler struct{ *qualapi.Deps }
+type SurveyHandler struct{ *support.Deps }
 
 // ──────────────────────────────────────────────
 // Surveys
@@ -23,28 +23,28 @@ type SurveyHandler struct{ *qualapi.Deps }
 func (h *SurveyHandler) ListSurveys(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsSurveyRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	search := r.URL.Query().Get("search")
 	rows, err := h.QsSurveyRepo.List(ctx, search)
 	if err != nil {
 		slog.Error("list surveys", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to list surveys"})
+		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to list surveys"})
 		return
 	}
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, dto.SurveyFromRow(&row))
 	}
-	qualapi.WriteJSON(w, http.StatusOK, out)
+	support.WriteJSON(w, http.StatusOK, out)
 }
 
 
 func (h *SurveyHandler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsSurveyRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	var req dto.CreateSurveyRequest
@@ -67,26 +67,26 @@ func (h *SurveyHandler) CreateSurvey(w http.ResponseWriter, r *http.Request) {
 	newID, err := h.QsSurveyRepo.Create(ctx, req.ProjectID, req.Title, req.Status, req.Questions, req.Rules)
 	if err != nil {
 		slog.Error("create survey", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create survey"})
+		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to create survey"})
 		return
 	}
 	row, err := h.QsSurveyRepo.GetByID(ctx, newID)
 	if err != nil || row == nil {
-		qualapi.WriteJSON(w, http.StatusCreated, map[string]any{"id": fmt.Sprintf("%d", newID)})
+		support.WriteJSON(w, http.StatusCreated, map[string]any{"id": fmt.Sprintf("%d", newID)})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusCreated, dto.SurveyFromRow(row))
+	support.WriteJSON(w, http.StatusCreated, dto.SurveyFromRow(row))
 }
 
 func (h *SurveyHandler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsSurveyRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 	var req dto.CreateSurveyRequest
@@ -102,58 +102,58 @@ func (h *SurveyHandler) UpdateSurvey(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.QsSurveyRepo.Update(ctx, surveyID, req.Title, req.Status, req.Questions, req.Rules); err != nil {
 		slog.Error("update survey", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to update survey"})
+		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to update survey"})
 		return
 	}
 	row, err := h.QsSurveyRepo.GetByID(ctx, surveyID)
 	if err != nil || row == nil {
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"id": fmt.Sprintf("%d", surveyID), "updatedAt": qualapi.Now()})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"id": fmt.Sprintf("%d", surveyID), "updatedAt": support.Now()})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusOK, dto.SurveyFromRow(row))
+	support.WriteJSON(w, http.StatusOK, dto.SurveyFromRow(row))
 }
 
 func (h *SurveyHandler) DeleteSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsSurveyRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 	if err := h.QsSurveyRepo.Delete(ctx, surveyID); err != nil {
 		slog.Error("delete survey", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to delete survey"})
+		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to delete survey"})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 func (h *SurveyHandler) GetPublicSurvey(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsSurveyRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, dto.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 	surveyID, err := validate.ParseIDParam(r, "surveyId")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, dto.ErrorBody{Error: err.Error()})
 		return
 	}
 	row, err := h.QsSurveyRepo.GetByID(ctx, surveyID)
 	if err != nil {
 		slog.Error("get public survey", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to get survey"})
+		support.WriteJSON(w, http.StatusInternalServerError, dto.ErrorBody{Error: "failed to get survey"})
 		return
 	}
 	if row == nil {
-		qualapi.WriteJSON(w, http.StatusNotFound, dto.ErrorBody{Error: "survey not found"})
+		support.WriteJSON(w, http.StatusNotFound, dto.ErrorBody{Error: "survey not found"})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusOK, dto.SurveyFromRow(row))
+	support.WriteJSON(w, http.StatusOK, dto.SurveyFromRow(row))
 }
 
 // ──────────────────────────────────────────────
@@ -161,7 +161,7 @@ func (h *SurveyHandler) GetPublicSurvey(w http.ResponseWriter, r *http.Request) 
 // ──────────────────────────────────────────────
 
 func (h *SurveyHandler) GetSurveyResponses(w http.ResponseWriter, r *http.Request) {
-	qualapi.WriteJSON(w, http.StatusOK, []map[string]any{
+	support.WriteJSON(w, http.StatusOK, []map[string]any{
 		{
 			"id": "resp-1", "userId": chi.URLParam(r, "userId"),
 			"projectId": "proj-101", "status": "qualified",
@@ -171,19 +171,19 @@ func (h *SurveyHandler) GetSurveyResponses(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *SurveyHandler) SubmitSurveyResponse(w http.ResponseWriter, r *http.Request) {
-	qualapi.WriteJSON(w, http.StatusCreated, map[string]any{
-		"id": "resp-" + qualapi.ID()[:8], "status": "qualified", "submittedAt": qualapi.Now(),
+	support.WriteJSON(w, http.StatusCreated, map[string]any{
+		"id": "resp-" + support.ID()[:8], "status": "qualified", "submittedAt": support.Now(),
 	})
 }
 
 func (h *SurveyHandler) SubmitParticipantSurvey(w http.ResponseWriter, r *http.Request) {
-	qualapi.WriteJSON(w, http.StatusCreated, map[string]any{
-		"id": "resp-" + qualapi.ID()[:8], "status": "qualified", "submittedAt": qualapi.Now(),
+	support.WriteJSON(w, http.StatusCreated, map[string]any{
+		"id": "resp-" + support.ID()[:8], "status": "qualified", "submittedAt": support.Now(),
 	})
 }
 
 func (h *SurveyHandler) GetParticipantSurveyResponse(w http.ResponseWriter, r *http.Request) {
-	qualapi.WriteJSON(w, http.StatusOK, []map[string]any{
+	support.WriteJSON(w, http.StatusOK, []map[string]any{
 		{"id": "resp-1", "userId": chi.URLParam(r, "userId"),
 			"projectId": "proj-101", "status": "qualified"},
 	})

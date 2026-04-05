@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	qualapi "github.com/InCrowd/unified-qual-api"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 	"github.com/go-chi/chi/v5"
@@ -24,7 +24,7 @@ import (
 func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsTimeSlotRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
@@ -49,7 +49,7 @@ func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
 	slots, total, err := h.QsTimeSlotRepo.List(ctx, page, pageSize, projectID, nil, nil, nil, nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "list bookings failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list bookings"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to list bookings"})
 		return
 	}
 
@@ -84,7 +84,7 @@ func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
 		result = append(result, item)
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    result,
 		"meta": map[string]any{
@@ -97,19 +97,19 @@ func (h *Handler) ListBookings(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) CreateBooking(w http.ResponseWriter, r *http.Request) {
 	// Booking creation is handled via ScheduleInterview which links respondent to timeslot
-	qualapi.WriteJSON(w, http.StatusCreated, map[string]any{"message": "use POST /interviews/schedule to create bookings"})
+	support.WriteJSON(w, http.StatusCreated, map[string]any{"message": "use POST /interviews/schedule to create bookings"})
 }
 
 func (h *Handler) GetBookingsByUser(w http.ResponseWriter, r *http.Request) {
 	// This returns timeslots linked to a specific respondent
 	if h.QsTimeSlotRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	// userId here would be a responder ID in the QS context
 	userID := chi.URLParam(r, "userId")
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data":    []map[string]any{},
 		"message": fmt.Sprintf("bookings for user %s — respondent-level lookup pending", userID),
@@ -120,13 +120,13 @@ func (h *Handler) UpdateBooking(w http.ResponseWriter, r *http.Request) {
 	// Booking update is a timeslot status change
 	ctx := r.Context()
 	if h.QsTimeSlotRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	tsID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -145,22 +145,22 @@ func (h *Handler) UpdateBooking(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.QsTimeSlotRepo.Update(ctx, tsID, fields); err != nil {
 		slog.ErrorContext(ctx, "update booking failed", "error", err, "id", tsID)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 		return
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"id": tsID, "updated": true, "source": "qs"})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"id": tsID, "updated": true, "source": "qs"})
 }
 
 func (h *Handler) UpdateBookingReward(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if h.QsTimeSlotRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 	bookingID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	var req struct {
@@ -176,10 +176,10 @@ func (h *Handler) UpdateBookingReward(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.QsTimeSlotRepo.UpsertReward(ctx, bookingID, req.RewardPoints, req.RewardStatus); err != nil {
 		slog.Error("update booking reward", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to update reward"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to update reward"})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"id":           bookingID,
 		"rewardPoints": req.RewardPoints,
 		"rewardStatus": req.RewardStatus,

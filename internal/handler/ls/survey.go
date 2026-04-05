@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	qualapi "github.com/InCrowd/unified-qual-api"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
@@ -30,23 +30,23 @@ import (
 func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	source := qualapi.ResolveSource(r)
+	source := support.ResolveSource(r)
 
 	if source == "iris" && h.IrisSurveyRepo != nil {
 		s, err := h.IrisSurveyRepo.GetSurvey(r.Context(), surveyID)
 		if err != nil {
 			slog.Error("iris survey get failed", "id", surveyID, "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if s == nil {
-			qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"id": s.ID, "subscriptionId": dto.NullInt64(s.SubscriptionID),
 			"surveyTypeId": s.SurveyTypeID, "namePublic": s.NamePublic,
 			"namePrivate": dto.NullStr(s.NamePrivate), "topicName": dto.NullStr(s.TopicName),
@@ -64,14 +64,14 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 		s, err := h.QsSurveyRepo.GetByID(r.Context(), surveyID)
 		if err != nil {
 			slog.Error("qs survey get failed", "id", surveyID, "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if s == nil {
-			qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"id": s.ID, "projectId": dto.NullInt64(s.ProjectID),
 			"title": s.Title, "status": s.Status,
 			"questions": json.RawMessage(s.Questions), "rules": json.RawMessage(s.Rules),
@@ -80,7 +80,7 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 }
 
 // ValidateSurvey checks if a survey can be fielded.
@@ -91,14 +91,14 @@ func (h *Handler) GetSurveyDetail(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.IrisSurveyRepo != nil && qualapi.ResolveSource(r) == "iris" {
+	if h.IrisSurveyRepo != nil && support.ResolveSource(r) == "iris" {
 		errors, err := h.IrisSurveyRepo.ValidateSurvey(r.Context(), surveyID)
 		if err != nil {
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "validation failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "validation failed"})
 			return
 		}
 		warnings := h.IrisSurveyRepo.ValidateSurveyWarnings(r.Context(), surveyID)
@@ -110,7 +110,7 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if len(errors) == 0 {
-			qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+			support.WriteJSON(w, http.StatusOK, map[string]any{
 				"error": map[string]any{
 					"message":          "ready",
 					"developerMessage": "This survey is okay to go live",
@@ -120,7 +120,7 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 				},
 			})
 		} else {
-			qualapi.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{
+			support.WriteJSON(w, http.StatusUnprocessableEntity, map[string]any{
 				"error": map[string]any{
 					"developerMessage": "this survey is not ready to go live",
 					"errors":           errors,
@@ -137,10 +137,10 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 	if h.QsSurveyRepo != nil {
 		s, _ := h.QsSurveyRepo.GetByID(r.Context(), surveyID)
 		if s == nil {
-			qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"error": map[string]any{
 				"message":          "ready",
 				"developerMessage": "This survey is okay to go live",
@@ -151,7 +151,7 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
+	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "survey not found"})
 }
 
 // GetSurveyCrowds returns crowds assigned to a survey.
@@ -160,12 +160,12 @@ func (h *Handler) ValidateSurvey(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.IrisSurveyRepo == nil || qualapi.ResolveSource(r) != "iris" {
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"surveyId": surveyID, "surveyCrowds": []any{}})
+	if h.IrisSurveyRepo == nil || support.ResolveSource(r) != "iris" {
+		support.WriteJSON(w, http.StatusOK, map[string]any{"surveyId": surveyID, "surveyCrowds": []any{}})
 		return
 	}
 
@@ -179,7 +179,7 @@ func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 	surveyCrowds, err := h.IrisSurveyRepo.GetSurveyCrowds(r.Context(), surveyID)
 	if err != nil {
 		slog.Error("get survey crowds failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 
@@ -207,7 +207,7 @@ func (h *Handler) GetSurveyCrowds(w http.ResponseWriter, r *http.Request) {
 		items = append(items, item)
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"surveyId":     surveyID,
 		"surveyCrowds": items,
 	})
@@ -498,17 +498,17 @@ func (h *Handler) buildCrowdAdminJSONAvailable(ctx context.Context, crowdID, sur
 func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
 	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if h.IrisSurveyRepo != nil && qualapi.ResolveSource(r) == "iris" {
+	if h.IrisSurveyRepo != nil && support.ResolveSource(r) == "iris" {
 		if err := h.IrisSurveyRepo.CloseSurvey(r.Context(), surveyID); err != nil {
 			slog.Error("close survey failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"closed": true, "id": surveyID, "source": "iris"})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"closed": true, "id": surveyID, "source": "iris"})
 		return
 	}
 
@@ -516,13 +516,13 @@ func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
 	if h.QsSurveyRepo != nil {
 		if err := h.QsSurveyRepo.Update(r.Context(), surveyID, "", "closed", nil, nil); err != nil {
 			slog.Error("qs close survey failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to close survey"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"closed": true, "id": surveyID, "source": "qs"})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"closed": true, "id": surveyID, "source": "qs"})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 // ToggleSurveyFavorite toggles favorite status on a survey.
@@ -532,7 +532,7 @@ func (h *Handler) CloseSurvey(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	surveyID, err := validate.ParseIDParam(r, "id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -546,7 +546,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.IrisSurveyRepo == nil {
-		qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "database unavailable"})
+		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "database unavailable"})
 		return
 	}
 
@@ -560,7 +560,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if callerUserID == 0 {
-		qualapi.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "could not resolve user identity"})
+		support.WriteJSON(w, http.StatusUnauthorized, map[string]any{"error": "could not resolve user identity"})
 		return
 	}
 
@@ -568,11 +568,11 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	s, err := h.IrisSurveyRepo.GetSurvey(r.Context(), surveyID)
 	if err != nil {
 		slog.Error("get survey failed", "id", surveyID, "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 	if s == nil {
-		qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": fmt.Sprintf("survey not found: %d", surveyID)})
+		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": fmt.Sprintf("survey not found: %d", surveyID)})
 		return
 	}
 
@@ -589,7 +589,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	if !isAdmin {
 		canRead, _ := h.IrisSurveyRepo.UserCanReadProject(r.Context(), callerUserID, s.ProjectID)
 		if !canRead {
-			qualapi.WriteJSON(w, http.StatusForbidden, map[string]any{
+			support.WriteJSON(w, http.StatusForbidden, map[string]any{
 				"error": map[string]any{
 					"userMessage":      "You're not allowed to adjust other peoples favorites",
 					"developerMessage": "Access is denied to users who don't have the correct permissions to perform a task.",
@@ -604,7 +604,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	// Toggle the favorite
 	if err := h.IrisSurveyRepo.ToggleFavorite(r.Context(), surveyID, callerUserID, req.Favorite); err != nil {
 		slog.Error("toggle favorite failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to toggle favorite"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to toggle favorite"})
 		return
 	}
 
@@ -612,7 +612,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	s, _ = h.IrisSurveyRepo.GetSurvey(r.Context(), surveyID)
 
 	// Build subscriberJson-equivalent response
-	qualapi.WriteJSON(w, http.StatusOK, h.buildSubscriberJSON(r, s, callerUserID))
+	support.WriteJSON(w, http.StatusOK, h.buildSubscriberJSON(r, s, callerUserID))
 }
 
 // buildSubscriberJSON builds a legacy-compatible subscriberJson response for a survey.

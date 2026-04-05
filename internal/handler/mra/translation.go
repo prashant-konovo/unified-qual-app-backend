@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	qualapi "github.com/InCrowd/unified-qual-api"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 	"github.com/go-chi/chi/v5"
@@ -22,13 +22,13 @@ import (
 
 func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) {
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
 	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -37,7 +37,7 @@ func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) 
 	topics, err := h.QsProjectRepo.GetTopicsByProjectMRA(ctx, projectID)
 	if err != nil {
 		slog.Error("get topics by project failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err})
 		return
 	}
 
@@ -45,7 +45,7 @@ func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) 
 	projectStatusID, err := h.QsProjectRepo.GetProjectStatusByIdMRA(ctx, projectID)
 	if err != nil {
 		slog.Error("get project status failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err})
 		return
 	}
 
@@ -55,7 +55,7 @@ func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) 
 		scheduledLanguages, err = h.QsProjectRepo.GetRespondersLanguagesByProjectIdMRA(ctx, projectID)
 		if err != nil {
 			slog.Error("get responders languages failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err})
 			return
 		}
 	}
@@ -74,7 +74,7 @@ func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) 
 		canNotBeEdited = append(canNotBeEdited, []any{langCode, scheduledSet[langCode]})
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"topicsInformation": topicsInformation,
 		"canNotBeEdited":    canNotBeEdited,
 	})
@@ -88,13 +88,13 @@ func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) 
 
 func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Request) {
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
 	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -124,7 +124,7 @@ func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		exists, err := h.QsProjectRepo.GetTopicsByProjectIdAndLanguageIdMRA(ctx, projectID, languageID)
 		if err != nil {
 			slog.Error("check topic exists failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": err.Error(),
 			})
@@ -138,7 +138,7 @@ func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		}
 		if err != nil {
 			slog.Error("upsert topic translation failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": err.Error(),
 			})
@@ -146,7 +146,7 @@ func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, "Done")
+	support.WriteJSON(w, http.StatusOK, "Done")
 }
 
 // ──────────────────────────────────────────────
@@ -157,13 +157,13 @@ func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 
 func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Request) {
 	if h.QsProjectRepo == nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
 	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -175,7 +175,7 @@ func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 	projectStatusID, err := h.QsProjectRepo.GetProjectStatusByIdMRA(ctx, projectID)
 	if err != nil {
 		slog.Error("get project status failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
@@ -186,7 +186,7 @@ func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		scheduledLanguages, err := h.QsProjectRepo.GetRespondersLanguagesByProjectIdMRA(ctx, projectID)
 		if err != nil {
 			slog.Error("get responders languages failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": err.Error(),
 			})
@@ -194,7 +194,7 @@ func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		}
 		for _, lang := range scheduledLanguages {
 			if lang == translationToDelete {
-				qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+				support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 					"errorMessage": "Scheduled Interviews exists with the language trying to be deleted",
 				})
 				return
@@ -204,13 +204,13 @@ func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 
 	languageID, ok := langCodeToID[translationToDelete]
 	if !ok {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "unknown language code"})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "unknown language code"})
 		return
 	}
 
 	if err := h.QsProjectRepo.DeleteTopicByProjectAndLanguageMRA(ctx, projectID, languageID); err != nil {
 		slog.Error("delete topic translation failed", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
@@ -218,7 +218,7 @@ func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Legacy returns Data API transaction commit result
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"transactionStatus": "Transaction Committed",
 	})
 }
@@ -232,25 +232,25 @@ func (h *Handler) GetAllLocalisationsMRA(w http.ResponseWriter, r *http.Request)
 	allLangs, err := h.QsProjectRepo.GetAllLanguageLocalisationsMRA(r.Context())
 	if err != nil {
 		slog.Error("get all localisations mra: all", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
 		return
 	}
 
 	langData, err := h.QsProjectRepo.GetDataFromLanguageLocalisationsMRA(r.Context())
 	if err != nil {
 		slog.Error("get all localisations mra: data", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
 		return
 	}
 
 	countriesData, err := h.QsProjectRepo.GetCountriesWithLocalisationsMRA(r.Context())
 	if err != nil {
 		slog.Error("get all localisations mra: countries", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
 		return
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+	support.WriteJSON(w, http.StatusOK, map[string]any{
 		"getAllLanguageLocalisations":     allLangs,
 		"getDataFromLanguageLocalisation": langData,
 		"getCountriesWithLocalisations":   countriesData,
@@ -265,7 +265,7 @@ func (h *Handler) GetAllLocalisationsMRA(w http.ResponseWriter, r *http.Request)
 func (h *Handler) DeleteTranslationMRA(w http.ResponseWriter, r *http.Request) {
 	projectID, err := validate.ParseIDParam(r, "project_id")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 	translationToDelete := chi.URLParam(r, "transaltion_to_delete")
@@ -274,7 +274,7 @@ func (h *Handler) DeleteTranslationMRA(w http.ResponseWriter, r *http.Request) {
 	projectStatusID, err := h.QsProjectRepo.GetProjectStatusByIdMRA(r.Context(), projectID)
 	if err != nil {
 		slog.Error("delete translation mra: get project status", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
 		return
 	}
 
@@ -282,12 +282,12 @@ func (h *Handler) DeleteTranslationMRA(w http.ResponseWriter, r *http.Request) {
 		respondersLanguages, err := h.QsProjectRepo.GetRespondersLanguagesByProjectIdMRA(r.Context(), projectID)
 		if err != nil {
 			slog.Error("delete translation mra: get responders languages", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
 			return
 		}
 		for _, lang := range respondersLanguages {
 			if lang == translationToDelete {
-				qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+				support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 					"errorMessage": "Scheduled Interviews exists with the language trying to be deleted",
 				})
 				return
@@ -297,16 +297,16 @@ func (h *Handler) DeleteTranslationMRA(w http.ResponseWriter, r *http.Request) {
 
 	languageID := langCodeToID[translationToDelete]
 	if languageID == 0 {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid language code"})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid language code"})
 		return
 	}
 
 	result, err := h.QsProjectRepo.DeleteMeetingInformationTranslationMRA(r.Context(), projectID, languageID)
 	if err != nil {
 		slog.Error("delete translation mra", "error", err)
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error(), "errorMessage": err.Error()})
 		return
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, result)
+	support.WriteJSON(w, http.StatusOK, result)
 }

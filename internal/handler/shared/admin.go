@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	qualapi "github.com/InCrowd/unified-qual-api"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 )
@@ -21,7 +21,7 @@ import (
 
 func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	page, pageSize := qualapi.ParsePagination(r)
+	page, pageSize := support.ParsePagination(r)
 	search := r.URL.Query().Get("search")
 	source := r.URL.Query().Get("source") // "qs", "iris", or "" (both)
 
@@ -35,8 +35,8 @@ func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 		} else {
 			for _, u := range users {
 				roles := []string{}
-				for _, rid := range qualapi.ParseRoleCSV(u.RoleIDs) {
-					roles = append(roles, qualapi.QsRoleName(rid))
+				for _, rid := range support.ParseRoleCSV(u.RoleIDs) {
+					roles = append(roles, support.QsRoleName(rid))
 				}
 				allUsers = append(allUsers, map[string]any{
 					"id":              u.ID,
@@ -80,7 +80,7 @@ func (h *Handler) ListAdminUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	qualapi.WriteJSON(w, http.StatusOK, map[string]any{"users": allUsers})
+	support.WriteJSON(w, http.StatusOK, map[string]any{"users": allUsers})
 }
 
 func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
@@ -92,14 +92,14 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 		RoleIDs   []int  `json:"roleIds"`
 	}
 	if errs := validate.DecodeAndValidate(r, &req); errs != nil {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        errs,
 			"errorMessage": "An error occured while creating a new user",
 		})
 		return
 	}
 	if req.FirstName == "" {
-		qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "firstName is required",
 			"errorMessage": "An error occured while creating a new user",
 		})
@@ -109,12 +109,12 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 		req.RoleIDs = []int{3} // default: admin
 	}
 
-	source := qualapi.ResolveSource(r)
+	source := support.ResolveSource(r)
 	if (source == "" || source == "qs") && h.QsUserRepo != nil {
 		uid, err := h.QsUserRepo.Create(r.Context(), req.FirstName, req.LastName, req.Email, req.TimeZone, req.RoleIDs)
 		if err != nil {
 			slog.Error("create admin user failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
 				"errorMessage": "An error occured while creating a new user",
 			})
@@ -127,13 +127,13 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 				uid, req.Email, uid, uid)
 		}
 		// Legacy returns created user row with HTTP 200
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{
+		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"id": uid, "first_name": req.FirstName, "last_name": req.LastName,
 			"email": req.Email,
 		})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+	support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 		"error":        "no database available",
 		"errorMessage": "An error occured while creating a new user",
 	})

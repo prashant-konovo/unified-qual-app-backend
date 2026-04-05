@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	qualapi "github.com/InCrowd/unified-qual-api"
+	"github.com/InCrowd/unified-qual-api/internal/handler/support"
 
 	"github.com/InCrowd/unified-qual-api/internal/validate"
 	"github.com/go-chi/chi/v5"
@@ -32,23 +32,23 @@ func (h *Handler) AddConferenceLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.ConferenceHash == "" {
-		req.ConferenceHash = qualapi.ID()[:12]
+		req.ConferenceHash = support.ID()[:12]
 	}
 
 	if h.QsConferenceRepo != nil {
 		linkID, err := h.QsConferenceRepo.CreateConferenceLink(r.Context(), req.TimeSlotID, projectID, req.ConferenceHash)
 		if err != nil {
 			slog.Error("create conf link failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusCreated, map[string]any{
+		support.WriteJSON(w, http.StatusCreated, map[string]any{
 			"id": linkID, "projectId": projectID,
 			"timeSlotId": req.TimeSlotID, "conferenceHash": req.ConferenceHash,
 		})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 func (h *Handler) UpdateConferenceLinkHandler(w http.ResponseWriter, r *http.Request) {
@@ -65,19 +65,19 @@ func (h *Handler) UpdateConferenceLinkHandler(w http.ResponseWriter, r *http.Req
 	if h.QsConferenceRepo != nil {
 		if err := h.QsConferenceRepo.UpdateConferenceLink(r.Context(), req.TimeSlotID, req.ConferenceHash, req.Pin); err != nil {
 			slog.Error("update conf link failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "timeSlotId": req.TimeSlotID})
+		support.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "timeSlotId": req.TimeSlotID})
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }
 
 func (h *Handler) GetConferenceLinkByTimeSlot(w http.ResponseWriter, r *http.Request) {
 	tsID, err := validate.ParseIDParam(r, "timeslotId")
 	if err != nil {
-		qualapi.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		support.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -85,15 +85,15 @@ func (h *Handler) GetConferenceLinkByTimeSlot(w http.ResponseWriter, r *http.Req
 		link, err := h.QsConferenceRepo.GetConferenceLinkByTimeSlotID(r.Context(), tsID)
 		if err != nil {
 			slog.Error("get conf link failed", "error", err)
-			qualapi.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
+			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed"})
 			return
 		}
 		if link == nil {
-			qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference link not found"})
+			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference link not found"})
 			return
 		}
-		qualapi.WriteJSON(w, http.StatusOK, link)
+		support.WriteJSON(w, http.StatusOK, link)
 		return
 	}
-	qualapi.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference link not found"})
+	support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference link not found"})
 }
