@@ -77,10 +77,7 @@ func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.
 	modID, _ := dto.ParseIDParam(r, "modId")
 	subID, _ := dto.ParseIDParam(r, "subId")
 
-	var req struct {
-		StartTime string `json:"startTime"`
-		EndTime   string `json:"endTime"`
-	}
+	var req dto.LsModeratorAvailabilityTimeRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -146,10 +143,7 @@ func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.
 func (h *Handler) UpdateModeratorAvailabilityExt(w http.ResponseWriter, r *http.Request) {
 	maID, _ := dto.ParseIDParam(r, "maId")
 
-	var req struct {
-		StartTime string `json:"startTime"`
-		EndTime   string `json:"endTime"`
-	}
+	var req dto.LsModeratorAvailabilityTimeRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -395,11 +389,7 @@ func (h *Handler) UnlinkImportedModerator(w http.ResponseWriter, r *http.Request
 }
 
 func (h *Handler) UpdateGoogleSheetFirstDate(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		SheetName string `json:"sheetName"`
-		CellRange string `json:"cellRange"`
-		Value     string `json:"value"`
-	}
+	var req dto.LsUpdateGoogleSheetRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

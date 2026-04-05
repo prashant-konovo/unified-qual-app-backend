@@ -127,3 +127,16 @@ return map[string]any{
 "isInvalid":              ts.IsInvalid,
 }
 }
+
+// LsAssignTimeslotModeratorRequest is the request body for assigning a moderator to a timeslot (LS brand).
+type LsAssignTimeslotModeratorRequest struct {
+	ModeratorID int64 `json:"moderatorId" validate:"required,gt=0"`
+	IsHost      bool  `json:"isHost"`
+}
+
+// LsUpdateTimeslotObserversRequest is the request body for adding/removing timeslot observers (LS brand).
+type LsUpdateTimeslotObserversRequest struct {
+	ProjectID int64    `json:"projectId" validate:"required,gt=0"`
+	ToAdd     []string `json:"toAdd"`
+	ToDelete  []string `json:"toDelete"`
+}

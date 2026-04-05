@@ -55,10 +55,7 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) CheckQualEligibility(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		ResponderID int64 `json:"responderId"`
-		ProjectID   int64 `json:"projectId"`
-	}
+	var req dto.LsCheckQualEligibilityRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

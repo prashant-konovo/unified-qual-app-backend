@@ -18,11 +18,7 @@ import (
 
 // CreatePaymentReal creates a real payment record.
 func (h *Handler) CreatePaymentReal(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		TimeSlotID  int64  `json:"timeSlotId"`
-		Amount      int    `json:"amount"`
-		PaymentType string `json:"paymentType"`
-	}
+	var req dto.LsCreatePaymentRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -43,11 +39,7 @@ func (h *Handler) CreatePaymentReal(w http.ResponseWriter, r *http.Request) {
 
 // CreateCustomHonorariumReal creates a custom honorarium.
 func (h *Handler) CreateCustomHonorariumReal(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		TimeSlotID int64  `json:"timeSlotId"`
-		Amount     int    `json:"amount"`
-		Reason     string `json:"reason"`
-	}
+	var req dto.LsCreateCustomHonorariumRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -87,12 +79,7 @@ func (h *Handler) GetPaymentStatusListReal(w http.ResponseWriter, r *http.Reques
 // ──────────────────────────────────────────────
 
 func (h *Handler) CreateExternalPayment(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		TimeSlotID  int64  `json:"timeSlotId"`
-		Amount      int    `json:"amount"`
-		PaymentType string `json:"paymentType"`
-		ExternalRef string `json:"externalReference"`
-	}
+	var req dto.LsCreateExternalPaymentRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -148,114 +135,3 @@ func (h *Handler) GetInterviewPaymentStatusList(w http.ResponseWriter, r *http.R
 // ──────────────────────────────────────────────
 // LS: Inquiry Preview & Custom Crowd Inquiry (LS #6, #7, #55)
 // ──────────────────────────────────────────────
-
-// ── Inquiry Preview types (contract-identical with legacy Scala InCrowdAPI) ──
-
-type ipCrowdAttributeSpec struct {
-	AttributeID  int64   `json:"attributeId"`
-	NumericMin   *int64  `json:"numericMin"`
-	NumericMax   *int64  `json:"numericMax"`
-	ChoiceIDs    []int64 `json:"choiceIds"`
-	QualRequired *bool   `json:"qualRequired"`
-}
-
-type ipDifficultyLevelReq struct {
-	ID int64 `json:"id"`
-}
-
-type ipDifficultyAssessmentResp struct {
-	ID         int64  `json:"id"`
-	Name       string `json:"name"`
-	IsHardStop bool   `json:"isHardStop"`
-}
-
-type ipCrowdSpec struct {
-	Name                 *string                     `json:"name"`
-	NumberRequested      *int64                      `json:"numberRequested"`
-	Notes                *string                     `json:"notes"`
-	Attributes           []ipCrowdAttributeSpec      `json:"attributes"`
-	MarketID             int64                       `json:"marketId"`
-	MarketName           *string                     `json:"marketName"`
-	DifficultyLevel      ipDifficultyLevelReq        `json:"difficultyLevel"`
-	DifficultyAssessment *ipDifficultyAssessmentResp `json:"difficultyAssessment"`
-	CrowdID              *int64                      `json:"crowdId"`
-	IsCustom             bool                        `json:"isCustom"`
-	ValidRespondersCount *int64                      `json:"validRespondersCount"`
-}
-
-type ipProposal struct {
-	InterviewLength      int64         `json:"interviewLength"`
-	Name                 string        `json:"name"`
-	SalesforceProjectID  *string       `json:"salesforceProjectId"`
-	CompletionDate       *string       `json:"completionDate"`
-	Notes                *string       `json:"notes"`
-	Crowds               []ipCrowdSpec `json:"crowds"`
-	CustomCrowds         []ipCrowdSpec `json:"customCrowds"`
-	ProjectID            *int64        `json:"projectId"`
-	UnderReview          bool          `json:"underReview"`
-	TranscriptsRequested bool          `json:"transcriptsRequested"`
-	RequiresStimuli      bool          `json:"requiresStimuli"`
-	IsDynamicStimulus    bool          `json:"isDynamicStimulus"`
-}
-
-type ipFee struct {
-	GrossSubtotal float64  `json:"grossSubtotal"`
-	NetSubtotal   float64  `json:"netSubtotal"`
-	DiscountRate  *float64 `json:"discountRate"`
-	PricePerUnit  float64  `json:"pricePerUnit"`
-	Count         int64    `json:"count"`
-	IsHonorarium  bool     `json:"isHonorarium"`
-	Name          string   `json:"name"`
-	ProductID     int64    `json:"productId"`
-}
-
-type ipProjectCosts struct {
-	GrossTotal float64 `json:"grossTotal"`
-	NetTotal   float64 `json:"netTotal"`
-	Fees       []ipFee `json:"fees"`
-}
-
-type ipResponse struct {
-	Proposal              *ipProposal     `json:"proposal"`
-	SalesforceProjectName *string         `json:"salesforceProjectName"`
-	Costs                 *ipProjectCosts `json:"costs"`
-	IsHardStop            bool            `json:"isHardStop"`
-}
-
-// isSpecializedCrowd checks whether a crowd is "specialized" per legacy logic.
-func ipIsSpecializedCrowd(c *ipCrowdSpec) bool {
-	if c.MarketID != 1 {
-		return false
-	}
-	if c.IsCustom {
-		return true
-	}
-	nonGeneralChoices := map[int64]bool{304: true}
-	for _, attr := range c.Attributes {
-		if attr.AttributeID == 1 {
-			for _, cid := range attr.ChoiceIDs {
-				if !nonGeneralChoices[cid] {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-// ipCrowdMatchesProduct determines if a crowd matches a product for honorarium calculations.
-func ipCrowdMatchesProduct(c *ipCrowdSpec, relatedMarketIDs []int64, isSpecialized bool) bool {
-	for _, mid := range relatedMarketIDs {
-		if mid == c.MarketID {
-			return true
-		}
-	}
-	crowdSpecialized := ipIsSpecializedCrowd(c)
-	if isSpecialized && crowdSpecialized {
-		return true
-	}
-	if !isSpecialized && !crowdSpecialized && c.MarketID == 1 {
-		return true
-	}
-	return false
-}

@@ -21,9 +21,7 @@ import (
 // ──────────────────────────────────────────────
 
 func (h *Handler) SendPasswordResetEmail(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Email string `json:"email" validate:"required,email"`
-	}
+	var req dto.LsSendPasswordResetRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -63,9 +61,7 @@ func (h *Handler) SendPasswordResetEmail(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) CheckUserIsQsToolAndI2(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Email string `json:"email"`
-	}
+	var req dto.LsCheckUserQsToolI2Request
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -133,10 +129,7 @@ func (h *Handler) CheckUserCommPreference(w http.ResponseWriter, r *http.Request
 func (h *Handler) UnsubscribeUser(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "userId")
 
-	var req struct {
-		PmUserID            string `json:"pmUserId"`
-		AllowContactByEmail int    `json:"allowContactByEmail"`
-	}
+	var req dto.LsUnsubscribeUserRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

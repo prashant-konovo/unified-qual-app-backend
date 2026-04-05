@@ -22,10 +22,7 @@ func (h *Handler) AddConferenceLink(w http.ResponseWriter, r *http.Request) {
 	pidStr := chi.URLParam(r, "projectId")
 	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
 
-	var req struct {
-		TimeSlotID     int64  `json:"timeSlotId"`
-		ConferenceHash string `json:"conferenceHash"`
-	}
+	var req dto.LsAddConferenceLinkRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -51,11 +48,7 @@ func (h *Handler) AddConferenceLink(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateConferenceLinkHandler(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		TimeSlotID     int64  `json:"timeSlotId"`
-		ConferenceHash string `json:"conferenceHash"`
-		Pin            string `json:"pin"`
-	}
+	var req dto.LsUpdateConferenceLinkRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

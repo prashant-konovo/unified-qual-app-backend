@@ -535,9 +535,7 @@ func (h *Handler) ToggleSurveyFavorite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse request body: legacy format is {"favorite": bool}
-	var req struct {
-		Favorite bool `json:"favorite"`
-	}
+	var req dto.LsToggleSurveyFavoriteRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

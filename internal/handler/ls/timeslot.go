@@ -102,10 +102,7 @@ func (h *Handler) AssignTimeslotModerator(w http.ResponseWriter, r *http.Request
 		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	var req struct {
-		ModeratorID int64 `json:"moderatorId"`
-		IsHost      bool  `json:"isHost"`
-	}
+	var req dto.LsAssignTimeslotModeratorRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -210,11 +207,7 @@ func (h *Handler) UpdateTimeslotObservers(w http.ResponseWriter, r *http.Request
 		dto.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	var req struct {
-		ProjectID int64    `json:"projectId"`
-		ToAdd     []string `json:"toAdd"`
-		ToDelete  []string `json:"toDelete"`
-	}
+	var req dto.LsUpdateTimeslotObserversRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return

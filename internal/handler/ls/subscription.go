@@ -656,7 +656,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	subStr := chi.URLParam(r, "subscriptionId")
 	subID, _ := strconv.ParseInt(subStr, 10, 64)
 
-	var proposal ipProposal
+	var proposal dto.IPProposal
 	if errs := dto.DecodeAndValidate(r, &proposal); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -713,7 +713,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Combine all crowds for total respondent count
-	allCrowds := make([]ipCrowdSpec, 0, len(proposal.Crowds)+len(proposal.CustomCrowds))
+	allCrowds := make([]dto.IPCrowdSpec, 0, len(proposal.Crowds)+len(proposal.CustomCrowds))
 	allCrowds = append(allCrowds, proposal.Crowds...)
 	allCrowds = append(allCrowds, proposal.CustomCrowds...)
 
@@ -725,9 +725,9 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 3: Calculate fees
-	var fees []ipFee
+	var fees []dto.IPFee
 	for _, p := range products {
-		var fee ipFee
+		var fee dto.IPFee
 		fee.Name = p.Name
 		fee.ProductID = p.ID
 		fee.PricePerUnit = p.PriceUSD
@@ -736,7 +736,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 		if p.IsHonorarium {
 			var count int64
 			for i := range allCrowds {
-				if ipCrowdMatchesProduct(&allCrowds[i], p.RelatedMarketIDs, p.IsSpecialized) {
+				if dto.IPCrowdMatchesProduct(&allCrowds[i], p.RelatedMarketIDs, p.IsSpecialized) {
 					if allCrowds[i].NumberRequested != nil {
 						count += *allCrowds[i].NumberRequested
 					}
@@ -824,14 +824,14 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 
 	// Ensure fees is an empty array, not null
 	if fees == nil {
-		fees = []ipFee{}
+		fees = []dto.IPFee{}
 	}
 
 	// Step 8: Build response
-	resp := ipResponse{
+	resp := dto.IPResponse{
 		Proposal:              &proposal,
 		SalesforceProjectName: sfProjectName,
-		Costs: &ipProjectCosts{
+		Costs: &dto.IPProjectCosts{
 			GrossTotal: grossTotal,
 			NetTotal:   netTotal,
 			Fees:       fees,
@@ -843,7 +843,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 }
 
 // assessCrowdDifficulty calculates the feasibility score for a crowd and matches it to an assessment.
-func (h *Handler) assessCrowdDifficulty(ctx context.Context, crowd *ipCrowdSpec, assessments []iris.DifficultyAssessmentRow) *ipDifficultyAssessmentResp {
+func (h *Handler) assessCrowdDifficulty(ctx context.Context, crowd *dto.IPCrowdSpec, assessments []iris.DifficultyAssessmentRow) *dto.IPDifficultyAssessmentResp {
 	const (
 		responseRate   = 0.2
 		acceptanceRate = 0.6
@@ -878,7 +878,7 @@ func (h *Handler) assessCrowdDifficulty(ctx context.Context, crowd *ipCrowdSpec,
 		minOK := a.MinPercent == nil || *a.MinPercent <= feasibilityScore
 		maxOK := a.MaxPercent == nil || feasibilityScore < *a.MaxPercent
 		if minOK && maxOK {
-			return &ipDifficultyAssessmentResp{
+			return &dto.IPDifficultyAssessmentResp{
 				ID:         a.ID,
 				Name:       a.Name,
 				IsHardStop: a.IsHardStop,

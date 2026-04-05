@@ -57,3 +57,8 @@ type CreateSurveyRequest struct {
 	Questions json.RawMessage `json:"questions"`
 	Rules     json.RawMessage `json:"rules"`
 }
+
+// LsToggleSurveyFavoriteRequest is the request body for toggling survey favorite status (LS brand).
+type LsToggleSurveyFavoriteRequest struct {
+	Favorite bool `json:"favorite"`
+}

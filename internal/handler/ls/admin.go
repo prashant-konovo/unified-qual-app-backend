@@ -21,14 +21,7 @@ import (
 // ──────────────────────────────────────────────
 
 func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Email         string `json:"email"`
-		RoleID        int    `json:"roleId"`
-		ClientID      int64  `json:"clientId"`
-		FirstName     string `json:"firstName"`
-		LastName      string `json:"lastName"`
-		CognitoUserID string `json:"cognitoUserId"`
-	}
+	var req dto.LsAddUserRolesRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
@@ -95,10 +88,7 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Email  string `json:"email"`
-		RoleID int    `json:"roleId"`
-	}
+	var req dto.LsDeleteUserRolesRequest
 	if errs := dto.DecodeAndValidate(r, &req); errs != nil {
 		dto.WriteError(w, errs)
 		return
