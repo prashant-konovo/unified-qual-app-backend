@@ -299,3 +299,37 @@ func (s *SurveyService) GetTimeSlotTimes(ctx context.Context, timeSlotID int64) 
 func (s *SurveyService) GetTimeSlotAdminJSON(ctx context.Context, timeSlotID int64) (map[string]any, error) {
 	return s.irisRepo.GetTimeSlotAdminJSON(ctx, timeSlotID)
 }
+
+// --- Moderator availability methods (IrisSurveyRepo, used in ls/moderator.go) ---
+
+func (s *SurveyService) ListModeratorAvailability(ctx context.Context, moderatorID, subscriptionID int64) ([]iris.ICModeratorAvailability, error) {
+	return s.irisRepo.ListModeratorAvailability(ctx, moderatorID, subscriptionID)
+}
+
+func (s *SurveyService) CreateModeratorAvailability(ctx context.Context, moderatorID, subscriptionID int64, startTime, endTime time.Time) (int64, error) {
+	return s.irisRepo.CreateModeratorAvailability(ctx, moderatorID, subscriptionID, startTime, endTime)
+}
+
+func (s *SurveyService) UpdateModeratorAvailability(ctx context.Context, id int64, startTime, endTime time.Time) error {
+	return s.irisRepo.UpdateModeratorAvailability(ctx, id, startTime, endTime)
+}
+
+func (s *SurveyService) DeleteModeratorAvailability(ctx context.Context, id int64) error {
+	return s.irisRepo.DeleteModeratorAvailability(ctx, id)
+}
+
+func (s *SurveyService) AssignConferenceHash(ctx context.Context, timeSlotID int64) error {
+	return s.irisRepo.AssignConferenceHash(ctx, timeSlotID)
+}
+
+func (s *SurveyService) AssignConferencePin(ctx context.Context, timeSlotID int64) error {
+	return s.irisRepo.AssignConferencePin(ctx, timeSlotID)
+}
+
+func (s *SurveyService) GetNoShowCheck(ctx context.Context) (map[string]any, error) {
+	return s.irisRepo.GetNoShowCheck(ctx)
+}
+
+func (s *SurveyService) MarkNoShow(ctx context.Context, projectID, timeSlotID int64) error {
+	return s.irisRepo.MarkNoShow(ctx, projectID, timeSlotID)
+}

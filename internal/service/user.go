@@ -59,3 +59,11 @@ func (s *UserService) UpdateUserCommPreference(ctx context.Context, cognitoUserI
 func (s *UserService) GetIrisUserByID(ctx context.Context, id int64) (*iris.ICUserWithRoles, error) {
 	return s.irisUserRepo.GetByID(ctx, id)
 }
+
+func (s *UserService) UpdateIrisUser(ctx context.Context, id int64, firstName, lastName, timeZone string) error {
+	return s.irisUserRepo.Update(ctx, id, firstName, lastName, timeZone)
+}
+
+func (s *UserService) GetIrisUserByEmail(ctx context.Context, email string) (*iris.ICUserWithRoles, error) {
+	return s.irisUserRepo.GetByEmail(ctx, email)
+}

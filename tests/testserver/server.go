@@ -143,6 +143,8 @@ func New() *TestServer {
 	deps.UserService = service.NewUserService(ts.QsUserRepo, ts.IrisUserRepo)
 	deps.InterviewService = service.NewInterviewService(ts.QsTimeSlotRepo, nil)
 	deps.SurveyService = service.NewSurveyService(ts.QsSurveyRepo, ts.IrisSurveyRepo)
+	deps.ModeratorService = service.NewModeratorService(ts.QsUserRepo, ts.QsTimeSlotRepo)
+	deps.SubscriptionService = service.NewSubscriptionService(ts.IrisSurveyRepo)
 
 	// Build real handlers and router
 	hs := handler.NewHandlers(deps)

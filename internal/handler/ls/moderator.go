@@ -33,8 +33,8 @@ func (h *Handler) GetModeratorAvailabilityBySub(w http.ResponseWriter, r *http.R
 	subID, _ := validate.ParseIDParam(r, "subId")
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		avails, err := h.IrisSurveyRepo.ListModeratorAvailability(r.Context(), modID, subID)
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		avails, err := h.SurveyService.ListModeratorAvailability(r.Context(), modID, subID)
 		if err != nil {
 			slog.Error("iris mod avail failed", "error", err)
 		}
@@ -52,8 +52,8 @@ func (h *Handler) GetModeratorAvailabilityBySub(w http.ResponseWriter, r *http.R
 	}
 
 	// QS
-	if h.QsUserRepo != nil {
-		avails, err := h.QsUserRepo.ListModeratorAvailability(r.Context(), modID, &subID, "", "")
+	if h.ModeratorService.QsUserAvailable() {
+		avails, err := h.ModeratorService.ListModeratorAvailability(r.Context(), modID, &subID, "", "")
 		if err != nil {
 			slog.Error("qs mod avail failed", "error", err)
 		}
@@ -90,15 +90,15 @@ func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.
 	endTime, _ := time.Parse(time.RFC3339, req.EndTime)
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		_, err := h.IrisSurveyRepo.CreateModeratorAvailability(r.Context(), modID, subID, startTime, endTime)
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		_, err := h.SurveyService.CreateModeratorAvailability(r.Context(), modID, subID, startTime, endTime)
 		if err != nil {
 			slog.Error("create iris avail failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
 		// Return updated availability list (legacy returns array)
-		avails, err := h.IrisSurveyRepo.ListModeratorAvailability(r.Context(), modID, subID)
+		avails, err := h.SurveyService.ListModeratorAvailability(r.Context(), modID, subID)
 		if err != nil {
 			slog.Error("list avail after create failed", "error", err)
 		}
@@ -115,15 +115,15 @@ func (h *Handler) PostModeratorAvailabilityBySub(w http.ResponseWriter, r *http.
 		return
 	}
 
-	if h.QsUserRepo != nil {
-		_, err := h.QsUserRepo.CreateModeratorAvailability(r.Context(), modID, subID, startTime, endTime)
+	if h.ModeratorService.QsUserAvailable() {
+		_, err := h.ModeratorService.CreateModeratorAvailability(r.Context(), modID, subID, startTime, endTime)
 		if err != nil {
 			slog.Error("create qs avail failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "create failed"})
 			return
 		}
 		// Return updated availability list (legacy returns array)
-		avails, err := h.QsUserRepo.ListModeratorAvailability(r.Context(), modID, &subID, "", "")
+		avails, err := h.ModeratorService.ListModeratorAvailability(r.Context(), modID, &subID, "", "")
 		if err != nil {
 			slog.Error("list avail after create failed", "error", err)
 		}
@@ -159,8 +159,8 @@ func (h *Handler) UpdateModeratorAvailabilityExt(w http.ResponseWriter, r *http.
 	endTime, _ := time.Parse(time.RFC3339, req.EndTime)
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		if err := h.IrisSurveyRepo.UpdateModeratorAvailability(r.Context(), maID, startTime, endTime); err != nil {
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		if err := h.SurveyService.UpdateModeratorAvailability(r.Context(), maID, startTime, endTime); err != nil {
 			slog.Error("update iris avail failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
@@ -168,8 +168,8 @@ func (h *Handler) UpdateModeratorAvailabilityExt(w http.ResponseWriter, r *http.
 		support.WriteJSON(w, http.StatusOK, map[string]any{"updated": true, "id": maID})
 		return
 	}
-	if h.QsUserRepo != nil {
-		if err := h.QsUserRepo.UpdateModeratorAvailability(r.Context(), maID, startTime, endTime); err != nil {
+	if h.ModeratorService.QsUserAvailable() {
+		if err := h.ModeratorService.UpdateModeratorAvailability(r.Context(), maID, startTime, endTime); err != nil {
 			slog.Error("update qs avail failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
@@ -187,8 +187,8 @@ func (h *Handler) DeleteModeratorAvailabilityExt(w http.ResponseWriter, r *http.
 	maID, _ := validate.ParseIDParam(r, "maId")
 	source := support.ResolveSource(r)
 
-	if source == "iris" && h.IrisSurveyRepo != nil {
-		if err := h.IrisSurveyRepo.DeleteModeratorAvailability(r.Context(), maID); err != nil {
+	if source == "iris" && h.SurveyService.IrisAvailable() {
+		if err := h.SurveyService.DeleteModeratorAvailability(r.Context(), maID); err != nil {
 			slog.Error("delete iris avail failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
@@ -196,8 +196,8 @@ func (h *Handler) DeleteModeratorAvailabilityExt(w http.ResponseWriter, r *http.
 		support.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true, "id": maID})
 		return
 	}
-	if h.QsUserRepo != nil {
-		if err := h.QsUserRepo.DeleteModeratorAvailability(r.Context(), maID); err != nil {
+	if h.ModeratorService.QsUserAvailable() {
+		if err := h.ModeratorService.DeleteModeratorAvailability(r.Context(), maID); err != nil {
 			slog.Error("delete qs avail failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
@@ -221,8 +221,8 @@ func (h *Handler) DeleteModeratorAvailabilityExt(w http.ResponseWriter, r *http.
 // Contract-identical with legacy InCrowdAPI: GET /v1/selfservice/noshow
 // Response: {"timeSlot": <adminJson>, "interviewee": <userID>}
 func (h *Handler) GetNoShowCheck(w http.ResponseWriter, r *http.Request) {
-	if h.IrisSurveyRepo != nil {
-		data, err := h.IrisSurveyRepo.GetNoShowCheck(r.Context())
+	if h.SurveyService.IrisAvailable() {
+		data, err := h.SurveyService.GetNoShowCheck(r.Context())
 		if err != nil {
 			slog.Error("noshow check failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
@@ -241,28 +241,28 @@ func (h *Handler) MarkNoShow(w http.ResponseWriter, r *http.Request) {
 	projectID, _ := validate.ParseIDParam(r, "pid")
 	timeSlotID, _ := validate.ParseIDParam(r, "tid")
 
-	if h.IrisSurveyRepo != nil {
-		if err := h.IrisSurveyRepo.MarkNoShow(r.Context(), projectID, timeSlotID); err != nil {
+	if h.SurveyService.IrisAvailable() {
+		if err := h.SurveyService.MarkNoShow(r.Context(), projectID, timeSlotID); err != nil {
 			slog.Error("mark noshow failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "mark failed"})
 			return
 		}
 		// Hook: TimeSlot.afterUpdateHooks — assignConferenceHashAndPin
-		if err := h.IrisSurveyRepo.AssignConferenceHash(r.Context(), timeSlotID); err != nil {
+		if err := h.SurveyService.AssignConferenceHash(r.Context(), timeSlotID); err != nil {
 			slog.Warn("hook: assign conference hash failed (non-fatal)", "timeSlotId", timeSlotID, "error", err)
 		}
-		if err := h.IrisSurveyRepo.AssignConferencePin(r.Context(), timeSlotID); err != nil {
+		if err := h.SurveyService.AssignConferencePin(r.Context(), timeSlotID); err != nil {
 			slog.Warn("hook: assign conference pin failed (non-fatal)", "timeSlotId", timeSlotID, "error", err)
 		}
 	}
 
 	if h.QsTimeSlotRepo != nil {
-		_ = h.QsTimeSlotRepo.Update(r.Context(), timeSlotID, map[string]any{"status_id": 10}) // 10 = NoShow
+		_ = h.ModeratorService.UpdateTimeSlot(r.Context(), timeSlotID, map[string]any{"status_id": 10}) // 10 = NoShow
 	}
 
 	// Return the updated timeslot adminJson (legacy contract)
-	if h.IrisSurveyRepo != nil {
-		ts, err := h.IrisSurveyRepo.GetTimeSlotAdminJSON(r.Context(), timeSlotID)
+	if h.SurveyService.IrisAvailable() {
+		ts, err := h.SurveyService.GetTimeSlotAdminJSON(r.Context(), timeSlotID)
 		if err == nil && ts != nil {
 			support.WriteJSON(w, http.StatusOK, ts)
 			return
@@ -347,8 +347,8 @@ func (h *Handler) GetImportedAvailability(w http.ResponseWriter, r *http.Request
 	}
 
 	// Fallback: database
-	if h.QsUserRepo != nil {
-		avails, _ := h.QsUserRepo.ListModeratorAvailability(r.Context(), moderatorID, nil, "", "")
+	if h.ModeratorService.QsUserAvailable() {
+		avails, _ := h.ModeratorService.ListModeratorAvailability(r.Context(), moderatorID, nil, "", "")
 		result := make([]map[string]any, 0, len(avails))
 		for _, a := range avails {
 			result = append(result, map[string]any{

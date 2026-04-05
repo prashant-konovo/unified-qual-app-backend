@@ -26,7 +26,7 @@ import (
 // Response: [{id, firstName, lastName, interviewCount}]
 // No side effects — pure read API.
 func (h *Handler) GetAllModeratorsMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "user repository not available"})
 		return
 	}
@@ -37,7 +37,7 @@ func (h *Handler) GetAllModeratorsMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	records, err := h.QsUserRepo.GetAllModeratorsListMRA(r.Context(), clientID)
+	records, err := h.ModeratorService.GetAllModeratorsListMRA(r.Context(), clientID)
 	if err != nil {
 		slog.Error("get all moderators failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -55,7 +55,7 @@ func (h *Handler) PostModeratorAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	headers := map[string]string{"Content-Type": "application/json", "Access-Control-Allow-Origin": "*"}
 	_ = headers
 
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "user repository not available"})
 		return
 	}
@@ -95,7 +95,7 @@ func (h *Handler) PostModeratorAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	ctx := r.Context()
 
 	// Check external calendar import status
-	calStatus, _ := h.QsUserRepo.GetModExternalCalendarStatusMRA(ctx, body.ModeratorID)
+	calStatus, _ := h.ModeratorService.GetModExternalCalendarStatusMRA(ctx, body.ModeratorID)
 	if calStatus == "In Progress" {
 		support.WriteJSON(w, http.StatusMethodNotAllowed, map[string]any{
 			"errorMessage": "There is a running import process for this moderator, try again later",
@@ -104,10 +104,10 @@ func (h *Handler) PostModeratorAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	}
 
 	// Get moderator buffer (default 15)
-	buffer, _ := h.QsUserRepo.GetModeratorBufferMRA(ctx, body.ModeratorID)
+	buffer, _ := h.ModeratorService.GetModeratorBufferMRA(ctx, body.ModeratorID)
 
 	// Check for timeslot conflicts
-	conflictCount, err := h.QsUserRepo.IsValidAvailabilityMRA(ctx, body.ModeratorID, body.StartTime, body.EndTime, buffer)
+	conflictCount, err := h.ModeratorService.IsValidAvailabilityMRA(ctx, body.ModeratorID, body.StartTime, body.EndTime, buffer)
 	if err != nil {
 		slog.Error("check availability validity failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -121,7 +121,7 @@ func (h *Handler) PostModeratorAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	}
 
 	// Check for overlapping availabilities and merge
-	overlapping, err := h.QsUserRepo.OverlappingAvailabilitiesMRA(ctx, body.ModeratorID, body.StartTime, body.EndTime)
+	overlapping, err := h.ModeratorService.OverlappingAvailabilitiesMRA(ctx, body.ModeratorID, body.StartTime, body.EndTime)
 	if err != nil {
 		slog.Error("get overlapping availabilities failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -139,24 +139,24 @@ func (h *Handler) PostModeratorAvailabilityMRA(w http.ResponseWriter, r *http.Re
 
 		if (oldST.Equal(newStartTime) || oldST.After(newStartTime)) && (oldET.Equal(newEndTime) || oldET.Before(newEndTime)) {
 			// Old is fully contained in new → delete old
-			_ = h.QsUserRepo.DeleteModeratorAvailability(ctx, avID)
+			_ = h.ModeratorService.DeleteModeratorAvailability(ctx, avID)
 		} else if oldST.Before(newStartTime) && oldET.After(newEndTime) {
 			// New is wrapped inside old → don't create
 			skipCreate = true
 		} else if oldST.Before(newStartTime) || oldET.Equal(newStartTime) {
 			// Old starts before new → extend newStartTime
 			newStartTime = oldST
-			_ = h.QsUserRepo.DeleteModeratorAvailability(ctx, avID)
+			_ = h.ModeratorService.DeleteModeratorAvailability(ctx, avID)
 		} else if oldET.After(newEndTime) || oldST.Equal(newEndTime) {
 			// Old ends after new → extend newEndTime
 			newEndTime = oldET
-			_ = h.QsUserRepo.DeleteModeratorAvailability(ctx, avID)
+			_ = h.ModeratorService.DeleteModeratorAvailability(ctx, avID)
 		}
 	}
 
 	// Create the merged availability
 	if !skipCreate {
-		_, err = h.QsUserRepo.CreateModeratorAvailability(ctx, body.ModeratorID, body.ClientID, newStartTime, newEndTime)
+		_, err = h.ModeratorService.CreateModeratorAvailability(ctx, body.ModeratorID, body.ClientID, newStartTime, newEndTime)
 		if err != nil {
 			slog.Error("create moderator availability failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -172,10 +172,10 @@ func (h *Handler) PostModeratorAvailabilityMRA(w http.ResponseWriter, r *http.Re
 // getAllModeratorAvailabilityWithImported replicates the legacy getAllModeratorAvailabilityWithImportedService.
 // It fetches 4 sets of availabilities and merges them with overlap resolution.
 func (h *Handler) getAllModeratorAvailabilityWithImported(ctx context.Context, moderatorID, clientID int64) []map[string]any {
-	nonOverlapManual, err1 := h.QsUserRepo.GetNonOverlappingManualAvailabilityMRA(ctx, moderatorID, clientID)
-	nonOverlapImported, err2 := h.QsUserRepo.GetNonOverlappingImportedAvailabilityMRA(ctx, moderatorID, clientID)
-	overlapManual, err3 := h.QsUserRepo.GetAllOverlappingManualAvailabilityMRA(ctx, moderatorID, clientID)
-	overlapImported, err4 := h.QsUserRepo.GetAllOverlappingImportedAvailabilityMRA(ctx, moderatorID, clientID)
+	nonOverlapManual, err1 := h.ModeratorService.GetNonOverlappingManualAvailabilityMRA(ctx, moderatorID, clientID)
+	nonOverlapImported, err2 := h.ModeratorService.GetNonOverlappingImportedAvailabilityMRA(ctx, moderatorID, clientID)
+	overlapManual, err3 := h.ModeratorService.GetAllOverlappingManualAvailabilityMRA(ctx, moderatorID, clientID)
+	overlapImported, err4 := h.ModeratorService.GetAllOverlappingImportedAvailabilityMRA(ctx, moderatorID, clientID)
 
 	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
 		slog.Error("availability query errors", "err1", err1, "err2", err2, "err3", err3, "err4", err4)
@@ -317,7 +317,7 @@ func (h *Handler) UpdateModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 	idStr := chi.URLParam(r, "availability_id")
 	avID, _ := strconv.ParseInt(idStr, 10, 64)
 
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "user repository not available"})
 		return
 	}
@@ -325,7 +325,7 @@ func (h *Handler) UpdateModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 	ctx := r.Context()
 
 	// Step 1: Find existing availability
-	oldAv, err := h.QsUserRepo.FindModeratorAvailabilityByIdMRA(ctx, avID)
+	oldAv, err := h.ModeratorService.FindModeratorAvailabilityByIdMRA(ctx, avID)
 	if err != nil {
 		slog.Error("find availability failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -347,7 +347,7 @@ func (h *Handler) UpdateModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 	}
 
 	// Step 2: Get moderator info with buffer
-	modInfo, err := h.QsUserRepo.GetModeratorsInfoByAvailabilityIdMRA(ctx, avID)
+	modInfo, err := h.ModeratorService.GetModeratorsInfoByAvailabilityIdMRA(ctx, avID)
 	if err != nil {
 		slog.Error("get moderator info failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -366,7 +366,7 @@ func (h *Handler) UpdateModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 	oldST := fmt.Sprint(oldAv["startTime"])
 	oldET := fmt.Sprint(oldAv["endTime"])
 
-	conflictCount, err := h.QsUserRepo.IsValidAvailabilityMRA(ctx, modID, oldST, oldET, moderatorBuffer)
+	conflictCount, err := h.ModeratorService.IsValidAvailabilityMRA(ctx, modID, oldST, oldET, moderatorBuffer)
 	if err != nil {
 		slog.Error("check availability validity failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -389,14 +389,14 @@ func (h *Handler) UpdateModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 		endTime, _ = time.Parse("2006-01-02T15:04:05.000Z", req.EndTime)
 	}
 
-	if err := h.QsUserRepo.UpdateModeratorAvailability(ctx, avID, startTime, endTime); err != nil {
+	if err := h.ModeratorService.UpdateModeratorAvailability(ctx, avID, startTime, endTime); err != nil {
 		slog.Error("update availability failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
 	// Step 5: Return all moderator availabilities (matching legacy getAllModeratorAvailabilityService)
-	result, err := h.QsUserRepo.GetAllModeratorAvailabilityWithUserMRA(ctx, modID, clientID)
+	result, err := h.ModeratorService.GetAllModeratorAvailabilityWithUserMRA(ctx, modID, clientID)
 	if err != nil {
 		slog.Error("get all availability failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -413,7 +413,7 @@ func (h *Handler) DeleteModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 	idStr := chi.URLParam(r, "availability_id")
 	avID, _ := strconv.ParseInt(idStr, 10, 64)
 
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "user repository not available"})
 		return
 	}
@@ -421,7 +421,7 @@ func (h *Handler) DeleteModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 	ctx := r.Context()
 
 	// Step 1: Find existing availability
-	oldAv, err := h.QsUserRepo.FindModeratorAvailabilityByIdMRA(ctx, avID)
+	oldAv, err := h.ModeratorService.FindModeratorAvailabilityByIdMRA(ctx, avID)
 	if err != nil {
 		slog.Error("find availability failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -436,7 +436,7 @@ func (h *Handler) DeleteModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 	clientID := oldAv["clientId"].(int64)
 
 	// Step 2: Check external calendar status
-	calStatus, _ := h.QsUserRepo.GetModExternalCalendarStatusMRA(ctx, modID)
+	calStatus, _ := h.ModeratorService.GetModExternalCalendarStatusMRA(ctx, modID)
 	if calStatus == "In Progress" {
 		support.WriteJSON(w, http.StatusMethodNotAllowed, map[string]any{
 			"errorMessage": "There is a running import process for this moderator, try again later",
@@ -447,7 +447,7 @@ func (h *Handler) DeleteModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 	// Step 3: Before deleting, check for overlapping imported avails and re-create them as manual
 	oldST := fmt.Sprint(oldAv["startTime"])
 	oldET := fmt.Sprint(oldAv["endTime"])
-	overlappingImported, err := h.QsUserRepo.GetOverlappingImportedAvailabilityMRA(ctx, modID, clientID, oldST, oldET)
+	overlappingImported, err := h.ModeratorService.GetOverlappingImportedAvailabilityMRA(ctx, modID, clientID, oldST, oldET)
 	if err != nil {
 		slog.Error("get overlapping imported failed", "error", err)
 	}
@@ -456,11 +456,11 @@ func (h *Handler) DeleteModeratorAvailabilityMRA(w http.ResponseWriter, r *http.
 		impClientID, _ := imp["clientId"].(int64)
 		impST := fmt.Sprint(imp["startTime"])
 		impET := fmt.Sprint(imp["endTime"])
-		_ = h.QsUserRepo.AddModeratorAvailabilityFromImportedMRA(ctx, impModID, impClientID, impST, impET)
+		_ = h.ModeratorService.AddModeratorAvailabilityFromImportedMRA(ctx, impModID, impClientID, impST, impET)
 	}
 
 	// Step 4: Delete the availability
-	if err := h.QsUserRepo.DeleteModeratorAvailability(ctx, avID); err != nil {
+	if err := h.ModeratorService.DeleteModeratorAvailability(ctx, avID); err != nil {
 		slog.Error("delete availability failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
@@ -495,7 +495,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	respondentIdentifier := r.URL.Query().Get("respondentIdentifer")
 	rescheduleToken := r.URL.Query().Get("rescheduleToken")
 
-	if h.QsSurveyRepo == nil || h.QsProjectRepo == nil || h.QsUserRepo == nil || h.QsTimeSlotRepo == nil || h.QsRespondentRepo == nil {
+	if h.QsSurveyRepo == nil || h.QsProjectRepo == nil || !h.ModeratorService.QsUserAvailable() || !h.ModeratorService.TimeSlotAvailable() || h.QsRespondentRepo == nil {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":           "database not configured",
 			"errorMessage":    "an error occurred while getting moderators availability",
@@ -576,7 +576,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	// Step 4: Validate respondent
 	if rescheduleToken == "" {
 		// Regular schedule or moderator reschedule
-		statusRecords, err := h.QsTimeSlotRepo.GetInvalidTimeSlotStatusMRA(ctx, respondentIdentifier, projectID)
+		statusRecords, err := h.ModeratorService.GetInvalidTimeSlotStatusMRA(ctx, respondentIdentifier, projectID)
 		if err != nil {
 			slog.Error("get invalid timeslot status failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -597,7 +597,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 		}
 	} else {
 		// Respondent reschedule — validate token
-		statusRecords, err := h.QsTimeSlotRepo.GetInvalidTimeSlotStatusForRespRescMRA(ctx, respondentIdentifier, projectID)
+		statusRecords, err := h.ModeratorService.GetInvalidTimeSlotStatusForRespRescMRA(ctx, respondentIdentifier, projectID)
 		if err != nil {
 			slog.Error("get invalid timeslot status for resp resc failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -640,7 +640,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 		responderID, _ := respRecords[0]["responderId"].(int64)
 
 		// Check pending timeslot for token expiry
-		pendingSlots, err := h.QsTimeSlotRepo.GetPendingTimeslotByProjectAndResponderMRA(ctx, projectID, responderID)
+		pendingSlots, err := h.ModeratorService.GetPendingTimeslotByProjectAndResponderMRA(ctx, projectID, responderID)
 		if err != nil {
 			slog.Error("get pending timeslot failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -739,7 +739,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 	}
 
 	// Step 6: Get all moderator availabilities
-	moderatorsAvailability, err := h.QsUserRepo.GetAllModeratorsAvailabilityPerClientMRA(ctx, clientID, projectID)
+	moderatorsAvailability, err := h.ModeratorService.GetAllModeratorsAvailabilityPerClientMRA(ctx, clientID, projectID)
 	if err != nil {
 		slog.Error("get all moderators availability failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -771,7 +771,7 @@ func (h *Handler) GetModeratorsAvailabilityMRA(w http.ResponseWriter, r *http.Re
 		}
 
 		// Get overlapping imported availability for this availability window
-		overlappingImported, err := h.QsUserRepo.GetOverlappingImportedAvailabilityMRA(ctx, modID, avClientID, stStr, etStr)
+		overlappingImported, err := h.ModeratorService.GetOverlappingImportedAvailabilityMRA(ctx, modID, avClientID, stStr, etStr)
 		if err != nil {
 			slog.Error("get overlapping imported failed", "error", err)
 			overlappingImported = []map[string]any{}
@@ -881,7 +881,7 @@ func (h *Handler) GetModeratorTimeslotsMRA(w http.ResponseWriter, r *http.Reques
 	clientIDStr := chi.URLParam(r, "client_id")
 	clientID, _ := strconv.ParseInt(clientIDStr, 10, 64)
 
-	if h.QsTimeSlotRepo == nil || h.QsUserRepo == nil {
+	if !h.ModeratorService.TimeSlotAvailable() || !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -889,7 +889,7 @@ func (h *Handler) GetModeratorTimeslotsMRA(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 
 	// Check external calendar status
-	calStatus, _ := h.QsUserRepo.GetModExternalCalendarStatusMRA(ctx, modID)
+	calStatus, _ := h.ModeratorService.GetModExternalCalendarStatusMRA(ctx, modID)
 	if calStatus == "In Progress" {
 		support.WriteJSON(w, http.StatusMethodNotAllowed, map[string]any{
 			"errorMessage": "There is a running import process for this moderator, try again later",
@@ -908,9 +908,9 @@ func (h *Handler) GetModeratorTimeslotsMRA(w http.ResponseWriter, r *http.Reques
 	var records []map[string]any
 	var err error
 	if len(body.ProjectsToFilter) > 0 {
-		records, err = h.QsTimeSlotRepo.GetModeratorTimeSlotsWithFilterMRA(ctx, modID, clientID, body.ProjectsToFilter)
+		records, err = h.ModeratorService.GetModeratorTimeSlotsWithFilterMRA(ctx, modID, clientID, body.ProjectsToFilter)
 	} else {
-		records, err = h.QsTimeSlotRepo.GetModeratorTimeSlotsMRA(ctx, modID, clientID)
+		records, err = h.ModeratorService.GetModeratorTimeSlotsMRA(ctx, modID, clientID)
 	}
 	if err != nil {
 		slog.Error("get moderator timeslots mra failed", "error", err)
@@ -931,7 +931,7 @@ func (h *Handler) GetModeratorInterviewsMRA(w http.ResponseWriter, r *http.Reque
 	modIDStr := chi.URLParam(r, "moderator_id")
 	modID, _ := strconv.ParseInt(modIDStr, 10, 64)
 
-	if h.QsTimeSlotRepo == nil {
+	if !h.ModeratorService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -961,7 +961,7 @@ func (h *Handler) GetModeratorInterviewsMRA(w http.ResponseWriter, r *http.Reque
 	}
 
 	ctx := r.Context()
-	records, err := h.QsTimeSlotRepo.GetAllInterviewsMRA(ctx, modID, search, excludeIDs, body.PaymentStatusCode)
+	records, err := h.ModeratorService.GetAllInterviewsMRA(ctx, modID, search, excludeIDs, body.PaymentStatusCode)
 	if err != nil {
 		slog.Error("get moderator interviews mra failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -1008,12 +1008,12 @@ func (h *Handler) GetModeratorsListForProjectMRA(w http.ResponseWriter, r *http.
 	projectIDStr := chi.URLParam(r, "project_id")
 	projectID, _ := strconv.ParseInt(projectIDStr, 10, 64)
 
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
-	records, err := h.QsUserRepo.GetModeratorsListMRA(r.Context(), projectID)
+	records, err := h.ModeratorService.GetModeratorsListMRA(r.Context(), projectID)
 	if err != nil {
 		slog.Error("get moderators list mra failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -1048,7 +1048,7 @@ func (h *Handler) UpdateModeratorMRA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -1065,7 +1065,7 @@ func (h *Handler) UpdateModeratorMRA(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Step 1: fetch old buffer and clientId
-	oldBuffer, clientID, err := h.QsUserRepo.FetchUserInfoByUserIdMRA(ctx, moderatorID)
+	oldBuffer, clientID, err := h.ModeratorService.FetchUserInfoByUserIdMRA(ctx, moderatorID)
 	if err != nil {
 		slog.Error("fetch user info failed", "error", err, "moderatorId", moderatorID)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -1075,7 +1075,7 @@ func (h *Handler) UpdateModeratorMRA(w http.ResponseWriter, r *http.Request) {
 	newBuffer := body.ModeratorBuffer
 
 	// Step 2: update moderator buffer
-	if err := h.QsUserRepo.UpdateModeratorBufferMRA(ctx, moderatorID, newBuffer); err != nil {
+	if err := h.ModeratorService.UpdateModeratorBufferMRA(ctx, moderatorID, newBuffer); err != nil {
 		slog.Error("update moderator buffer failed", "error", err, "moderatorId", moderatorID)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
@@ -1098,14 +1098,14 @@ func (h *Handler) UpdateModeratorMRA(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 5: clean up invalid availabilities (start >= end)
-	if err := h.QsUserRepo.CleanUpAvailabilitiesByModeratorIdMRA(ctx, moderatorID); err != nil {
+	if err := h.ModeratorService.CleanUpAvailabilitiesByModeratorIdMRA(ctx, moderatorID); err != nil {
 		slog.Error("cleanup availabilities failed", "error", err, "moderatorId", moderatorID)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
 	// Step 6: remove nested availabilities
-	if err := h.QsUserRepo.RemoveNestedAvailabilitiesMRA(ctx, moderatorID); err != nil {
+	if err := h.ModeratorService.RemoveNestedAvailabilitiesMRA(ctx, moderatorID); err != nil {
 		slog.Error("remove nested availabilities failed", "error", err, "moderatorId", moderatorID)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
@@ -1119,7 +1119,7 @@ func (h *Handler) UpdateModeratorMRA(w http.ResponseWriter, r *http.Request) {
 // based on proximity to scheduled interviews after a buffer change.
 func (h *Handler) updateAvailabilitiesBasedOnBufferMRA(ctx context.Context, newBuffer int, moderatorID, clientID int64, increase bool) error {
 	// Get future interviews for this moderator
-	interviews, err := h.QsUserRepo.GetFutureModeratorTimeslotsMRA(ctx, moderatorID, clientID)
+	interviews, err := h.ModeratorService.GetFutureModeratorTimeslotsMRA(ctx, moderatorID, clientID)
 	if err != nil {
 		return fmt.Errorf("get future timeslots: %w", err)
 	}
@@ -1128,7 +1128,7 @@ func (h *Handler) updateAvailabilitiesBasedOnBufferMRA(ctx context.Context, newB
 	}
 
 	// Get all future manual availabilities with proximity to interviews
-	avails, err := h.QsUserRepo.GetFutureAvailsWithProximityMRA(ctx, moderatorID, clientID)
+	avails, err := h.ModeratorService.GetFutureAvailsWithProximityMRA(ctx, moderatorID, clientID)
 	if err != nil {
 		return fmt.Errorf("get future avails with proximity: %w", err)
 	}
@@ -1145,7 +1145,7 @@ func (h *Handler) updateAvailabilitiesBasedOnBufferMRA(ctx context.Context, newB
 // updateImportedAvailabilitiesBasedOnBufferMRA adjusts imported moderator availabilities
 // based on proximity to scheduled interviews after a buffer change.
 func (h *Handler) updateImportedAvailabilitiesBasedOnBufferMRA(ctx context.Context, newBuffer int, moderatorID, clientID int64, increase bool) error {
-	interviews, err := h.QsUserRepo.GetFutureModeratorTimeslotsMRA(ctx, moderatorID, clientID)
+	interviews, err := h.ModeratorService.GetFutureModeratorTimeslotsMRA(ctx, moderatorID, clientID)
 	if err != nil {
 		return fmt.Errorf("get future timeslots: %w", err)
 	}
@@ -1153,7 +1153,7 @@ func (h *Handler) updateImportedAvailabilitiesBasedOnBufferMRA(ctx context.Conte
 		return nil
 	}
 
-	avails, err := h.QsUserRepo.GetFutureImportedAvailsWithProximityMRA(ctx, moderatorID, clientID)
+	avails, err := h.ModeratorService.GetFutureImportedAvailsWithProximityMRA(ctx, moderatorID, clientID)
 	if err != nil {
 		return fmt.Errorf("get future imported avails with proximity: %w", err)
 	}
@@ -1195,9 +1195,9 @@ func (h *Handler) processAvailabilityBufferAdjustmentMRA(ctx context.Context,
 		var al *qs.AvailLengthMRA
 		var err error
 		if imported {
-			al, err = h.QsUserRepo.GetImportedModeratorAvailabilityLengthMRA(ctx, availID)
+			al, err = h.ModeratorService.GetImportedModeratorAvailabilityLengthMRA(ctx, availID)
 		} else {
-			al, err = h.QsUserRepo.GetModeratorAvailabilityLengthMRA(ctx, availID)
+			al, err = h.ModeratorService.GetModeratorAvailabilityLengthMRA(ctx, availID)
 		}
 		if err != nil {
 			return fmt.Errorf("get availability length: %w", err)
@@ -1209,9 +1209,9 @@ func (h *Handler) processAvailabilityBufferAdjustmentMRA(ctx context.Context,
 
 		if shouldDelete {
 			if imported {
-				return h.QsUserRepo.DeleteImportedModeratorAvailabilityByIdMRA(ctx, availID)
+				return h.ModeratorService.DeleteImportedModeratorAvailabilityByIdMRA(ctx, availID)
 			}
-			return h.QsUserRepo.DeleteModeratorAvailabilityByIdMRA(ctx, availID)
+			return h.ModeratorService.DeleteModeratorAvailabilityByIdMRA(ctx, availID)
 		}
 
 		// If interview end is before availability end AND within 3600s of availability start
@@ -1223,11 +1223,11 @@ func (h *Handler) processAvailabilityBufferAdjustmentMRA(ctx context.Context,
 			if diff <= 3600 {
 				newStart := nearestEndTime.Add(bufferDur)
 				if imported {
-					if err := h.QsUserRepo.UpdateImportedModeratorAvailabilityStartTimeMRA(ctx, availID, newStart); err != nil {
+					if err := h.ModeratorService.UpdateImportedModeratorAvailabilityStartTimeMRA(ctx, availID, newStart); err != nil {
 						return err
 					}
 				} else {
-					if err := h.QsUserRepo.UpdateModeratorAvailabilityStartTimeMRA(ctx, availID, newStart); err != nil {
+					if err := h.ModeratorService.UpdateModeratorAvailabilityStartTimeMRA(ctx, availID, newStart); err != nil {
 						return err
 					}
 				}
@@ -1254,9 +1254,9 @@ func (h *Handler) processAvailabilityBufferAdjustmentMRA(ctx context.Context,
 		var al *qs.AvailLengthMRA
 		var err error
 		if imported {
-			al, err = h.QsUserRepo.GetImportedModeratorAvailabilityLengthMRA(ctx, availID)
+			al, err = h.ModeratorService.GetImportedModeratorAvailabilityLengthMRA(ctx, availID)
 		} else {
-			al, err = h.QsUserRepo.GetModeratorAvailabilityLengthMRA(ctx, availID)
+			al, err = h.ModeratorService.GetModeratorAvailabilityLengthMRA(ctx, availID)
 		}
 		if err != nil {
 			return fmt.Errorf("get availability length (pass 2): %w", err)
@@ -1268,9 +1268,9 @@ func (h *Handler) processAvailabilityBufferAdjustmentMRA(ctx context.Context,
 
 		if shouldDelete {
 			if imported {
-				return h.QsUserRepo.DeleteImportedModeratorAvailabilityByIdMRA(ctx, availID)
+				return h.ModeratorService.DeleteImportedModeratorAvailabilityByIdMRA(ctx, availID)
 			}
-			return h.QsUserRepo.DeleteModeratorAvailabilityByIdMRA(ctx, availID)
+			return h.ModeratorService.DeleteModeratorAvailabilityByIdMRA(ctx, availID)
 		}
 
 		// If interview start is after availability start AND within 60 min of availability end
@@ -1282,11 +1282,11 @@ func (h *Handler) processAvailabilityBufferAdjustmentMRA(ctx context.Context,
 			if diff <= 3600 {
 				newEnd := nearestStartTime.Add(-bufferDur)
 				if imported {
-					if err := h.QsUserRepo.UpdateImportedModeratorAvailabilityEndTimeMRA(ctx, availID, newEnd); err != nil {
+					if err := h.ModeratorService.UpdateImportedModeratorAvailabilityEndTimeMRA(ctx, availID, newEnd); err != nil {
 						return err
 					}
 				} else {
-					if err := h.QsUserRepo.UpdateModeratorAvailabilityEndTimeMRA(ctx, availID, newEnd); err != nil {
+					if err := h.ModeratorService.UpdateModeratorAvailabilityEndTimeMRA(ctx, availID, newEnd); err != nil {
 						return err
 					}
 				}
@@ -1303,12 +1303,12 @@ func (h *Handler) GetModeratorsForTimeSlotMRA(w http.ResponseWriter, r *http.Req
 	tsIDStr := chi.URLParam(r, "timeslot_id")
 	tsID, _ := strconv.ParseInt(tsIDStr, 10, 64)
 
-	if h.QsTimeSlotRepo == nil {
+	if !h.ModeratorService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
-	records, err := h.QsTimeSlotRepo.GetModeratorsForTimeSlotMRA(r.Context(), tsID)
+	records, err := h.ModeratorService.GetModeratorsForTimeSlotMRA(r.Context(), tsID)
 	if err != nil {
 		slog.Error("get moderators for timeslot mra failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -1327,14 +1327,14 @@ func (h *Handler) GetModeratorsOptionMRA(w http.ResponseWriter, r *http.Request)
 	tsIDStr := chi.URLParam(r, "timeslot_id")
 	tsID, _ := strconv.ParseInt(tsIDStr, 10, 64)
 
-	if h.QsTimeSlotRepo == nil {
+	if !h.ModeratorService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
 	ctx := r.Context()
 
-	startTime, endTime, err := h.QsTimeSlotRepo.GetStartEndTimeBySlotIdMRA(ctx, tsID)
+	startTime, endTime, err := h.ModeratorService.GetStartEndTimeBySlotIdMRA(ctx, tsID)
 	if err != nil {
 		slog.Error("get start end time failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -1344,7 +1344,7 @@ func (h *Handler) GetModeratorsOptionMRA(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	modsInfo, err := h.QsTimeSlotRepo.GetModeratorsInfoForSlotMRA(ctx, tsID)
+	modsInfo, err := h.ModeratorService.GetModeratorsInfoForSlotMRA(ctx, tsID)
 	if err != nil {
 		slog.Error("get moderators info failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -1356,7 +1356,7 @@ func (h *Handler) GetModeratorsOptionMRA(w http.ResponseWriter, r *http.Request)
 
 	var result []map[string]any
 	for _, m := range modsInfo {
-		hasConflict, err := h.QsTimeSlotRepo.GetModeratorConflictForSlotMRA(ctx, m.ID, startTime, endTime, tsID)
+		hasConflict, err := h.ModeratorService.GetModeratorConflictForSlotMRA(ctx, m.ID, startTime, endTime, tsID)
 		if err != nil {
 			slog.Error("get moderator conflict failed", "error", err, "moderatorId", m.ID)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
@@ -1467,7 +1467,7 @@ func (h *Handler) UpsertModeratorTimeRangeMRA(w http.ResponseWriter, r *http.Req
 // ──────────────────────────────────────────────
 
 func (h *Handler) GetModeratorAvailabilityByClientMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "repository not available",
 			"errorMessage": "An error occured while getting moderator availability",
@@ -1490,7 +1490,7 @@ func (h *Handler) GetModeratorAvailabilityByClientMRA(w http.ResponseWriter, r *
 	ctx := r.Context()
 
 	// Check external calendar import status
-	calStatus, _ := h.QsUserRepo.GetModExternalCalendarStatusMRA(ctx, moderatorID)
+	calStatus, _ := h.ModeratorService.GetModExternalCalendarStatusMRA(ctx, moderatorID)
 	if calStatus == "In Progress" {
 		support.WriteJSON(w, http.StatusMethodNotAllowed, map[string]any{
 			"error": "There is a running import process for this moderator, try again later",
@@ -1509,7 +1509,7 @@ func (h *Handler) GetModeratorAvailabilityByClientMRA(w http.ResponseWriter, r *
 // ──────────────────────────────────────────────
 
 func (h *Handler) StartModeratorImportMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -1540,7 +1540,7 @@ func (h *Handler) StartModeratorImportMRA(w http.ResponseWriter, r *http.Request
 	ctx := r.Context()
 
 	// Step 1: Check external calendar status
-	calStatus, _ := h.QsUserRepo.GetModExternalCalendarStatusMRA(ctx, moderatorID)
+	calStatus, _ := h.ModeratorService.GetModExternalCalendarStatusMRA(ctx, moderatorID)
 	if calStatus == "In Progress" && !body.ForceUpdate {
 		support.WriteJSON(w, http.StatusMethodNotAllowed, map[string]any{
 			"error": "There is a running import process for this moderator, try again later",
@@ -1549,21 +1549,21 @@ func (h *Handler) StartModeratorImportMRA(w http.ResponseWriter, r *http.Request
 	}
 
 	// Step 2: Update external calendar URL and key
-	if err := h.QsUserRepo.UpdateModExternalCalendarUrlMRA(ctx, moderatorID, body.ExternalCalendarInput, body.ExternalCalendarKeyInput); err != nil {
+	if err := h.ModeratorService.UpdateModExternalCalendarUrlMRA(ctx, moderatorID, body.ExternalCalendarInput, body.ExternalCalendarKeyInput); err != nil {
 		slog.Error("update external calendar url failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
 	// Step 3: Set status to "In Progress"
-	if err := h.QsUserRepo.UpdateModExternalCalendarStatusMRA(ctx, moderatorID, "In Progress"); err != nil {
+	if err := h.ModeratorService.UpdateModExternalCalendarStatusMRA(ctx, moderatorID, "In Progress"); err != nil {
 		slog.Error("update external calendar status failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
 	// Step 4: Delete existing imported avails
-	if err := h.QsUserRepo.DeleteImportedModeratorAvailabilityByModeratorMRA(ctx, moderatorID, clientID); err != nil {
+	if err := h.ModeratorService.DeleteImportedModeratorAvailabilityByModeratorMRA(ctx, moderatorID, clientID); err != nil {
 		slog.Error("delete imported moderator availability failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
@@ -1584,7 +1584,7 @@ func (h *Handler) StartModeratorImportMRA(w http.ResponseWriter, r *http.Request
 // ──────────────────────────────────────────────
 
 func (h *Handler) GetImportedAvailabilityFromCurrentSyncMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -1602,7 +1602,7 @@ func (h *Handler) GetImportedAvailabilityFromCurrentSyncMRA(w http.ResponseWrite
 	}
 
 	// PARTIAL: Legacy parses Google Sheets data. This returns DB-stored imported avails.
-	result, err := h.QsUserRepo.GetImportedModeratorAvailabilityMRA(r.Context(), moderatorID, clientID)
+	result, err := h.ModeratorService.GetImportedModeratorAvailabilityMRA(r.Context(), moderatorID, clientID)
 	if err != nil {
 		slog.Error("get imported availability from current sync failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -1633,7 +1633,7 @@ var langCodeToID = map[string]int64{
 // ──────────────────────────────────────────────
 
 func (h *Handler) GetImportStatusMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -1646,14 +1646,14 @@ func (h *Handler) GetImportStatusMRA(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	statusResult, err := h.QsUserRepo.GetModeratorExternalCalendarMRA(ctx, moderatorID)
+	statusResult, err := h.ModeratorService.GetModeratorExternalCalendarMRA(ctx, moderatorID)
 	if err != nil {
 		slog.Error("get moderator external calendar failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err})
 		return
 	}
 
-	runningCount, err := h.QsUserRepo.GetRunningImportProcessCountMRA(ctx)
+	runningCount, err := h.ModeratorService.GetRunningImportProcessCountMRA(ctx)
 	if err != nil {
 		slog.Error("get running import process count failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err})
@@ -1675,7 +1675,7 @@ func (h *Handler) GetImportStatusMRA(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) UnlinkImportedModeratorMRA(w http.ResponseWriter, r *http.Request) {
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
@@ -1697,7 +1697,7 @@ func (h *Handler) UnlinkImportedModeratorMRA(w http.ResponseWriter, r *http.Requ
 	ctx := r.Context()
 
 	// Check if import is in progress
-	calRecords, err := h.QsUserRepo.GetModeratorExternalCalendarMRA(ctx, moderatorID)
+	calRecords, err := h.ModeratorService.GetModeratorExternalCalendarMRA(ctx, moderatorID)
 	if err != nil {
 		slog.Error("get moderator external calendar failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
@@ -1714,13 +1714,13 @@ func (h *Handler) UnlinkImportedModeratorMRA(w http.ResponseWriter, r *http.Requ
 	}
 
 	// Delete imported availabilities and external calendar status
-	if err := h.QsUserRepo.DeleteImportedModeratorAvailabilityByModeratorMRA(ctx, moderatorID, req.ClientID); err != nil {
+	if err := h.ModeratorService.DeleteImportedModeratorAvailabilityByModeratorMRA(ctx, moderatorID, req.ClientID); err != nil {
 		slog.Error("delete imported moderator availability failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
 
-	if err := h.QsUserRepo.DeleteExternalCalStatusMRA(ctx, moderatorID); err != nil {
+	if err := h.ModeratorService.DeleteExternalCalStatusMRA(ctx, moderatorID); err != nil {
 		slog.Error("delete external calendar status failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return

@@ -95,8 +95,8 @@ func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if h.IrisSurveyRepo != nil {
-		interviews, err := h.IrisSurveyRepo.GetSubscriptionInterviews(r.Context(), subID)
+	if h.SubscriptionService.Available() {
+		interviews, err := h.SubscriptionService.GetSubscriptionInterviews(r.Context(), subID)
 		if err != nil {
 			slog.Error("subscription interviews failed", "error", err)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -109,7 +109,7 @@ func (h *Handler) GetSubscriptionInterviews(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if h.QsTimeSlotRepo != nil {
-		tsRows, _, _ := h.QsTimeSlotRepo.ListByProject(r.Context(), subID, 1, 1000)
+		tsRows, _, _ := h.InterviewService.ListByProject(r.Context(), subID, 1, 1000)
 		interviews := make([]map[string]any, 0)
 		for _, ts := range tsRows {
 			interviews = append(interviews, map[string]any{
@@ -135,7 +135,7 @@ func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if h.IrisSurveyRepo == nil {
+	if !h.SubscriptionService.Available() {
 		support.WriteJSON(w, http.StatusOK, map[string]any{"crowds": []map[string]any{}, "limit": 20, "offset": 0, "totalCount": 0})
 		return
 	}
@@ -164,7 +164,7 @@ func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) 
 		Offset:                offset,
 	}
 
-	crowds, total, err := h.IrisSurveyRepo.ListCrowdsForSubscription(r.Context(), subID, filter)
+	crowds, total, err := h.SubscriptionService.ListCrowdsForSubscription(r.Context(), subID, filter)
 	if err != nil {
 		slog.Error("subscription crowds failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -189,7 +189,7 @@ func (h *Handler) GetSubscriptionCrowds(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) buildCrowdBasicJSON(ctx context.Context, c iris.ICCrowd) map[string]any {
 	// Type description
 	typeDesc := ""
-	if td, err := h.IrisSurveyRepo.GetCrowdTypeDescription(ctx, c.TypeID); err == nil {
+	if td, err := h.SubscriptionService.GetCrowdTypeDescription(ctx, c.TypeID); err == nil {
 		typeDesc = td
 	}
 
@@ -201,57 +201,57 @@ func (h *Handler) buildCrowdBasicJSON(ctx context.Context, c iris.ICCrowd) map[s
 
 	// Account ID (from subscription)
 	var accountID any
-	if aid := h.IrisSurveyRepo.GetAccountIDForSubscription(ctx, c.SubscriptionID); aid != nil {
+	if aid := h.SubscriptionService.GetAccountIDForSubscription(ctx, c.SubscriptionID); aid != nil {
 		accountID = *aid
 	}
 
 	// Market name
 	marketName := ""
-	if mn, err := h.IrisSurveyRepo.GetMarketName(ctx, c.MarketID); err == nil {
+	if mn, err := h.SubscriptionService.GetMarketName(ctx, c.MarketID); err == nil {
 		marketName = mn
 	}
 
 	// Brand IDs and name
-	brandIDs, _ := h.IrisSurveyRepo.GetCrowdBrandIDs(ctx, c.ID)
+	brandIDs, _ := h.SubscriptionService.GetCrowdBrandIDs(ctx, c.ID)
 	if brandIDs == nil {
 		brandIDs = []int64{}
 	}
 	var brandNames []string
 	for _, bid := range brandIDs {
-		if bn, err := h.IrisSurveyRepo.GetBrandName(ctx, bid); err == nil {
+		if bn, err := h.SubscriptionService.GetBrandName(ctx, bid); err == nil {
 			brandNames = append(brandNames, bn)
 		}
 	}
 	brandName := strings.Join(brandNames, ", ")
 
 	// Country (attribute_id=29)
-	countryID := h.IrisSurveyRepo.GetCrowdCountryID(ctx, c.ID)
+	countryID := h.SubscriptionService.GetCrowdCountryID(ctx, c.ID)
 	countryName := ""
 	var countryLanguage []string
 	if countryID > 0 {
-		countryName = h.IrisSurveyRepo.GetAttributeChoiceLabel(ctx, countryID)
-		countryLanguage = h.IrisSurveyRepo.GetCountryLanguages(ctx, countryID, countryName)
+		countryName = h.SubscriptionService.GetAttributeChoiceLabel(ctx, countryID)
+		countryLanguage = h.SubscriptionService.GetCountryLanguages(ctx, countryID, countryName)
 	}
 	if countryLanguage == nil {
 		countryLanguage = []string{}
 	}
 
 	// Created via list match
-	createdViaListMatch := h.IrisSurveyRepo.CrowdHasListMatch(ctx, c.ID) || c.DuplicatedFromS3Key.Valid
+	createdViaListMatch := h.SubscriptionService.CrowdHasListMatch(ctx, c.ID) || c.DuplicatedFromS3Key.Valid
 
 	// Specialty values
-	specialtyValues := h.IrisSurveyRepo.GetCrowdSpecialtyIDs(ctx, c.ID)
+	specialtyValues := h.SubscriptionService.GetCrowdSpecialtyIDs(ctx, c.ID)
 	if specialtyValues == nil {
 		specialtyValues = []int{}
 	}
 
 	// Engagement rates
 	var expectedCompletesRate any
-	if rate := h.IrisSurveyRepo.GetCrowdEngagementRate(ctx, c.ID, false); rate != nil {
+	if rate := h.SubscriptionService.GetCrowdEngagementRate(ctx, c.ID, false); rate != nil {
 		expectedCompletesRate = *rate
 	}
 	var expectedCompletesRateFullMatch any
-	if rate := h.IrisSurveyRepo.GetCrowdEngagementRate(ctx, c.ID, true); rate != nil {
+	if rate := h.SubscriptionService.GetCrowdEngagementRate(ctx, c.ID, true); rate != nil {
 		expectedCompletesRateFullMatch = *rate
 	}
 
@@ -296,12 +296,12 @@ func (h *Handler) buildCrowdBasicJSON(ctx context.Context, c iris.ICCrowd) map[s
 func (h *Handler) GetSubscriptionQuestionTypes(w http.ResponseWriter, r *http.Request) {
 	_ = chi.URLParam(r, "id") // subId validated but not used for filtering (legacy returns all types)
 
-	if h.IrisSurveyRepo == nil {
+	if !h.SubscriptionService.Available() {
 		support.WriteJSON(w, http.StatusOK, map[string]any{"totalCount": 0, "limit": nil, "offset": nil, "questionTypes": []map[string]any{}})
 		return
 	}
 
-	allTypes, err := h.IrisSurveyRepo.GetAllQuestionTypes(r.Context())
+	allTypes, err := h.SubscriptionService.GetAllQuestionTypes(r.Context())
 	if err != nil {
 		slog.Error("question types failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -347,7 +347,7 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if h.IrisSurveyRepo == nil {
+	if !h.SubscriptionService.Available() {
 		support.WriteJSON(w, http.StatusOK, []map[string]any{})
 		return
 	}
@@ -368,7 +368,7 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	inquiries, err := h.IrisSurveyRepo.ListProjectInquiries(r.Context(), subID, filter)
+	inquiries, err := h.SubscriptionService.ListProjectInquiries(r.Context(), subID, filter)
 	if err != nil {
 		slog.Error("inquiries list failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -385,7 +385,7 @@ func (h *Handler) GetSubscriptionInquiries(w http.ResponseWriter, r *http.Reques
 			"notes":                  dto.NullStr(pi.Notes),
 			"subscriptionId":         pi.SubscriptionID,
 			"inquiryTypeId":          pi.InquiryTypeID,
-			"inquiryType":            h.IrisSurveyRepo.GetInquiryTypeName(ctx, pi.InquiryTypeID),
+			"inquiryType":            h.SubscriptionService.GetInquiryTypeName(ctx, pi.InquiryTypeID),
 			"interviewLength":        pi.InterviewLength,
 			"requiredCompletionDate": dto.NullTime(pi.RequiredCompletionDate),
 			"projectId":              pi.ProjectID,
@@ -442,13 +442,13 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 	subID, _ := validate.ParseIDParam(r, "subId")
 	projectID, _ := validate.ParseIDParam(r, "pid")
 
-	if h.IrisSurveyRepo == nil {
+	if !h.SubscriptionService.Available() {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "inquiry not found"})
 		return
 	}
 
 	// 1. Get inquiry
-	pi, err := h.IrisSurveyRepo.GetProjectInquiry(r.Context(), subID, projectID)
+	pi, err := h.SubscriptionService.GetProjectInquiry(r.Context(), subID, projectID)
 	if err != nil {
 		slog.Error("get inquiry failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
@@ -460,14 +460,14 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 	}
 
 	// 2. Get project
-	project, err := h.IrisSurveyRepo.GetProjectForInquiry(r.Context(), projectID)
+	project, err := h.SubscriptionService.GetProjectForInquiry(r.Context(), projectID)
 	if err != nil || project == nil {
 		support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "project not found"})
 		return
 	}
 
 	// 3. Get inquiry crowds (standard + custom + crowd objects)
-	standardCrowds, customCrowds, crowdObjects, err := h.IrisSurveyRepo.GetProjectInquiryCrowds(r.Context(), pi.ID)
+	standardCrowds, customCrowds, crowdObjects, err := h.SubscriptionService.GetProjectInquiryCrowds(r.Context(), pi.ID)
 	if err != nil {
 		slog.Error("get inquiry crowds failed", "error", err)
 		standardCrowds = []map[string]any{}
@@ -512,7 +512,7 @@ func (h *Handler) GetSubscriptionProjectInquiry(w http.ResponseWriter, r *http.R
 	if projectStatusID == 1 {
 		fees = []map[string]any{}
 	} else {
-		fees, err = h.IrisSurveyRepo.GetProjectFees(r.Context(), projectID)
+		fees, err = h.SubscriptionService.GetProjectFees(r.Context(), projectID)
 		if err != nil {
 			fees = []map[string]any{}
 		}
@@ -564,7 +564,7 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if h.IrisSurveyRepo == nil {
+	if !h.SubscriptionService.Available() {
 		support.WriteJSON(w, http.StatusOK, map[string]any{"projects": map[string]any{}})
 		return
 	}
@@ -573,14 +573,14 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 	var callerUserID int64
 	user := middleware.GetUser(r)
 	if user != nil && user.Email != "" && h.IrisUserRepo != nil {
-		u, err := h.IrisUserRepo.GetByEmail(r.Context(), user.Email)
+		u, err := h.UserService.GetIrisUserByEmail(r.Context(), user.Email)
 		if err == nil && u != nil {
 			callerUserID = u.ID
 		}
 	}
 
 	// Step 1: Get projects for subscription (excludes status 1 / draft, excludes archived)
-	projects, err := h.IrisSurveyRepo.ListProjectsForSubscription(r.Context(), subID)
+	projects, err := h.SubscriptionService.ListProjectsForSubscription(r.Context(), subID)
 	if err != nil {
 		slog.Error("subscription projects failed", "error", err)
 		support.WriteJSON(w, http.StatusOK, map[string]any{"projects": map[string]any{}})
@@ -590,7 +590,7 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 	projectsMap := make(map[string]any, len(projects))
 	for _, p := range projects {
 		// Step 2: Get surveys for each project
-		surveys, err := h.IrisSurveyRepo.ListSurveysForProject(r.Context(), p.ID)
+		surveys, err := h.SubscriptionService.ListSurveysForProject(r.Context(), p.ID)
 		if err != nil {
 			slog.Error("project surveys failed", "projectId", p.ID, "error", err)
 			surveys = nil
@@ -600,33 +600,33 @@ func (h *Handler) GetSubscriptionProjectSurveys(w http.ResponseWriter, r *http.R
 		for _, s := range surveys {
 			// Status object: { "status": <int>, "label": <string> }
 			statusObj := map[string]any{"status": s.Status, "label": ""}
-			_, label, err := h.IrisSurveyRepo.GetSurveyStatusLabel(r.Context(), s.Status)
+			_, label, err := h.SubscriptionService.GetSurveyStatusLabel(r.Context(), s.Status)
 			if err == nil {
 				statusObj["label"] = label
 			}
 
 			// Qual crowd name (first survey_crowd entry)
 			qualCrowdName := ""
-			if name, err := h.IrisSurveyRepo.GetFirstSurveyCrowdName(r.Context(), s.ID); err == nil {
+			if name, err := h.SubscriptionService.GetFirstSurveyCrowdName(r.Context(), s.ID); err == nil {
 				qualCrowdName = name
 			}
 
 			// Question count
 			numQuestions := 0
-			if cnt, err := h.IrisSurveyRepo.CountSurveyQuestions(r.Context(), s.ID); err == nil {
+			if cnt, err := h.SubscriptionService.CountSurveyQuestions(r.Context(), s.ID); err == nil {
 				numQuestions = cnt
 			}
 
 			// Completion count (non-invalid, non-test)
 			numCompletions := 0
-			if cnt, err := h.IrisSurveyRepo.CountSurveyCompletions(r.Context(), s.ID); err == nil {
+			if cnt, err := h.SubscriptionService.CountSurveyCompletions(r.Context(), s.ID); err == nil {
 				numCompletions = cnt
 			}
 
 			// Favorite check for calling user
 			favorite := false
 			if callerUserID > 0 {
-				if fav, err := h.IrisSurveyRepo.IsSurveyFavoriteOf(r.Context(), s.ID, callerUserID); err == nil {
+				if fav, err := h.SubscriptionService.IsSurveyFavoriteOf(r.Context(), s.ID, callerUserID); err == nil {
 					favorite = fav
 				}
 			}
@@ -669,7 +669,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.IrisSurveyRepo == nil {
+	if !h.SubscriptionService.Available() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 		return
 	}
@@ -677,7 +677,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// Step 1: Get qual products
-	allProducts, err := h.IrisSurveyRepo.GetQualProducts(ctx)
+	allProducts, err := h.SubscriptionService.GetQualProducts(ctx)
 	if err != nil {
 		slog.Error("get qual products failed", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get products"})
@@ -705,7 +705,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 
 	// Step 2: Get related market IDs for each product
 	for i := range products {
-		mids, err := h.IrisSurveyRepo.GetProductRelatedMarketIDs(ctx, products[i].ID)
+		mids, err := h.SubscriptionService.GetProductRelatedMarketIDs(ctx, products[i].ID)
 		if err != nil {
 			slog.Error("get product market ids failed", "error", err, "productId", products[i].ID)
 		}
@@ -713,7 +713,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 4: Get subscription discount
-	serviceDiscount, err := h.IrisSurveyRepo.GetSubscriptionServiceDiscount(ctx, subID)
+	serviceDiscount, err := h.SubscriptionService.GetSubscriptionServiceDiscount(ctx, subID)
 	if err != nil {
 		slog.Error("get subscription discount failed", "error", err)
 		serviceDiscount = 0
@@ -783,7 +783,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Step 5: Assess crowd difficulty
-	assessments, err := h.IrisSurveyRepo.GetDifficultyAssessments(ctx)
+	assessments, err := h.SubscriptionService.GetDifficultyAssessments(ctx)
 	if err != nil {
 		slog.Error("get difficulty assessments failed", "error", err)
 	}
@@ -808,7 +808,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	// Step 6: Resolve custom crowd names
 	for i := range proposal.CustomCrowds {
 		if proposal.CustomCrowds[i].CrowdID != nil {
-			name, err := h.IrisSurveyRepo.GetCrowdNameByID(ctx, *proposal.CustomCrowds[i].CrowdID)
+			name, err := h.SubscriptionService.GetCrowdNameByID(ctx, *proposal.CustomCrowds[i].CrowdID)
 			if err != nil {
 				slog.Error("get crowd name failed", "error", err, "crowdId", *proposal.CustomCrowds[i].CrowdID)
 			} else {
@@ -820,7 +820,7 @@ func (h *Handler) UpdateInquiryPreview(w http.ResponseWriter, r *http.Request) {
 	// Step 7: Lookup Salesforce project
 	var sfProjectName *string
 	if proposal.SalesforceProjectID != nil && *proposal.SalesforceProjectID != "" {
-		num, name, err := h.IrisSurveyRepo.GetSalesforceProjectByExtID(ctx, *proposal.SalesforceProjectID)
+		num, name, err := h.SubscriptionService.GetSalesforceProjectByExtID(ctx, *proposal.SalesforceProjectID)
 		if err != nil {
 			slog.Error("get salesforce project failed", "error", err)
 		} else {
@@ -862,13 +862,13 @@ func (h *Handler) assessCrowdDifficulty(ctx context.Context, crowd *ipCrowdSpec,
 		return nil
 	}
 
-	population, err := h.IrisSurveyRepo.CountMarketPopulation(ctx, crowd.MarketID)
+	population, err := h.SubscriptionService.CountMarketPopulation(ctx, crowd.MarketID)
 	if err != nil {
 		slog.Error("count market population failed", "error", err, "marketId", crowd.MarketID)
 		return nil
 	}
 
-	diffPercent, err := h.IrisSurveyRepo.GetDifficultyLevelPercent(ctx, crowd.DifficultyLevel.ID)
+	diffPercent, err := h.SubscriptionService.GetDifficultyLevelPercent(ctx, crowd.DifficultyLevel.ID)
 	if err != nil {
 		slog.Error("get difficulty level percent failed", "error", err, "levelId", crowd.DifficultyLevel.ID)
 		return nil
@@ -950,8 +950,8 @@ func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Reques
 
 	// Resolve calling user's numeric IRIS ID for filename (legacy uses user.id)
 	var userID int64
-	if user := middleware.GetUser(r); user != nil && user.Email != "" && h.IrisSurveyRepo != nil {
-		if id, lookupErr := h.IrisSurveyRepo.GetUserIDByEmail(r.Context(), user.Email); lookupErr == nil {
+	if user := middleware.GetUser(r); user != nil && user.Email != "" && h.SubscriptionService.Available() {
+		if id, lookupErr := h.SubscriptionService.GetUserIDByEmail(r.Context(), user.Email); lookupErr == nil {
 			userID = id
 		}
 	}
@@ -980,8 +980,8 @@ func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Reques
 	// Look up subscription company name + shortCode
 	companyName := "Unknown"
 	shortCode := ""
-	if h.IrisSurveyRepo != nil {
-		if name, sc, lookupErr := h.IrisSurveyRepo.GetSubscriptionCompanyAndShortCode(r.Context(), subscriptionID); lookupErr == nil {
+	if h.SubscriptionService.Available() {
+		if name, sc, lookupErr := h.SubscriptionService.GetSubscriptionCompanyAndShortCode(r.Context(), subscriptionID); lookupErr == nil {
 			if name != "" {
 				companyName = name
 			}
@@ -991,9 +991,9 @@ func (h *Handler) CreateCustomCrowdInquiry(w http.ResponseWriter, r *http.Reques
 
 	// Look up market name if provided
 	var marketName string
-	if isListMatch && h.IrisSurveyRepo != nil {
+	if isListMatch && h.SubscriptionService.Available() {
 		if mID, parseErr := strconv.ParseInt(marketID, 10, 64); parseErr == nil {
-			if name, lookupErr := h.IrisSurveyRepo.GetMarketName(r.Context(), mID); lookupErr == nil {
+			if name, lookupErr := h.SubscriptionService.GetMarketName(r.Context(), mID); lookupErr == nil {
 				marketName = name
 			}
 		}

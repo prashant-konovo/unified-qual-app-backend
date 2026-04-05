@@ -62,6 +62,10 @@ func (s *InterviewService) ListStatuses(ctx context.Context) ([]qs.TimeSlotStatu
 	return s.timeSlotRepo.ListStatuses(ctx)
 }
 
+func (s *InterviewService) ListByProject(ctx context.Context, projectID int64, page, pageSize int) ([]qs.TimeSlotListRow, int, error) {
+	return s.timeSlotRepo.ListByProject(ctx, projectID, page, pageSize)
+}
+
 func (s *InterviewService) HasCompletedPaymentMRA(ctx context.Context, timeSlotID int64) (bool, error) {
 	return s.timeSlotRepo.HasCompletedPaymentMRA(ctx, timeSlotID)
 }

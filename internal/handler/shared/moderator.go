@@ -25,8 +25,8 @@ func (h *Handler) ListModerators(w http.ResponseWriter, r *http.Request) {
 	var combined []map[string]any
 
 	// QS moderators (role_id = 1)
-	if h.QsUserRepo != nil {
-		mods, err := h.QsUserRepo.GetModerators(ctx)
+	if h.ModeratorService.QsUserAvailable() {
+		mods, err := h.ModeratorService.GetModerators(ctx)
 		if err != nil {
 			slog.ErrorContext(ctx, "list QS moderators failed", "error", err)
 		} else {
@@ -56,7 +56,7 @@ func (h *Handler) ListModerators(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) CreateModerator(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -74,7 +74,7 @@ func (h *Handler) CreateModerator(w http.ResponseWriter, r *http.Request) {
 		req.TimeZone = "America/New_York"
 	}
 	// Role 1 = Moderator
-	uid, err := h.QsUserRepo.Create(ctx, req.FirstName, req.LastName, req.Email, req.TimeZone, []int{1})
+	uid, err := h.ModeratorService.Create(ctx, req.FirstName, req.LastName, req.Email, req.TimeZone, []int{1})
 	if err != nil {
 		slog.Error("create moderator", "error", err)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create moderator"})
@@ -106,11 +106,11 @@ func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
 
 	switch source {
 	case "qs":
-		if h.QsUserRepo == nil {
+		if !h.ModeratorService.QsUserAvailable() {
 			support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 			return
 		}
-		u, err := h.QsUserRepo.GetByID(ctx, nid)
+		u, err := h.ModeratorService.GetByID(ctx, nid)
 		if err != nil {
 			slog.ErrorContext(ctx, "get QS moderator failed", "error", err, "id", nid)
 			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "moderator not found"})
@@ -134,11 +134,11 @@ func (h *Handler) GetModerator(w http.ResponseWriter, r *http.Request) {
 			"modifiedOn":      u.ModifiedOn.Format(time.RFC3339),
 		})
 	case "iris":
-		if h.IrisUserRepo == nil {
+		if !h.UserService.IrisAvailable() {
 			support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "IRIS database unavailable"})
 			return
 		}
-		u, err := h.IrisUserRepo.GetByID(ctx, nid)
+		u, err := h.UserService.GetIrisUserByID(ctx, nid)
 		if err != nil {
 			slog.ErrorContext(ctx, "get IRIS moderator failed", "error", err, "id", nid)
 			support.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "moderator not found"})
@@ -186,21 +186,21 @@ func (h *Handler) UpdateModerator(w http.ResponseWriter, r *http.Request) {
 
 	switch body.Source {
 	case "qs":
-		if h.QsUserRepo == nil {
+		if !h.ModeratorService.QsUserAvailable() {
 			support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 			return
 		}
-		if err := h.QsUserRepo.Update(ctx, nid, body.FirstName, body.LastName, body.TimeZone); err != nil {
+		if err := h.ModeratorService.UpdateUser(ctx, nid, body.FirstName, body.LastName, body.TimeZone); err != nil {
 			slog.ErrorContext(ctx, "update QS moderator failed", "error", err, "id", nid)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
 		}
 	case "iris":
-		if h.IrisUserRepo == nil {
+		if !h.UserService.IrisAvailable() {
 			support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "IRIS database unavailable"})
 			return
 		}
-		if err := h.IrisUserRepo.Update(ctx, nid, body.FirstName, body.LastName, body.TimeZone); err != nil {
+		if err := h.UserService.UpdateIrisUser(ctx, nid, body.FirstName, body.LastName, body.TimeZone); err != nil {
 			slog.ErrorContext(ctx, "update IRIS moderator failed", "error", err, "id", nid)
 			support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "update failed"})
 			return
@@ -215,7 +215,7 @@ func (h *Handler) UpdateModerator(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"error":        "QS database unavailable",
 			"errorMessage": "An error occured while removing the user",
@@ -230,7 +230,7 @@ func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if err := h.QsUserRepo.SoftDelete(ctx, modID); err != nil {
+	if err := h.ModeratorService.SoftDelete(ctx, modID); err != nil {
 		slog.Error("delete moderator", "error", err)
 		support.WriteJSON(w, http.StatusOK, map[string]any{
 			"error":        err.Error(),
@@ -250,7 +250,7 @@ func (h *Handler) BulkUploadModerators(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetModeratorTimeslots(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if h.QsTimeSlotRepo == nil {
+	if !h.ModeratorService.TimeSlotAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -270,7 +270,7 @@ func (h *Handler) GetModeratorTimeslots(w http.ResponseWriter, r *http.Request) 
 		pageSize = 50
 	}
 
-	slots, total, err := h.QsTimeSlotRepo.ListByModerator(ctx, modID, page, pageSize)
+	slots, total, err := h.ModeratorService.ListByModerator(ctx, modID, page, pageSize)
 	if err != nil {
 		slog.ErrorContext(ctx, "get moderator timeslots failed", "error", err, "moderatorId", modID)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to get moderator timeslots"})
@@ -317,7 +317,7 @@ func (h *Handler) GetModeratorAvailability(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -332,7 +332,7 @@ func (h *Handler) GetModeratorAvailability(w http.ResponseWriter, r *http.Reques
 	startDate := r.URL.Query().Get("startDate")
 	endDate := r.URL.Query().Get("endDate")
 
-	avails, err := h.QsUserRepo.ListModeratorAvailability(ctx, nid, clientID, startDate, endDate)
+	avails, err := h.ModeratorService.ListModeratorAvailability(ctx, nid, clientID, startDate, endDate)
 	if err != nil {
 		slog.ErrorContext(ctx, "list moderator availability failed", "error", err, "moderatorId", nid)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to fetch availability"})
@@ -361,7 +361,7 @@ func (h *Handler) PostModeratorAvailability(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
@@ -387,7 +387,7 @@ func (h *Handler) PostModeratorAvailability(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	avail, err := h.QsUserRepo.CreateModeratorAvailability(ctx, nid, body.ClientID, st, et)
+	avail, err := h.ModeratorService.CreateModeratorAvailability(ctx, nid, body.ClientID, st, et)
 	if err != nil {
 		slog.ErrorContext(ctx, "create moderator availability failed", "error", err, "moderatorId", nid)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to create availability"})
@@ -410,12 +410,12 @@ func (h *Handler) DeleteModeratorAvailability(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if h.QsUserRepo == nil {
+	if !h.ModeratorService.QsUserAvailable() {
 		support.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
-	if err := h.QsUserRepo.DeleteModeratorAvailability(ctx, nid); err != nil {
+	if err := h.ModeratorService.DeleteModeratorAvailability(ctx, nid); err != nil {
 		slog.ErrorContext(ctx, "delete moderator availability failed", "error", err, "availabilityId", nid)
 		support.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to delete availability"})
 		return
