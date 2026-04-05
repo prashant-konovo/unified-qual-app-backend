@@ -1,6 +1,6 @@
 // Package validate provides request body decoding, struct-tag validation,
 // and imperative validation helpers for the unified-qual API handlers.
-package httpkit
+package utilities
 
 import (
 	"encoding/json"

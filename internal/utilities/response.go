@@ -1,4 +1,4 @@
-package httpkit
+package utilities
 
 // PaginatedResponse wraps list endpoints with pagination metadata.
 type PaginatedResponse struct {

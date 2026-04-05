@@ -7,7 +7,7 @@ import (
 
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/httpkit"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -20,7 +20,7 @@ import (
 // ──────────────────────────────────────────────
 
 func (h *Handler) GetLocales(w http.ResponseWriter, r *http.Request) {
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{
 		"locales": []map[string]string{
 			{"code": "en_us", "name": "English (US)"},
 			{"code": "es_es", "name": "Spanish"},
@@ -38,8 +38,8 @@ func (h *Handler) UpdateTopicTranslations(w http.ResponseWriter, r *http.Request
 	projectID, _ := strconv.ParseInt(pidStr, 10, 64)
 
 	var req dto.UpdateTopicTranslationsRequest
-	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
-		httpkit.WriteError(w, errs)
+	if errs := utilities.DecodeAndValidate(r, &req); errs != nil {
+		utilities.WriteError(w, errs)
 		return
 	}
 
@@ -49,8 +49,8 @@ func (h *Handler) UpdateTopicTranslations(w http.ResponseWriter, r *http.Request
 				slog.Error("update translation failed", "topicId", t.TopicID, "error", err)
 			}
 		}
-		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "updatedCount": len(req.Translations)})
+		utilities.WriteJSON(w, http.StatusOK, map[string]any{"projectId": projectID, "updatedCount": len(req.Translations)})
 		return
 	}
-	httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
+	utilities.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "no database available"})
 }

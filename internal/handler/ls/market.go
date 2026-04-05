@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/InCrowd/unified-qual-api/internal/httpkit"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 )
@@ -23,7 +23,7 @@ import (
 // Query params: brandId, subscriptionId, accountId, includeAnyProfession, lang, limit, offset
 func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 	if !h.SurveyService.IrisAvailable() {
-		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}, "limit": nil, "offset": nil, "totalCount": 0})
+		utilities.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}, "limit": nil, "offset": nil, "totalCount": 0})
 		return
 	}
 
@@ -81,7 +81,7 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 	markets, totalCount, err := h.SurveyService.ListMarkets(r.Context(), filter)
 	if err != nil {
 		slog.Error("list markets failed", "error", err)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 		return
 	}
 
@@ -95,7 +95,7 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 				name = translated
 			}
 		}
-		rollup := httpkit.NullStr(m.Rollup)
+		rollup := utilities.NullStr(m.Rollup)
 		if lang != "en_us" {
 			if translated := h.SurveyService.GetMarketRollupTranslation(ctx, m.ID, lang); translated != "" {
 				rollup = translated
@@ -119,7 +119,7 @@ func (h *Handler) ListMarkets(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{
 		"markets":    result,
 		"limit":      limitVal,
 		"offset":     offsetVal,
@@ -136,7 +136,7 @@ func (h *Handler) ListMarketsNPI(w http.ResponseWriter, r *http.Request) {
 		markets, err := h.SurveyService.ListMarketsWithNPI(r.Context())
 		if err != nil {
 			slog.Error("list npi markets failed", "error", err)
-			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		result := make([]map[string]any, 0, len(markets))
@@ -145,19 +145,19 @@ func (h *Handler) ListMarketsNPI(w http.ResponseWriter, r *http.Request) {
 				"id": m.ID, "name": m.Name, "canInterview": m.CanInterview,
 			})
 		}
-		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"markets": result})
+		utilities.WriteJSON(w, http.StatusOK, map[string]any{"markets": result})
 		return
 	}
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{"markets": []any{}})
 }
 
 // GetCrowdableAttributes returns crowdable attributes for a market.
 // Contract-identical with legacy InCrowdAPI: GET /v1/market/:id/crowdable_attributes
 // Response: {"attributes": [...]}
 func (h *Handler) GetCrowdableAttributes(w http.ResponseWriter, r *http.Request) {
-	marketID, err := httpkit.ParseIDParam(r, "id")
+	marketID, err := utilities.ParseIDParam(r, "id")
 	if err != nil {
-		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		utilities.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -165,13 +165,13 @@ func (h *Handler) GetCrowdableAttributes(w http.ResponseWriter, r *http.Request)
 		attrs, err := h.SurveyService.GetCrowdableAttributes(r.Context(), marketID)
 		if err != nil {
 			slog.Error("crowdable attrs failed", "error", err)
-			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
-		httpkit.WriteJSON(w, http.StatusOK, map[string]any{"attributes": attrs})
+		utilities.WriteJSON(w, http.StatusOK, map[string]any{"attributes": attrs})
 		return
 	}
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"attributes": []any{}})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{"attributes": []any{}})
 }
 
 // ──────────────────────────────────────────────

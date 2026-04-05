@@ -6,7 +6,7 @@ import (
 
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/httpkit"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -21,9 +21,9 @@ import (
 // ──────────────────────────────────────────────
 
 func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
-	userID, err := httpkit.ParseIDParam(r, "user_id")
+	userID, err := utilities.ParseIDParam(r, "user_id")
 	if err != nil {
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
@@ -31,8 +31,8 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req dto.MraPatchUserRequest
-	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
-		httpkit.WriteError(w, errs)
+	if errs := utilities.DecodeAndValidate(r, &req); errs != nil {
+		utilities.WriteError(w, errs)
 		return
 	}
 
@@ -41,7 +41,7 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 
 	// Legacy returns parsedJson[0] on Lambda proxy result object → undefined → empty body.
 	// Match with empty response for contract-identical compliance.
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{})
 }
 
 // ──────────────────────────────────────────────
@@ -52,9 +52,9 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
-	userID, err := httpkit.ParseIDParam(r, "user_id")
+	userID, err := utilities.ParseIDParam(r, "user_id")
 	if err != nil {
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": err.Error(),
 		})
@@ -62,8 +62,8 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req dto.MraPasswordRequest
-	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
-		httpkit.WriteError(w, errs)
+	if errs := utilities.DecodeAndValidate(r, &req); errs != nil {
+		utilities.WriteError(w, errs)
 		return
 	}
 
@@ -72,7 +72,7 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 	slog.Info("patch user password requested (profile)", "userId", userID)
 
 	// Legacy returns full Lambda proxy result: {status, headers, body, isBase64Encoded}
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":          200,
 		"headers":         map[string]string{"Content-Type": "application/json"},
 		"body":            map[string]any{"message": "Password updated"},
@@ -90,14 +90,14 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 // Response: Lambda proxy {status, headers, body:{passwordMatch:bool}, isBase64Encoded}
 func (h *Handler) CheckPasswordMatchesMRA(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "user_id")
-	if _, err := httpkit.ParseIDParam(r, "user_id"); err != nil {
-		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+	if _, err := utilities.ParseIDParam(r, "user_id"); err != nil {
+		utilities.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	var req dto.MraPasswordRequest
-	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
-		httpkit.WriteError(w, errs)
+	if errs := utilities.DecodeAndValidate(r, &req); errs != nil {
+		utilities.WriteError(w, errs)
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *Handler) CheckPasswordMatchesMRA(w http.ResponseWriter, r *http.Request
 	slog.Info("check password matches requested", "userId", userIDStr)
 
 	// Return legacy Lambda proxy result shape
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":          200,
 		"headers":         map[string]string{"Content-Type": "application/json"},
 		"body":            map[string]any{"passwordMatch": true},

@@ -9,7 +9,7 @@ import (
 
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/httpkit"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 )
 
 // ──────────────────────────────────────────────
@@ -21,9 +21,9 @@ import (
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/interview_media
 // Response: {"media": [...], "limit": N, "offset": N, "count": N}
 func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
-	projectID, err := httpkit.ParseIDParam(r, "pid")
+	projectID, err := utilities.ParseIDParam(r, "pid")
 	if err != nil {
-		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		utilities.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -37,7 +37,7 @@ func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
 		media, err := h.MediaService.ListMediaForProject(r.Context(), projectID)
 		if err != nil {
 			slog.Error("list media failed", "error", err)
-			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		totalCount := len(media)
@@ -66,7 +66,7 @@ func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
 			entry["pages"] = pages
 			result = append(result, entry)
 		}
-		httpkit.WriteJSON(w, http.StatusOK, map[string]any{
+		utilities.WriteJSON(w, http.StatusOK, map[string]any{
 			"media":  result,
 			"limit":  limit,
 			"offset": offset,
@@ -74,25 +74,25 @@ func (h *Handler) GetProjectMedia(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"media": []any{}, "limit": limit, "offset": offset, "count": 0})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{"media": []any{}, "limit": limit, "offset": offset, "count": 0})
 }
 
 // GetProjectMediaDetail returns a single media item with computed page URLs.
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/interview_media/:mediaId
 // Response: full InterviewMedia JSON with basisPDF and pages array
 func (h *Handler) GetProjectMediaDetail(w http.ResponseWriter, r *http.Request) {
-	projectID, _ := httpkit.ParseIDParam(r, "pid")
-	mediaID, _ := httpkit.ParseIDParam(r, "mediaId")
+	projectID, _ := utilities.ParseIDParam(r, "pid")
+	mediaID, _ := utilities.ParseIDParam(r, "mediaId")
 
 	if h.MediaService.Available() {
 		m, err := h.MediaService.GetMediaByID(r.Context(), projectID, mediaID)
 		if err != nil {
 			slog.Error("get media failed", "error", err)
-			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
+			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "database error"})
 			return
 		}
 		if m == nil {
-			httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+			utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 			return
 		}
 		entry := dto.MediaToJSON(*m)
@@ -104,26 +104,26 @@ func (h *Handler) GetProjectMediaDetail(w http.ResponseWriter, r *http.Request) 
 			})
 		}
 		entry["pages"] = pages
-		httpkit.WriteJSON(w, http.StatusOK, entry)
+		utilities.WriteJSON(w, http.StatusOK, entry)
 		return
 	}
-	httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+	utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 }
 
 // DownloadMediaPDF streams a media PDF from S3.
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/interview_media/:mediaId/media.pdf
 func (h *Handler) DownloadMediaPDF(w http.ResponseWriter, r *http.Request) {
-	projectID, _ := httpkit.ParseIDParam(r, "pid")
-	mediaID, _ := httpkit.ParseIDParam(r, "mediaId")
+	projectID, _ := utilities.ParseIDParam(r, "pid")
+	mediaID, _ := utilities.ParseIDParam(r, "mediaId")
 
 	if !h.MediaService.Available() || !h.MediaService.S3Configured() {
-		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
 	m, err := h.MediaService.GetMediaByID(r.Context(), projectID, mediaID)
 	if err != nil || m == nil || !m.S3Key.Valid {
-		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
@@ -132,7 +132,7 @@ func (h *Handler) DownloadMediaPDF(w http.ResponseWriter, r *http.Request) {
 	body, contentLength, err := h.MediaService.GetS3Object(r.Context(), bucket, key)
 	if err != nil {
 		slog.Error("S3 get media PDF failed", "error", err, "key", key)
-		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 	defer body.Close()
@@ -148,19 +148,19 @@ func (h *Handler) DownloadMediaPDF(w http.ResponseWriter, r *http.Request) {
 // DownloadMediaPage streams a single page PDF from S3.
 // Contract-identical with legacy InCrowdAPI: GET /v1/project/:projectId/interview_media/:mediaId/pages/:page/img.png
 func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
-	projectID, _ := httpkit.ParseIDParam(r, "pid")
-	mediaID, _ := httpkit.ParseIDParam(r, "mediaId")
-	pageStr, _ := httpkit.ParseStringParam(r, "page")
+	projectID, _ := utilities.ParseIDParam(r, "pid")
+	mediaID, _ := utilities.ParseIDParam(r, "mediaId")
+	pageStr, _ := utilities.ParseStringParam(r, "page")
 	page, _ := strconv.Atoi(pageStr)
 
 	if !h.MediaService.Available() || !h.MediaService.S3Configured() {
-		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
 	m, err := h.MediaService.GetMediaByID(r.Context(), projectID, mediaID)
 	if err != nil || m == nil || !m.S3Key.Valid {
-		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
@@ -169,7 +169,7 @@ func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
 	body, contentLength, err := h.MediaService.GetS3Object(r.Context(), bucket, key)
 	if err != nil {
 		slog.Error("S3 get media page failed", "error", err, "key", key)
-		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 	defer body.Close()
@@ -187,13 +187,13 @@ func (h *Handler) DownloadMediaPage(w http.ResponseWriter, r *http.Request) {
 // GetMediaPageForConference serves a media page for a conference participant.
 // Contract-identical with legacy InCrowdAPI: validates participant cookie
 func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Request) {
-	confHash, _ := httpkit.ParseStringParam(r, "confHash")
-	mediaID, _ := httpkit.ParseIDParam(r, "mediaId")
-	pageStr, _ := httpkit.ParseStringParam(r, "page")
+	confHash, _ := utilities.ParseStringParam(r, "confHash")
+	mediaID, _ := utilities.ParseIDParam(r, "mediaId")
+	pageStr, _ := utilities.ParseStringParam(r, "page")
 	page, _ := strconv.Atoi(pageStr)
 
 	if !h.MediaService.Available() || !h.MediaService.S3Configured() {
-		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
@@ -207,7 +207,7 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 	// Look up timeslot by conference hash to verify access and get project ID
 	projectID, err := h.MediaService.GetProjectIDByConferenceHash(r.Context(), confHash)
 	if err != nil {
-		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
+		utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 		return
 	}
 
@@ -215,13 +215,13 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 	if participantHash != "" && h.ConferenceService.Available() {
 		ci, ciErr := h.ConferenceService.GetByHash(r.Context(), confHash)
 		if ciErr != nil || ci == nil {
-			httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
+			utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "conference not found"})
 			return
 		}
 		// Verify participant belongs to this conference timeslot
 		participants, pErr := h.ConferenceService.GetParticipants(r.Context(), ci.TimeSlotID)
 		if pErr != nil {
-			httpkit.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "access denied"})
+			utilities.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "access denied"})
 			return
 		}
 		found := false
@@ -232,14 +232,14 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 			}
 		}
 		if !found {
-			httpkit.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "access denied"})
+			utilities.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "access denied"})
 			return
 		}
 	}
 
 	m, err := h.MediaService.GetMediaByID(r.Context(), projectID, mediaID)
 	if err != nil || m == nil || !m.S3Key.Valid {
-		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 
@@ -248,7 +248,7 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 	body, contentLength, sErr := h.MediaService.GetS3Object(r.Context(), bucket, key)
 	if sErr != nil {
 		slog.Error("S3 get conference media page failed", "error", sErr, "key", key)
-		httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+		utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 		return
 	}
 	defer body.Close()
@@ -265,14 +265,14 @@ func (h *Handler) GetMediaPageForConference(w http.ResponseWriter, r *http.Reque
 // Contract-identical with legacy InCrowdAPI: DELETE /v1/interview_media/:projectId/:mediaId
 // Response: {} (empty JSON object)
 func (h *Handler) DeleteProjectMedia(w http.ResponseWriter, r *http.Request) {
-	projectID, _ := httpkit.ParseIDParam(r, "pid")
-	mediaID, _ := httpkit.ParseIDParam(r, "mediaId")
+	projectID, _ := utilities.ParseIDParam(r, "pid")
+	mediaID, _ := utilities.ParseIDParam(r, "mediaId")
 
 	if h.MediaService.Available() {
 		// Get media first for S3 cleanup
 		m, _ := h.MediaService.GetMediaByID(r.Context(), projectID, mediaID)
 		if m != nil && m.Shared {
-			httpkit.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "cannot delete shared media"})
+			utilities.WriteJSON(w, http.StatusForbidden, map[string]any{"error": "cannot delete shared media"})
 			return
 		}
 
@@ -290,13 +290,13 @@ func (h *Handler) DeleteProjectMedia(w http.ResponseWriter, r *http.Request) {
 
 		if err := h.MediaService.DeleteMedia(r.Context(), projectID, mediaID); err != nil {
 			slog.Error("delete media failed", "error", err)
-			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
+			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "delete failed"})
 			return
 		}
-		httpkit.WriteJSON(w, http.StatusOK, map[string]any{})
+		utilities.WriteJSON(w, http.StatusOK, map[string]any{})
 		return
 	}
-	httpkit.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
+	utilities.WriteJSON(w, http.StatusNotFound, map[string]any{"error": "media not found"})
 }
 
 // ──────────────────────────────────────────────

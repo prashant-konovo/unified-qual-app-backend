@@ -9,7 +9,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/service"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/httpkit"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
 
@@ -23,7 +23,7 @@ type InterviewHandler struct{ *service.Deps }
 func (h *InterviewHandler) ListTimeslots(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.InterviewService.TimeSlotAvailable() {
-		httpkit.WriteJSON(w, http.StatusServiceUnavailable, httpkit.ErrorBody{Error: "QS database unavailable"})
+		utilities.WriteJSON(w, http.StatusServiceUnavailable, utilities.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 
@@ -77,7 +77,7 @@ func (h *InterviewHandler) ListTimeslots(w http.ResponseWriter, r *http.Request)
 	slots, total, err := h.InterviewService.ListTimeSlots(ctx, page, pageSize, projectID, statusID, moderatorID, fromTime, toTime)
 	if err != nil {
 		slog.ErrorContext(ctx, "list timeslots failed", "error", err)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "failed to list timeslots"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, utilities.ErrorBody{Error: "failed to list timeslots"})
 		return
 	}
 
@@ -86,30 +86,30 @@ func (h *InterviewHandler) ListTimeslots(w http.ResponseWriter, r *http.Request)
 		result = append(result, dto.TimeslotFromListRow(s))
 	}
 
-	httpkit.WriteJSON(w, http.StatusOK, httpkit.NewPaginated(result, page, pageSize, total))
+	utilities.WriteJSON(w, http.StatusOK, utilities.NewPaginated(result, page, pageSize, total))
 }
 
 func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.InterviewService.TimeSlotAvailable() {
-		httpkit.WriteJSON(w, http.StatusServiceUnavailable, httpkit.ErrorBody{Error: "QS database unavailable"})
+		utilities.WriteJSON(w, http.StatusServiceUnavailable, utilities.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 
 	var body dto.CreateTimeslotRequest
-	if errs := httpkit.DecodeAndValidate(r, &body); errs != nil {
-		httpkit.WriteError(w, errs)
+	if errs := utilities.DecodeAndValidate(r, &body); errs != nil {
+		utilities.WriteError(w, errs)
 		return
 	}
 
 	st, err := time.Parse(time.RFC3339, body.StartTime)
 	if err != nil {
-		httpkit.WriteJSON(w, http.StatusBadRequest, httpkit.ErrorBody{Error: "invalid startTime format, use RFC3339"})
+		utilities.WriteJSON(w, http.StatusBadRequest, utilities.ErrorBody{Error: "invalid startTime format, use RFC3339"})
 		return
 	}
 	et, err := time.Parse(time.RFC3339, body.EndTime)
 	if err != nil {
-		httpkit.WriteJSON(w, http.StatusBadRequest, httpkit.ErrorBody{Error: "invalid endTime format, use RFC3339"})
+		utilities.WriteJSON(w, http.StatusBadRequest, utilities.ErrorBody{Error: "invalid endTime format, use RFC3339"})
 		return
 	}
 	if body.Duration <= 0 {
@@ -128,7 +128,7 @@ func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request
 	tsID, err := h.InterviewService.Create(ctx, ts)
 	if err != nil {
 		slog.ErrorContext(ctx, "create timeslot failed", "error", err)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "failed to create timeslot"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, utilities.ErrorBody{Error: "failed to create timeslot"})
 		return
 	}
 
@@ -139,30 +139,30 @@ func (h *InterviewHandler) CreateTimeslot(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	httpkit.WriteJSON(w, http.StatusCreated, httpkit.MutationResult{ID: tsID, Source: "qs"})
+	utilities.WriteJSON(w, http.StatusCreated, utilities.MutationResult{ID: tsID, Source: "qs"})
 }
 
 func (h *InterviewHandler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.InterviewService.TimeSlotAvailable() {
-		httpkit.WriteJSON(w, http.StatusServiceUnavailable, httpkit.ErrorBody{Error: "QS database unavailable"})
+		utilities.WriteJSON(w, http.StatusServiceUnavailable, utilities.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 
-	tsID, err := httpkit.ParseIDParam(r, "id")
+	tsID, err := utilities.ParseIDParam(r, "id")
 	if err != nil {
-		httpkit.WriteJSON(w, http.StatusBadRequest, httpkit.ErrorBody{Error: err.Error()})
+		utilities.WriteJSON(w, http.StatusBadRequest, utilities.ErrorBody{Error: err.Error()})
 		return
 	}
 
 	ts, err := h.InterviewService.GetByID(ctx, tsID)
 	if err != nil {
 		slog.ErrorContext(ctx, "get timeslot failed", "error", err, "id", tsID)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "database error"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, utilities.ErrorBody{Error: "database error"})
 		return
 	}
 	if ts == nil {
-		httpkit.WriteJSON(w, http.StatusNotFound, httpkit.ErrorBody{Error: "timeslot not found"})
+		utilities.WriteJSON(w, http.StatusNotFound, utilities.ErrorBody{Error: "timeslot not found"})
 		return
 	}
 
@@ -190,25 +190,25 @@ func (h *InterviewHandler) GetTimeslot(w http.ResponseWriter, r *http.Request) {
 		result["respondent"] = dto.TimeslotRespondent(resp)
 	}
 
-	httpkit.WriteJSON(w, http.StatusOK, result)
+	utilities.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *InterviewHandler) UpdateTimeslot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.InterviewService.TimeSlotAvailable() {
-		httpkit.WriteJSON(w, http.StatusServiceUnavailable, httpkit.ErrorBody{Error: "QS database unavailable"})
+		utilities.WriteJSON(w, http.StatusServiceUnavailable, utilities.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 
-	tsID, err := httpkit.ParseIDParam(r, "id")
+	tsID, err := utilities.ParseIDParam(r, "id")
 	if err != nil {
-		httpkit.WriteJSON(w, http.StatusBadRequest, httpkit.ErrorBody{Error: err.Error()})
+		utilities.WriteJSON(w, http.StatusBadRequest, utilities.ErrorBody{Error: err.Error()})
 		return
 	}
 
 	var body dto.UpdateTimeslotRequest
-	if errs := httpkit.DecodeAndValidate(r, &body); errs != nil {
-		httpkit.WriteError(w, errs)
+	if errs := utilities.DecodeAndValidate(r, &body); errs != nil {
+		utilities.WriteError(w, errs)
 		return
 	}
 
@@ -238,33 +238,33 @@ func (h *InterviewHandler) UpdateTimeslot(w http.ResponseWriter, r *http.Request
 
 	if err := h.InterviewService.UpdateTimeSlot(ctx, tsID, fields); err != nil {
 		slog.ErrorContext(ctx, "update timeslot failed", "error", err, "id", tsID)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "update failed"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, utilities.ErrorBody{Error: "update failed"})
 		return
 	}
 
-	httpkit.WriteJSON(w, http.StatusOK, httpkit.MutationResult{ID: tsID, Updated: true, Source: "qs"})
+	utilities.WriteJSON(w, http.StatusOK, utilities.MutationResult{ID: tsID, Updated: true, Source: "qs"})
 }
 
 func (h *InterviewHandler) DeleteTimeslot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.InterviewService.TimeSlotAvailable() {
-		httpkit.WriteJSON(w, http.StatusServiceUnavailable, httpkit.ErrorBody{Error: "QS database unavailable"})
+		utilities.WriteJSON(w, http.StatusServiceUnavailable, utilities.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 
-	tsID, err := httpkit.ParseIDParam(r, "id")
+	tsID, err := utilities.ParseIDParam(r, "id")
 	if err != nil {
-		httpkit.WriteJSON(w, http.StatusBadRequest, httpkit.ErrorBody{Error: err.Error()})
+		utilities.WriteJSON(w, http.StatusBadRequest, utilities.ErrorBody{Error: err.Error()})
 		return
 	}
 
 	if err := h.InterviewService.DeleteTimeSlot(ctx, tsID); err != nil {
 		slog.ErrorContext(ctx, "delete timeslot failed", "error", err, "id", tsID)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "delete failed"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, utilities.ErrorBody{Error: "delete failed"})
 		return
 	}
 
-	httpkit.WriteJSON(w, http.StatusOK, httpkit.MutationResult{ID: tsID, Deleted: true, Source: "qs"})
+	utilities.WriteJSON(w, http.StatusOK, utilities.MutationResult{ID: tsID, Deleted: true, Source: "qs"})
 }
 
 // ──────────────────────────────────────────────
@@ -282,13 +282,13 @@ func (h *InterviewHandler) GenerateSlots(w http.ResponseWriter, r *http.Request)
 		{"id": "slot-3", "projectId": "proj-101", "moderatorId": "mod-201",
 			"start": "2026-04-01T10:00:00Z", "end": "2026-04-01T10:30:00Z", "capacity": 1},
 	}
-	httpkit.WriteJSON(w, http.StatusOK, slots)
+	utilities.WriteJSON(w, http.StatusOK, slots)
 }
 
 func (h *InterviewHandler) GetAvailableSlots(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.InterviewService.TimeSlotAvailable() {
-		httpkit.WriteJSON(w, http.StatusServiceUnavailable, httpkit.ErrorBody{Error: "QS database unavailable"})
+		utilities.WriteJSON(w, http.StatusServiceUnavailable, utilities.ErrorBody{Error: "QS database unavailable"})
 		return
 	}
 
@@ -305,7 +305,7 @@ func (h *InterviewHandler) GetAvailableSlots(w http.ResponseWriter, r *http.Requ
 	slots, _, err := h.InterviewService.ListTimeSlots(ctx, 1, 50, projectID, &openStatus, nil, nil, nil)
 	if err != nil {
 		slog.ErrorContext(ctx, "get available slots failed", "error", err)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, httpkit.ErrorBody{Error: "failed to get available slots"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, utilities.ErrorBody{Error: "failed to get available slots"})
 		return
 	}
 
@@ -313,11 +313,11 @@ func (h *InterviewHandler) GetAvailableSlots(w http.ResponseWriter, r *http.Requ
 	for _, s := range slots {
 		result = append(result, dto.SlotFromListRowSimple(s))
 	}
-	httpkit.WriteJSON(w, http.StatusOK, result)
+	utilities.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *InterviewHandler) GetAISuggestions(w http.ResponseWriter, r *http.Request) {
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{
 		"projectId": r.URL.Query().Get("projectId"),
 		"suggestions": []map[string]any{
 			{"suggestedStart": "2026-04-01T09:00:00Z", "suggestedEnd": "2026-04-01T09:30:00Z", "participantCount": 3},

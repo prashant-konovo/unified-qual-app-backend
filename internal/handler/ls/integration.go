@@ -6,7 +6,7 @@ import (
 
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/httpkit"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 )
 
 // ──────────────────────────────────────────────
@@ -19,8 +19,8 @@ import (
 
 func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 	var req map[string]any
-	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
-		httpkit.WriteError(w, errs)
+	if errs := utilities.DecodeAndValidate(r, &req); errs != nil {
+		utilities.WriteError(w, errs)
 		return
 	}
 
@@ -31,12 +31,12 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("decipher respondent data failed", "surveyId", surveyID, "error", err)
 		} else {
 			slog.Info("decipher data retrieved", "surveyId", surveyID, "records", len(data))
-			httpkit.WriteJSON(w, http.StatusOK, map[string]any{
+			utilities.WriteJSON(w, http.StatusOK, map[string]any{
 				"accepted":    true,
 				"source":      "decipher",
 				"surveyId":    surveyID,
 				"recordCount": len(data),
-				"timestamp":   httpkit.Now(),
+				"timestamp":   utilities.Now(),
 			})
 			return
 		}
@@ -48,7 +48,7 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slog.Info("third-party integration received", "payload_keys", len(req))
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"accepted": true, "timestamp": httpkit.Now()})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{"accepted": true, "timestamp": utilities.Now()})
 }
 
 // ──────────────────────────────────────────────
@@ -57,8 +57,8 @@ func (h *Handler) ThirdPartyIntegrate(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) CheckQualEligibility(w http.ResponseWriter, r *http.Request) {
 	var req dto.LsCheckQualEligibilityRequest
-	if errs := httpkit.DecodeAndValidate(r, &req); errs != nil {
-		httpkit.WriteError(w, errs)
+	if errs := utilities.DecodeAndValidate(r, &req); errs != nil {
+		utilities.WriteError(w, errs)
 		return
 	}
 
@@ -66,20 +66,20 @@ func (h *Handler) CheckQualEligibility(w http.ResponseWriter, r *http.Request) {
 		result, err := h.TranslationService.GetParticipantEligibility(r.Context(), req.ResponderID, req.ProjectID)
 		if err != nil {
 			slog.Error("eligibility check failed", "error", err)
-			httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
+			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "check failed"})
 			return
 		}
 		if result == nil {
-			httpkit.WriteJSON(w, http.StatusOK, map[string]any{
+			utilities.WriteJSON(w, http.StatusOK, map[string]any{
 				"eligible": true, "responderId": req.ResponderID,
 				"projectId": req.ProjectID, "source": "qs",
 			})
 			return
 		}
 		result["source"] = "qs"
-		httpkit.WriteJSON(w, http.StatusOK, result)
+		utilities.WriteJSON(w, http.StatusOK, result)
 		return
 	}
 
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"eligible": true, "responderId": req.ResponderID, "projectId": req.ProjectID})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{"eligible": true, "responderId": req.ResponderID, "projectId": req.ProjectID})
 }

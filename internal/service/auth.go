@@ -15,7 +15,7 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/httpkit"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
@@ -169,8 +169,8 @@ func (s *AuthService) handleICLoginSuccess(ctx context.Context, loginResp *integ
 		u, err := s.qsUserRepo.GetByEmail(ctx, req.Email)
 		if err == nil && u != nil {
 			userInfo["id"] = u.ID
-			userInfo["firstName"] = httpkit.NullStr(u.FirstName)
-			userInfo["lastName"] = httpkit.NullStr(u.LastName)
+			userInfo["firstName"] = utilities.NullStr(u.FirstName)
+			userInfo["lastName"] = utilities.NullStr(u.LastName)
 		}
 	}
 
@@ -207,8 +207,8 @@ func (s *AuthService) handleCognitoLoginSuccess(ctx context.Context, body []byte
 		u, err := s.qsUserRepo.GetByEmail(ctx, req.Email)
 		if err == nil && u != nil {
 			userInfo["id"] = u.ID
-			userInfo["firstName"] = httpkit.NullStr(u.FirstName)
-			userInfo["lastName"] = httpkit.NullStr(u.LastName)
+			userInfo["firstName"] = utilities.NullStr(u.FirstName)
+			userInfo["lastName"] = utilities.NullStr(u.LastName)
 
 			if req.TermsAccepted != nil && *req.TermsAccepted {
 				_ = s.qsUserRepo.AcceptTerms(ctx, u.ID)
@@ -314,9 +314,9 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID int64, icAuthTo
 		if err == nil && u != nil {
 			return map[string]any{
 				"id":         u.ID,
-				"first_name": httpkit.NullStr(u.FirstName),
-				"last_name":  httpkit.NullStr(u.LastName),
-				"email":      httpkit.NullStr(u.Email),
+				"first_name": utilities.NullStr(u.FirstName),
+				"last_name":  utilities.NullStr(u.LastName),
+				"email":      utilities.NullStr(u.Email),
 			}, nil
 		}
 	}

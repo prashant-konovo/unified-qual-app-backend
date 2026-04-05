@@ -9,7 +9,7 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/httpkit"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 )
 
 // ──────────────────────────────────────────────
@@ -23,20 +23,20 @@ import (
 func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.InterviewService.TimeSlotAvailable() {
-		httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		utilities.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
 	var body dto.ScheduleInterviewRequest
-	if errs := httpkit.DecodeAndValidate(r, &body); errs != nil {
-		httpkit.WriteError(w, errs)
+	if errs := utilities.DecodeAndValidate(r, &body); errs != nil {
+		utilities.WriteError(w, errs)
 		return
 	}
 
 	// Update timeslot status to PENDING (2)
 	if err := h.InterviewService.UpdateTimeSlot(ctx, body.TimeSlotID, map[string]any{"status_id": 2, "confirmed": true}); err != nil {
 		slog.ErrorContext(ctx, "schedule interview: update timeslot failed", "error", err)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to schedule interview"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "failed to schedule interview"})
 		return
 	}
 
@@ -47,7 +47,7 @@ func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	httpkit.WriteJSON(w, http.StatusCreated, map[string]any{
+	utilities.WriteJSON(w, http.StatusCreated, map[string]any{
 		"timeSlotId": body.TimeSlotID,
 		"statusId":   2,
 		"status":     "PENDING",
@@ -58,13 +58,13 @@ func (h *Handler) ScheduleInterview(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CancelInterview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.InterviewService.TimeSlotAvailable() {
-		httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		utilities.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
-	tsID, err := httpkit.ParseIDParam(r, "id")
+	tsID, err := utilities.ParseIDParam(r, "id")
 	if err != nil {
-		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		utilities.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
@@ -92,29 +92,29 @@ func (h *Handler) CancelInterview(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.InterviewService.UpdateTimeSlot(ctx, tsID, fields); err != nil {
 		slog.ErrorContext(ctx, "cancel interview failed", "error", err, "id", tsID)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "cancel failed"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "cancel failed"})
 		return
 	}
 
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"timeSlotId": tsID, "statusId": cancelStatusID, "status": "CANCELLED"})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{"timeSlotId": tsID, "statusId": cancelStatusID, "status": "CANCELLED"})
 }
 
 func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	if !h.InterviewService.TimeSlotAvailable() {
-		httpkit.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
+		utilities.WriteJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "QS database unavailable"})
 		return
 	}
 
-	tsID, err := httpkit.ParseIDParam(r, "id")
+	tsID, err := utilities.ParseIDParam(r, "id")
 	if err != nil {
-		httpkit.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		utilities.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
 
 	var body dto.RescheduleInterviewRequest
-	if errs := httpkit.DecodeAndValidate(r, &body); errs != nil {
-		httpkit.WriteError(w, errs)
+	if errs := utilities.DecodeAndValidate(r, &body); errs != nil {
+		utilities.WriteError(w, errs)
 		return
 	}
 
@@ -146,11 +146,11 @@ func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.InterviewService.UpdateTimeSlot(ctx, tsID, fields); err != nil {
 		slog.ErrorContext(ctx, "reschedule interview failed", "error", err, "id", tsID)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reschedule failed"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "reschedule failed"})
 		return
 	}
 
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"timeSlotId": tsID, "statusId": rescheduleStatusID, "status": "RESCHEDULED"})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{"timeSlotId": tsID, "statusId": rescheduleStatusID, "status": "RESCHEDULED"})
 }
 
 // ──────────────────────────────────────────────
@@ -158,7 +158,7 @@ func (h *Handler) RescheduleInterview(w http.ResponseWriter, r *http.Request) {
 // ──────────────────────────────────────────────
 
 func (h *Handler) GetWaitingQueue(w http.ResponseWriter, r *http.Request) {
-	httpkit.WriteJSON(w, http.StatusOK, []map[string]any{
+	utilities.WriteJSON(w, http.StatusOK, []map[string]any{
 		{
 			"id": "wq-1", "userId": "par-301", "projectId": "proj-101",
 			"participantName": "Alice Johnson", "participantEmail": "alice@hospital.org",
@@ -181,17 +181,17 @@ func (h *Handler) GetWaitingQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) AddToWaitingQueue(w http.ResponseWriter, r *http.Request) {
-	httpkit.WriteJSON(w, http.StatusCreated, map[string]any{
-		"id": "wq-" + httpkit.ID()[:8], "status": "waiting", "waitingSince": httpkit.Now(),
+	utilities.WriteJSON(w, http.StatusCreated, map[string]any{
+		"id": "wq-" + utilities.ID()[:8], "status": "waiting", "waitingSince": utilities.Now(),
 	})
 }
 
 func (h *Handler) RemoveFromWaitingQueue(w http.ResponseWriter, r *http.Request) {
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{"deleted": true})
 }
 
 func (h *Handler) TriggerMatching(w http.ResponseWriter, r *http.Request) {
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{
 		"assigned": 2, "invited": 3, "message": "Matching complete. 2 assigned, 3 invited.",
 	})
 }

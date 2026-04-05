@@ -1,4 +1,4 @@
-package httpkit
+package utilities
 
 import (
 "encoding/json"

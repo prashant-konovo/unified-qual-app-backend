@@ -6,7 +6,7 @@ import (
 
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/httpkit"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -18,35 +18,35 @@ import (
 // Contract-identical: returns {data: [{id, account_name}]}
 func (h *Handler) GetAllAccountsMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ProjectService.QsProjectAvailable() {
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 	records, err := h.ProjectService.GetAllAccountsMRA(r.Context())
 	if err != nil {
 		slog.Error("get all accounts mra failed", "error", err)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"data": records})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{"data": records})
 }
 
 // GetSalesforceClientsMRA handles GET /salesforce/clients (MRA).
 // Contract-identical: returns {data: [{accountId, name}]}
 func (h *Handler) GetSalesforceClientsMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ProjectService.QsProjectAvailable() {
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 	records, err := h.ProjectService.GetSalesforceClientsMRA(r.Context())
 	if err != nil {
 		slog.Error("get salesforce clients mra failed", "error", err)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while getting sales force clients",
 		})
 		return
 	}
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"data": records})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{"data": records})
 }
 
 // GetSalesforceProjectsMRA handles GET /salesforce/projects/{salesforce_client_id} (MRA).
@@ -55,43 +55,43 @@ func (h *Handler) GetSalesforceProjectsMRA(w http.ResponseWriter, r *http.Reques
 	sfClientID := chi.URLParam(r, "salesforce_client_id")
 
 	if !h.ProjectService.QsProjectAvailable() {
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 	records, err := h.ProjectService.GetSalesforceProjectsMRA(r.Context(), sfClientID)
 	if err != nil {
 		slog.Error("get salesforce projects mra failed", "error", err)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while getting sales force projects",
 		})
 		return
 	}
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"data": records})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{"data": records})
 }
 
 // GetSalesforceClientsWithFilterMRA handles POST /salesforce/getSalesforceClientsWithFilter (MRA).
 // Contract-identical: returns {data: [{salesforce_account_id, name}]}
 func (h *Handler) GetSalesforceClientsWithFilterMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ProjectService.QsProjectAvailable() {
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{"error": "repository not available"})
 		return
 	}
 
 	var body dto.MraGetSalesforceClientsWithFilterRequest
-	if errs := httpkit.DecodeAndValidate(r, &body); errs != nil {
-		httpkit.WriteError(w, errs)
+	if errs := utilities.DecodeAndValidate(r, &body); errs != nil {
+		utilities.WriteError(w, errs)
 		return
 	}
 
 	records, err := h.ProjectService.GetSalesforceClientsWithFilterMRA(r.Context(), body.ProjectAccountID)
 	if err != nil {
 		slog.Error("get salesforce clients with filter mra failed", "error", err)
-		httpkit.WriteJSON(w, http.StatusInternalServerError, map[string]any{
+		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
 			"errorMessage": "An error occured while getting sales force clients",
 		})
 		return
 	}
-	httpkit.WriteJSON(w, http.StatusOK, map[string]any{"data": records})
+	utilities.WriteJSON(w, http.StatusOK, map[string]any{"data": records})
 }

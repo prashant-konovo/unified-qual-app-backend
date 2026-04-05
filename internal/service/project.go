@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
-	"github.com/InCrowd/unified-qual-api/internal/httpkit"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
@@ -144,9 +144,9 @@ func (s *ProjectService) CreateProject(ctx context.Context, req dto.CreateProjec
 	if req.Source == "iris" && s.irisProjectRepo != nil {
 		p := &iris.Project{
 			Name:                req.Name,
-			Description:         httpkit.ToNullStr(req.Description),
+			Description:         utilities.ToNullStr(req.Description),
 			SubscriptionID:      req.SubscriptionID,
-			SalesforceProjectID: httpkit.ToNullStr(req.SalesforceProjectID),
+			SalesforceProjectID: utilities.ToNullStr(req.SalesforceProjectID),
 			ProjectStatusID:     2, // Defining
 		}
 		id, err := s.irisProjectRepo.Create(ctx, p)
@@ -159,12 +159,12 @@ func (s *ProjectService) CreateProject(ctx context.Context, req dto.CreateProjec
 	if s.qsProjectRepo != nil {
 		p := &qs.Project{
 			Name:                req.Name,
-			SalesforceJobNumber: httpkit.ToNullStr(req.SalesforceJobNumber),
-			SampleSize:          httpkit.ToNullInt64(req.SampleSize),
-			InterviewLength:     httpkit.ToNullInt64(req.InterviewLength),
-			ClientID:            httpkit.ToNullInt64(req.ClientID),
-			PostScreeninBuffer:  httpkit.ToNullStr(fmt.Sprintf("%.2f", req.PostScreeninBuffer)),
-			ModeratorBuffer:     httpkit.ToNullStr(fmt.Sprintf("%.2f", req.ModeratorBuffer)),
+			SalesforceJobNumber: utilities.ToNullStr(req.SalesforceJobNumber),
+			SampleSize:          utilities.ToNullInt64(req.SampleSize),
+			InterviewLength:     utilities.ToNullInt64(req.InterviewLength),
+			ClientID:            utilities.ToNullInt64(req.ClientID),
+			PostScreeninBuffer:  utilities.ToNullStr(fmt.Sprintf("%.2f", req.PostScreeninBuffer)),
+			ModeratorBuffer:     utilities.ToNullStr(fmt.Sprintf("%.2f", req.ModeratorBuffer)),
 		}
 		id, err := s.qsProjectRepo.Create(ctx, p)
 		if err != nil {
@@ -179,7 +179,7 @@ func (s *ProjectService) CreateProject(ctx context.Context, req dto.CreateProjec
 // ── Update ──────────────────────────────────────────────────────────────────
 
 // UpdateProject updates a project in IRIS or QS based on the request source.
-func (s *ProjectService) UpdateProject(ctx context.Context, projectID int64, req dto.UpdateProjectRequest) (*httpkit.MutationResult, error) {
+func (s *ProjectService) UpdateProject(ctx context.Context, projectID int64, req dto.UpdateProjectRequest) (*utilities.MutationResult, error) {
 	fields := map[string]any{}
 	if req.Name != "" {
 		fields["name"] = req.Name
@@ -201,7 +201,7 @@ func (s *ProjectService) UpdateProject(ctx context.Context, projectID int64, req
 		if err := s.irisProjectRepo.Update(ctx, projectID, fields); err != nil {
 			return nil, fmt.Errorf("iris project update: %w", err)
 		}
-		return &httpkit.MutationResult{ID: projectID, Updated: true, Source: "iris"}, nil
+		return &utilities.MutationResult{ID: projectID, Updated: true, Source: "iris"}, nil
 	}
 
 	if s.qsProjectRepo != nil {
@@ -214,7 +214,7 @@ func (s *ProjectService) UpdateProject(ctx context.Context, projectID int64, req
 		if err := s.qsProjectRepo.Update(ctx, projectID, fields); err != nil {
 			return nil, fmt.Errorf("qs project update: %w", err)
 		}
-		return &httpkit.MutationResult{ID: projectID, Updated: true, Source: "qs"}, nil
+		return &utilities.MutationResult{ID: projectID, Updated: true, Source: "qs"}, nil
 	}
 
 	return nil, fmt.Errorf("no database available")
@@ -223,19 +223,19 @@ func (s *ProjectService) UpdateProject(ctx context.Context, projectID int64, req
 // ── Delete (soft) ───────────────────────────────────────────────────────────
 
 // DeleteProject soft-deletes a project (QS: status=5 Canceled, IRIS: is_archived=true).
-func (s *ProjectService) DeleteProject(ctx context.Context, projectID int64, source string) (*httpkit.MutationResult, error) {
+func (s *ProjectService) DeleteProject(ctx context.Context, projectID int64, source string) (*utilities.MutationResult, error) {
 	if source == "qs" && s.qsProjectRepo != nil {
 		if err := s.qsProjectRepo.Update(ctx, projectID, map[string]any{"project_status_id": 5}); err != nil {
 			return nil, fmt.Errorf("qs project archive: %w", err)
 		}
-		return &httpkit.MutationResult{ID: projectID, Archived: true, Source: "qs"}, nil
+		return &utilities.MutationResult{ID: projectID, Archived: true, Source: "qs"}, nil
 	}
 
 	if s.irisProjectRepo != nil {
 		if err := s.irisProjectRepo.Update(ctx, projectID, map[string]any{"is_archived": true}); err != nil {
 			return nil, fmt.Errorf("iris project archive: %w", err)
 		}
-		return &httpkit.MutationResult{ID: projectID, Archived: true, Source: "iris"}, nil
+		return &utilities.MutationResult{ID: projectID, Archived: true, Source: "iris"}, nil
 	}
 
 	return nil, fmt.Errorf("no database available")

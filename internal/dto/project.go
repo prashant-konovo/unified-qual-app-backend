@@ -1,7 +1,7 @@
 package dto
 
 import (
-	"github.com/InCrowd/unified-qual-api/internal/httpkit"
+	"github.com/InCrowd/unified-qual-api/internal/utilities"
 	"time"
 
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
@@ -17,16 +17,16 @@ func ProjectFromIRISList(p iris.ProjectListRow) map[string]any {
 	return map[string]any{
 		"id":                  p.ID,
 		"name":                p.Name,
-		"description":         httpkit.NullStrPtr(p.Description),
+		"description":         utilities.NullStrPtr(p.Description),
 		"subscriptionId":      p.SubscriptionID,
-		"subscriptionCompany": httpkit.NullStrPtr(p.SubscriptionCompany),
+		"subscriptionCompany": utilities.NullStrPtr(p.SubscriptionCompany),
 		"statusId":            p.ProjectStatusID,
 		"status":              p.ProjectStatusName,
 		"projectTypeId":       p.ProjectTypeID,
-		"salesforceProjectId": httpkit.NullStrPtr(p.SalesforceProjectID),
+		"salesforceProjectId": utilities.NullStrPtr(p.SalesforceProjectID),
 		"isArchived":          p.IsArchived,
 		"createdAt":           p.CreatedOn.Format(time.RFC3339),
-		"modifiedAt":          httpkit.NullTimeStr(p.ModifiedOn),
+		"modifiedAt":          utilities.NullTimeStr(p.ModifiedOn),
 		"source":              "iris",
 		"serviceCategory":     "LS",
 	}
@@ -37,17 +37,17 @@ func ProjectFromQSList(p qs.ProjectListRow) map[string]any {
 	return map[string]any{
 		"id":                  p.ID,
 		"name":                p.Name,
-		"salesforceJobNumber": httpkit.NullStrPtr(p.SalesforceJobNumber),
-		"clientId":            httpkit.NullInt64Ptr(p.ClientID),
-		"clientCompany":       httpkit.NullStrPtr(p.ClientCompany),
-		"sampleSize":          httpkit.NullInt64Ptr(p.SampleSize),
-		"interviewLength":     httpkit.NullInt64Ptr(p.InterviewLength),
+		"salesforceJobNumber": utilities.NullStrPtr(p.SalesforceJobNumber),
+		"clientId":            utilities.NullInt64Ptr(p.ClientID),
+		"clientCompany":       utilities.NullStrPtr(p.ClientCompany),
+		"sampleSize":          utilities.NullInt64Ptr(p.SampleSize),
+		"interviewLength":     utilities.NullInt64Ptr(p.InterviewLength),
 		"statusId":            p.ProjectStatusID,
 		"status":              p.ProjectStatusName,
 		"scheduledCount":      p.ScheduledCount,
 		"completedCount":      p.CompletedCount,
 		"createdAt":           p.CreatedOn.Format(time.RFC3339),
-		"modifiedAt":          httpkit.NullTimeStr(p.ModifiedOn),
+		"modifiedAt":          utilities.NullTimeStr(p.ModifiedOn),
 		"source":              "qs",
 		"serviceCategory":     "MRA",
 	}
@@ -58,16 +58,16 @@ func ProjectDetailFromIRIS(p *iris.Project, statusName string) map[string]any {
 	return map[string]any{
 		"id":                  p.ID,
 		"name":                p.Name,
-		"description":         httpkit.NullStrPtr(p.Description),
+		"description":         utilities.NullStrPtr(p.Description),
 		"subscriptionId":      p.SubscriptionID,
 		"statusId":            p.ProjectStatusID,
 		"status":              statusName,
 		"projectTypeId":       p.ProjectTypeID,
-		"salesforceProjectId": httpkit.NullStrPtr(p.SalesforceProjectID),
+		"salesforceProjectId": utilities.NullStrPtr(p.SalesforceProjectID),
 		"isPrivate":           p.IsPrivate,
 		"isArchived":          p.IsArchived,
 		"createdAt":           p.CreatedOn.Format(time.RFC3339),
-		"modifiedAt":          httpkit.NullTimeStr(p.ModifiedOn),
+		"modifiedAt":          utilities.NullTimeStr(p.ModifiedOn),
 		"source":              "iris",
 		"serviceCategory":     "LS",
 	}
@@ -78,20 +78,20 @@ func ProjectDetailFromQS(p *qs.Project, scheduled, completed int, topicNames []s
 	return map[string]any{
 		"id":                 p.ID,
 		"name":               p.Name,
-		"externalSurveyId":   httpkit.NullStrPtr(p.ExternalSurveyID),
-		"salesforceJobNumber": httpkit.NullStrPtr(p.SalesforceJobNumber),
-		"clientId":           httpkit.NullInt64Ptr(p.ClientID),
-		"sampleSize":         httpkit.NullInt64Ptr(p.SampleSize),
-		"interviewLength":    httpkit.NullInt64Ptr(p.InterviewLength),
+		"externalSurveyId":   utilities.NullStrPtr(p.ExternalSurveyID),
+		"salesforceJobNumber": utilities.NullStrPtr(p.SalesforceJobNumber),
+		"clientId":           utilities.NullInt64Ptr(p.ClientID),
+		"sampleSize":         utilities.NullInt64Ptr(p.SampleSize),
+		"interviewLength":    utilities.NullInt64Ptr(p.InterviewLength),
 		"statusId":           p.ProjectStatusID,
 		"schedulerGenerated": p.SchedulerGenerated,
-		"postScreeninBuffer": httpkit.NullStrPtr(p.PostScreeninBuffer),
-		"moderatorBuffer":    httpkit.NullStrPtr(p.ModeratorBuffer),
+		"postScreeninBuffer": utilities.NullStrPtr(p.PostScreeninBuffer),
+		"moderatorBuffer":    utilities.NullStrPtr(p.ModeratorBuffer),
 		"topics":             topicNames,
 		"scheduledCount":     scheduled,
 		"completedCount":     completed,
 		"createdAt":          p.CreatedOn.Format(time.RFC3339),
-		"modifiedAt":         httpkit.NullTimeStr(p.ModifiedOn),
+		"modifiedAt":         utilities.NullTimeStr(p.ModifiedOn),
 		"source":             "qs",
 		"serviceCategory":    "MRA",
 	}
