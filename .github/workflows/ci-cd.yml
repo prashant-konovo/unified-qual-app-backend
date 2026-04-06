@@ -2,9 +2,9 @@ name: Backend CI/CD
 
 on:
   push:
-    branches: [data-qa, qa, staging, production, main, develop]
+    branches: [data-qa, qa, staging, production]
   pull_request:
-    branches: [data-qa, qa, staging, production, main, develop]
+    branches: [data-qa]
 
 env:
   ECR_REPOSITORY: unified-qual-api
@@ -14,7 +14,9 @@ env:
   K8S_DEPLOYMENT: unified-qual-api
 
 jobs:
+  # ── CI jobs: lint, test, security, build — run on data-qa only ──────────
   lint-test:
+    if: github.ref_name == 'data-qa'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,6 +40,7 @@ jobs:
         run: go test -tags=integration -race -v ./integrationtests/...
 
   security:
+    if: github.ref_name == 'data-qa'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,7 +68,7 @@ jobs:
 
   build-push:
     needs: [lint-test, security]
-    if: github.event_name == 'push'
+    if: github.ref_name == 'data-qa' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -91,11 +94,20 @@ jobs:
           docker push $IMAGE
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
+  # ── Deploy: runs on data-qa, qa, staging, production ────────────────────
+  # On data-qa: runs after build-push succeeds (full CI pipeline)
+  # On qa/staging/production: runs standalone (CI jobs skipped)
+  # Uses GitHub Environments for approval gate — configure required reviewers
+  # in GitHub repo Settings → Environments → <branch-name>
   deploy:
     needs: build-push
-    if: github.event_name == 'push' && contains(fromJSON('["data-qa","qa","staging","production"]'), github.ref_name)
+    if: |
+      always()
+      && github.event_name == 'push'
+      && contains(fromJSON('["data-qa","qa","staging","production"]'), github.ref_name)
+      && (needs.build-push.result == 'success' || needs.build-push.result == 'skipped')
     runs-on: ubuntu-latest
-    environment: ${{ github.ref_name }}  # Requires approval in GitHub Environment settings
+    environment: ${{ github.ref_name }}
     steps:
       - name: Resolve deploy config
         id: config
@@ -154,5 +166,5 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
           git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "chore: update unified-qual-api image to ${{ github.sha }} [${GITHUB_REF_NAME}]"
+          git commit -m "chore: update unified-qual-api image to ${{ github.sha }} [${{ github.ref_name }}]"
           git push origin ${{ steps.config.outputs.gitops_branch }}
