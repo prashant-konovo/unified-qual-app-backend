@@ -18,6 +18,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
+	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
@@ -135,7 +136,7 @@ func New() *TestServer {
 	// qs.Repositories.Survey (concrete *SurveyRepo), so wire it manually.
 	svcs.Survey = service.NewSurveyService(ts.QsSurveyRepo, ts.IrisSurveyRepo, nil, nil)
 
-	db := &config.DBPair{} // nil DBs — health will show "not_configured"
+	db := &database.DBPair{} // nil DBs — health will show "not_configured"
 	hs := handler.NewHandlers(cfg, db, svcs)
 
 	// Create JWTAuth that fetches keys from our test JWKS server.
