@@ -167,6 +167,8 @@ go test -v -run TestHealth_AllDBsHealthy ./internal/handler/shared/
 
 Integration tests live in `integrationtests/` and exercise the full HTTP stack (router → middleware → handler → mock repos). They use the `integration` build tag so `go test ./...` skips them by default.
 
+**These tests also run in CI** — the `lint-test` job runs integration tests after unit tests.
+
 **Run all integration tests:**
 ```bash
 # Step 1: Run all integration tests
@@ -227,6 +229,30 @@ export SNYK_TOKEN=<your-token>
 npx snyk test --all-projects
 npx snyk code test
 ```
+
+## CI/CD Pipeline
+
+The pipeline is defined in `.github/workflows/ci-cd.yml`.
+
+**On `data-qa` branch (full pipeline):**
+```
+lint-test (tidy → format check → lint → 29 unit tests → 16 integration tests)
+    ∥
+security (Snyk deps → SAST → monitor)
+    ↓
+build-push (Docker → ECR)
+    ↓
+deploy [approval gate] → update gitops tag → ArgoCD syncs to EKS
+```
+
+**On `qa` / `staging` / `production` branches (deploy only):**
+```
+deploy [approval gate] → update gitops tag → ArgoCD syncs to EKS
+```
+
+- CI jobs (`lint-test`, `security`, `build-push`) only run on `data-qa`.
+- Deploy maps each branch to its gitops values path (`data-qa` → `envs/konovo-dev/`, `qa` → `envs/konovo-qa/`, etc.).
+- **Approval gate:** Uses GitHub Environments — configure required reviewers in repo Settings → Environments → `<branch-name>`.
 
 ## API Endpoints
 All routes under `/v1/` prefix. Health check at `/health`. 228 routes total across 14 sub-routers.
