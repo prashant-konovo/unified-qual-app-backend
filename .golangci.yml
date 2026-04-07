@@ -4,6 +4,13 @@ run:
 linters:
   enable:
     - goimports
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - misspell
 
 linters-settings:
   goimports:
