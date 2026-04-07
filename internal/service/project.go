@@ -100,6 +100,10 @@ func (s *ProjectService) ListProjects(ctx context.Context, page, pageSize int, s
 // GetProject fetches a project by ID from QS (preferred) or IRIS.
 func (s *ProjectService) GetProject(ctx context.Context, projectID int64, source string) (*ProjectGetResult, error) {
 	// Try QS first (or if source=qs)
+
+	// sample adpater usage for project list:
+	// s.projectAdapter.List(ctx, adapter.BrandLS, 1, 1, nil, fmt.Sprintf("id:%d", projectID))
+
 	if (source == "" || source == "qs") && s.qsProjectRepo != nil {
 		p, err := s.qsProjectRepo.GetByID(ctx, projectID)
 		if err != nil {
