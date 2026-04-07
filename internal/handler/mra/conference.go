@@ -195,7 +195,7 @@ func (h *Handler) GetConfLinkByTimeSlotMRA(w http.ResponseWriter, r *http.Reques
 	if !h.ConferenceService.Available() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "conference repository not available",
-			"errorMessage": "An error occured while getting conference link by timeslot id",
+			"errorMessage": "An error occurred while getting conference link by timeslot id",
 		})
 		return
 	}
@@ -211,7 +211,7 @@ func (h *Handler) GetConfLinkByTimeSlotMRA(w http.ResponseWriter, r *http.Reques
 		slog.Error("get conference link by timeslot failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting conference link by timeslot id",
+			"errorMessage": "An error occurred while getting conference link by timeslot id",
 		})
 		return
 	}
@@ -222,7 +222,7 @@ func (h *Handler) GetConfLinkByTimeSlotMRA(w http.ResponseWriter, r *http.Reques
 	if result == nil {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "conference link not found",
-			"errorMessage": "An error occured while getting conference link by timeslot id",
+			"errorMessage": "An error occurred while getting conference link by timeslot id",
 		})
 		return
 	}

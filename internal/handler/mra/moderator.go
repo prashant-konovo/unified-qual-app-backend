@@ -902,7 +902,7 @@ func (h *Handler) GetModeratorTimeslotsMRA(w http.ResponseWriter, r *http.Reques
 		slog.Error("get moderator timeslots mra failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error has occured while getting moderator time slots",
+			"errorMessage": "An error has occurred while getting moderator time slots",
 		})
 		return
 	}
@@ -972,7 +972,7 @@ func (h *Handler) GetProjectsForModeratorMRA(w http.ResponseWriter, r *http.Requ
 		slog.Error("get projects for moderator mra failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting projects for moderator",
+			"errorMessage": "An error occurred while getting projects for moderator",
 		})
 		return
 	}
@@ -1001,7 +1001,7 @@ func (h *Handler) GetModeratorsListForProjectMRA(w http.ResponseWriter, r *http.
 		slog.Error("get moderators list mra failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting the list of moderators",
+			"errorMessage": "An error occurred while getting the list of moderators",
 		})
 		return
 	}
@@ -1293,7 +1293,7 @@ func (h *Handler) GetModeratorsForTimeSlotMRA(w http.ResponseWriter, r *http.Req
 		slog.Error("get moderators for timeslot mra failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting moderators for timeslot id",
+			"errorMessage": "An error occurred while getting moderators for timeslot id",
 		})
 		return
 	}
@@ -1319,7 +1319,7 @@ func (h *Handler) GetModeratorsOptionMRA(w http.ResponseWriter, r *http.Request)
 		slog.Error("get start end time failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting possible moderators for timeslot",
+			"errorMessage": "An error occurred while getting possible moderators for timeslot",
 		})
 		return
 	}
@@ -1329,7 +1329,7 @@ func (h *Handler) GetModeratorsOptionMRA(w http.ResponseWriter, r *http.Request)
 		slog.Error("get moderators info failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting possible moderators for timeslot",
+			"errorMessage": "An error occurred while getting possible moderators for timeslot",
 		})
 		return
 	}
@@ -1341,7 +1341,7 @@ func (h *Handler) GetModeratorsOptionMRA(w http.ResponseWriter, r *http.Request)
 			slog.Error("get moderator conflict failed", "error", err, "moderatorId", m.ID)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while getting possible moderators for timeslot",
+				"errorMessage": "An error occurred while getting possible moderators for timeslot",
 			})
 			return
 		}
@@ -1378,7 +1378,7 @@ func (h *Handler) GetParticipantIdMRA(w http.ResponseWriter, r *http.Request) {
 		slog.Error("get participant id mra failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting participant id for timeslot id",
+			"errorMessage": "An error occurred while getting participant id for timeslot id",
 		})
 		return
 	}
@@ -1446,7 +1446,7 @@ func (h *Handler) GetModeratorAvailabilityByClientMRA(w http.ResponseWriter, r *
 	if !h.ModeratorService.QsUserAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "repository not available",
-			"errorMessage": "An error occured while getting moderator availability",
+			"errorMessage": "An error occurred while getting moderator availability",
 		})
 		return
 	}
@@ -1710,7 +1710,7 @@ func (h *Handler) UpdateGoogleSheetFirstDateMRA(w http.ResponseWriter, r *http.R
 			slog.Warn("google sheets update first date calendar failed", "error", err)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error has occured while downloading google sheet",
+				"errorMessage": "An error has occurred while downloading google sheet",
 			})
 			return
 		}

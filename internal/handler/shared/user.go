@@ -39,8 +39,8 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 		u, err := h.UserService.GetIrisUserByID(r.Context(), userID)
 		if err != nil || u == nil {
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
-				"error":        "An error occured while fetching user info",
-				"errorMessage": "An error occured while fetching user info",
+				"error":        "An error occurred while fetching user info",
+				"errorMessage": "An error occurred while fetching user info",
 			})
 			return
 		}
@@ -55,8 +55,8 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 		u, err := h.UserService.GetByID(r.Context(), userID)
 		if err != nil || u == nil {
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
-				"error":        "An error occured while fetching user info",
-				"errorMessage": "An error occured while fetching user info",
+				"error":        "An error occurred while fetching user info",
+				"errorMessage": "An error occurred while fetching user info",
 			})
 			return
 		}
@@ -113,8 +113,8 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
-		"error":        "An error occured while fetching user info",
-		"errorMessage": "An error occured while fetching user info",
+		"error":        "An error occurred while fetching user info",
+		"errorMessage": "An error occurred while fetching user info",
 	})
 }
 
@@ -347,7 +347,7 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 	if !h.UserService.QsAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
-			"errorMessage": "An error occured while creating a new user",
+			"errorMessage": "An error occurred while creating a new user",
 		})
 		return
 	}
@@ -355,7 +355,7 @@ func (h *Handler) UpsertUserTimeZone(w http.ResponseWriter, r *http.Request) {
 	if err := h.UserService.UpdateTimeZone(r.Context(), req.UserID, req.UserSelectedTimeZone); err != nil {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while creating a new user",
+			"errorMessage": "An error occurred while creating a new user",
 		})
 		return
 	}

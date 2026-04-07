@@ -42,7 +42,7 @@ func (h *Handler) GetSalesforceClientsMRA(w http.ResponseWriter, r *http.Request
 		slog.Error("get salesforce clients mra failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting sales force clients",
+			"errorMessage": "An error occurred while getting sales force clients",
 		})
 		return
 	}
@@ -63,7 +63,7 @@ func (h *Handler) GetSalesforceProjectsMRA(w http.ResponseWriter, r *http.Reques
 		slog.Error("get salesforce projects mra failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting sales force projects",
+			"errorMessage": "An error occurred while getting sales force projects",
 		})
 		return
 	}
@@ -89,7 +89,7 @@ func (h *Handler) GetSalesforceClientsWithFilterMRA(w http.ResponseWriter, r *ht
 		slog.Error("get salesforce clients with filter mra failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting sales force clients",
+			"errorMessage": "An error occurred while getting sales force clients",
 		})
 		return
 	}

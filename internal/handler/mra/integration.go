@@ -25,7 +25,7 @@ func (h *Handler) ThirdPartyIntegrateMRA(w http.ResponseWriter, r *http.Request)
 	if !h.ParticipantService.Available() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "repository not available",
-			"errorMessage": "An error occured in third party integration",
+			"errorMessage": "An error occurred in third party integration",
 		})
 		return
 	}
@@ -50,7 +50,7 @@ func (h *Handler) ThirdPartyIntegrateMRA(w http.ResponseWriter, r *http.Request)
 		slog.Error("third party integrate mra failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured in third party integration",
+			"errorMessage": "An error occurred in third party integration",
 		})
 		return
 	}

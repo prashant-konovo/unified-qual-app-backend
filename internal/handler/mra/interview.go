@@ -99,7 +99,7 @@ func (h *Handler) ScheduleInterviewMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.InterviewService.TimeSlotAvailable() || !h.ProjectService.QsProjectAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
-			"errorMessage": "An error occured while scheduling the interview",
+			"errorMessage": "An error occurred while scheduling the interview",
 		})
 		return
 	}
@@ -431,7 +431,7 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 	if !h.InterviewService.TimeSlotAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "timeslot repository not available",
-			"errorMessage": "An error occured while rescheduling or canceling the interview",
+			"errorMessage": "An error occurred while rescheduling or canceling the interview",
 		})
 		return
 	}
@@ -463,7 +463,7 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 	if err != nil || ts == nil {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "timeslot not found",
-			"errorMessage": "An error occured while rescheduling or canceling the interview",
+			"errorMessage": "An error occurred while rescheduling or canceling the interview",
 		})
 		return
 	}
@@ -488,7 +488,7 @@ func (h *Handler) CancelRescheduleAction(w http.ResponseWriter, r *http.Request)
 		slog.Error("cancel/reschedule update failed", "tsId", tsID, "action", action, "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while rescheduling or canceling the interview",
+			"errorMessage": "An error occurred while rescheduling or canceling the interview",
 		})
 		return
 	}

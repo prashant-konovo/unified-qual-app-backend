@@ -217,7 +217,7 @@ func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ProjectService.QsProjectAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
-			"errorMessage": "An error occured while updating project details",
+			"errorMessage": "An error occurred while updating project details",
 		})
 		return
 	}
@@ -254,7 +254,7 @@ func (h *Handler) UpdateProjectMRA(w http.ResponseWriter, r *http.Request) {
 		slog.Error("update project mra failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while updating project details",
+			"errorMessage": "An error occurred while updating project details",
 		})
 		return
 	}
@@ -276,7 +276,7 @@ func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Reque
 	if !h.ProjectService.QsProjectAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
-			"errorMessage": "An error occured while updating external survey id",
+			"errorMessage": "An error occurred while updating external survey id",
 		})
 		return
 	}
@@ -291,7 +291,7 @@ func (h *Handler) UpdateExternalSurveyIDMRA(w http.ResponseWriter, r *http.Reque
 		slog.Error("update external survey id failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while updating external survey id",
+			"errorMessage": "An error occurred while updating external survey id",
 		})
 		return
 	}
@@ -313,7 +313,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 	if !h.ProjectService.QsProjectAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
-			"errorMessage": "An error occured while trying to reset project moderators",
+			"errorMessage": "An error occurred while trying to reset project moderators",
 		})
 		return
 	}
@@ -335,7 +335,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 			slog.Error("get project mod ids failed", "error", err)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while trying to reset project moderators",
+				"errorMessage": "An error occurred while trying to reset project moderators",
 			})
 			return
 		}
@@ -344,7 +344,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 			slog.Error("reset project mods failed", "error", err)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while trying to reset project moderators",
+				"errorMessage": "An error occurred while trying to reset project moderators",
 			})
 			return
 		}
@@ -355,7 +355,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 		if len(body.ModeratorIDs) == 0 {
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        "no moderator id provided",
-				"errorMessage": "An error occured while trying to reset project moderators",
+				"errorMessage": "An error occurred while trying to reset project moderators",
 			})
 			return
 		}
@@ -364,7 +364,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 			slog.Error("unassign moderator failed", "error", err)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while trying to reset project moderators",
+				"errorMessage": "An error occurred while trying to reset project moderators",
 			})
 			return
 		}
@@ -374,7 +374,7 @@ func (h *Handler) ResetProjectModeratorsMRA(w http.ResponseWriter, r *http.Reque
 			slog.Error("get moderators list failed", "error", err)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while trying to reset project moderators",
+				"errorMessage": "An error occurred while trying to reset project moderators",
 			})
 			return
 		}
@@ -394,7 +394,7 @@ func (h *Handler) GetEmailTemplateMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ProjectService.QsProjectAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
-			"errorMessage": "An error occured while getting the email template",
+			"errorMessage": "An error occurred while getting the email template",
 		})
 		return
 	}
@@ -429,7 +429,7 @@ func (h *Handler) GetEmailTemplateMRA(w http.ResponseWriter, r *http.Request) {
 		slog.Error("get email template failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting the email template",
+			"errorMessage": "An error occurred while getting the email template",
 		})
 		return
 	}
@@ -453,7 +453,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 	if !h.ProjectService.QsProjectAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
-			"errorMessage": "An error occured while exporting project",
+			"errorMessage": "An error occurred while exporting project",
 		})
 		return
 	}
@@ -477,7 +477,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 		slog.Error("export query failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while exporting project",
+			"errorMessage": "An error occurred while exporting project",
 		})
 		return
 	}
@@ -521,7 +521,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 			slog.Error("excel write failed", "error", err)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while exporting project",
+				"errorMessage": "An error occurred while exporting project",
 			})
 			return
 		}
@@ -532,7 +532,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 			slog.Error("s3 upload failed", "error", err)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while exporting project",
+				"errorMessage": "An error occurred while exporting project",
 			})
 			return
 		}
@@ -542,7 +542,7 @@ func (h *Handler) HandleProjectExportMRA(w http.ResponseWriter, r *http.Request)
 			slog.Error("presign failed", "error", err)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while exporting project",
+				"errorMessage": "An error occurred while exporting project",
 			})
 			return
 		}
@@ -568,7 +568,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 	if !h.ProjectService.QsProjectAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
-			"errorMessage": "An error occured while updating project sample size",
+			"errorMessage": "An error occurred while updating project sample size",
 		})
 		return
 	}
@@ -584,7 +584,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 	if err != nil || project == nil {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "project not found",
-			"errorMessage": "An error occured while updating project sample size",
+			"errorMessage": "An error occurred while updating project sample size",
 		})
 		return
 	}
@@ -620,7 +620,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 			slog.Error("update sample size with status failed", "error", err)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while updating project sample size",
+				"errorMessage": "An error occurred while updating project sample size",
 			})
 			return
 		}
@@ -630,7 +630,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 			slog.Error("update sample size with status failed", "error", err)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while updating project sample size",
+				"errorMessage": "An error occurred while updating project sample size",
 			})
 			return
 		}
@@ -640,7 +640,7 @@ func (h *Handler) UpdateSampleSizeMRA(w http.ResponseWriter, r *http.Request) {
 			slog.Error("update sample size failed", "error", err)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while updating project sample size",
+				"errorMessage": "An error occurred while updating project sample size",
 			})
 			return
 		}
@@ -665,7 +665,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 	if !h.ProjectService.QsProjectAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
-			"errorMessage": "An error occured while getting available and unavailable moderators assigned to the project",
+			"errorMessage": "An error occurred while getting available and unavailable moderators assigned to the project",
 		})
 		return
 	}
@@ -674,7 +674,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 	project, err := h.ProjectService.GetProjectDetailsMRA(r.Context(), projectID)
 	if err != nil || project == nil {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
-			"errorMessage": "An error occured while getting project details",
+			"errorMessage": "An error occurred while getting project details",
 		})
 		return
 	}
@@ -713,7 +713,7 @@ func (h *Handler) GetUnavailableModeratorsMRA(w http.ResponseWriter, r *http.Req
 		slog.Error("get moderator availability failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting available and unavailable moderators assigned to the project",
+			"errorMessage": "An error occurred while getting available and unavailable moderators assigned to the project",
 		})
 		return
 	}
@@ -827,7 +827,7 @@ func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) 
 	if !h.ProjectService.QsProjectAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "database not configured",
-			"errorMessage": "An error occured while getting the number of available moderators",
+			"errorMessage": "An error occurred while getting the number of available moderators",
 		})
 		return
 	}
@@ -838,7 +838,7 @@ func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) 
 		slog.Error("get moderator availability per role failed", "error", err)
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while getting the number of available moderators",
+			"errorMessage": "An error occurred while getting the number of available moderators",
 		})
 		return
 	}
@@ -847,7 +847,7 @@ func (h *Handler) GetModeratorsCountMRA(w http.ResponseWriter, r *http.Request) 
 	project, err := h.ProjectService.GetProjectDetailsMRA(r.Context(), projectID)
 	if err != nil || project == nil {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
-			"errorMessage": "An error occured while getting project details",
+			"errorMessage": "An error occurred while getting project details",
 		})
 		return
 	}

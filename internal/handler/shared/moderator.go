@@ -207,7 +207,7 @@ func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 	if !h.ModeratorService.QsUserAvailable() {
 		utilities.WriteJSON(w, http.StatusOK, map[string]any{
 			"error":        "QS database unavailable",
-			"errorMessage": "An error occured while removing the user",
+			"errorMessage": "An error occurred while removing the user",
 		})
 		return
 	}
@@ -215,7 +215,7 @@ func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		utilities.WriteJSON(w, http.StatusOK, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while removing the user",
+			"errorMessage": "An error occurred while removing the user",
 		})
 		return
 	}
@@ -223,7 +223,7 @@ func (h *Handler) DeleteModerator(w http.ResponseWriter, r *http.Request) {
 		slog.Error("delete moderator", "error", err)
 		utilities.WriteJSON(w, http.StatusOK, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while removing the user",
+			"errorMessage": "An error occurred while removing the user",
 		})
 		return
 	}

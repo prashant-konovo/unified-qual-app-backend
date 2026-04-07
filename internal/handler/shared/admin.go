@@ -88,14 +88,14 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 	if errs := utilities.DecodeAndValidate(r, &req); errs != nil {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        errs,
-			"errorMessage": "An error occured while creating a new user",
+			"errorMessage": "An error occurred while creating a new user",
 		})
 		return
 	}
 	if req.FirstName == "" {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "firstName is required",
-			"errorMessage": "An error occured while creating a new user",
+			"errorMessage": "An error occurred while creating a new user",
 		})
 		return
 	}
@@ -110,7 +110,7 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 			slog.Error("create admin user failed", "error", err)
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while creating a new user",
+				"errorMessage": "An error occurred while creating a new user",
 			})
 			return
 		}
@@ -125,6 +125,6 @@ func (h *Handler) CreateAdminUser(w http.ResponseWriter, r *http.Request) {
 	}
 	utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 		"error":        "no database available",
-		"errorMessage": "An error occured while creating a new user",
+		"errorMessage": "An error occurred while creating a new user",
 	})
 }
