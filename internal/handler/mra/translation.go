@@ -83,7 +83,7 @@ func (h *Handler) GetTopicsByProjectMRA(w http.ResponseWriter, r *http.Request) 
 // ──────────────────────────────────────────────
 // MRA #71 — UpdateTopicTranslationMRA
 // POST /v1/mra/update-topic-translation/{project_id}
-// Legacy: update-topic-transaltion.js
+// Legacy: update-topic-translation.js
 // ──────────────────────────────────────────────
 
 func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +149,7 @@ func (h *Handler) UpdateTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 // ──────────────────────────────────────────────
 // MRA #72 — DeleteTopicTranslationMRA
 // DELETE /v1/mra/translations/delete-topic-translation/{project_id}/{translation_to_delete}
-// Legacy: delete-topic-transaltion.js
+// Legacy: delete-topic-translation.js
 // ──────────────────────────────────────────────
 
 func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Request) {
@@ -164,7 +164,7 @@ func (h *Handler) DeleteTopicTranslationMRA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	translationToDelete := chi.URLParam(r, "transaltion_to_delete")
+	translationToDelete := chi.URLParam(r, "translation_to_delete")
 
 	ctx := r.Context()
 
@@ -255,7 +255,7 @@ func (h *Handler) GetAllLocalisationsMRA(w http.ResponseWriter, r *http.Request)
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// MRA #74: DELETE /translations/delete-translation/{project_id}/{transaltion_to_delete}
+// MRA #74: DELETE /translations/delete-translation/{project_id}/{translation_to_delete}
 // Legacy: deleteTranslationFactory — checks scheduled interviews, deletes project_meeting_translation
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -265,7 +265,7 @@ func (h *Handler) DeleteTranslationMRA(w http.ResponseWriter, r *http.Request) {
 		utilities.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
-	translationToDelete := chi.URLParam(r, "transaltion_to_delete")
+	translationToDelete := chi.URLParam(r, "translation_to_delete")
 
 	// Check for scheduled interviews
 	projectStatusID, err := h.TranslationService.GetProjectStatusByIdMRA(r.Context(), projectID)

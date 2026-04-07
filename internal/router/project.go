@@ -69,10 +69,10 @@ func registerProjectRoutes(r chi.Router, hs *handler.Handlers) {
 		r.Get("/moderator/update-google-sheet-first-date", hs.MRA.UpdateGoogleSheetFirstDateMRA)
 		r.Get("/project/get_topics_by_project/{project_id}", hs.MRA.GetTopicsByProjectMRA)
 		r.Post("/update-topic-translation/{project_id}", hs.MRA.UpdateTopicTranslationMRA)
-		r.Delete("/translations/delete-topic-translation/{project_id}/{transaltion_to_delete}", hs.MRA.DeleteTopicTranslationMRA)
+		r.Delete("/translations/delete-topic-translation/{project_id}/{translation_to_delete}", hs.MRA.DeleteTopicTranslationMRA)
 		// MRA #73-78
 		r.Get("/translations/get-all-localisations", hs.MRA.GetAllLocalisationsMRA)
-		r.Delete("/translations/delete-translation/{project_id}/{transaltion_to_delete}", hs.MRA.DeleteTranslationMRA)
+		r.Delete("/translations/delete-translation/{project_id}/{translation_to_delete}", hs.MRA.DeleteTranslationMRA)
 		r.Post("/add-honorarium-amount", hs.MRA.AddHonorariumAmountMRA)
 		r.Get("/hono-value-update-reason-list", hs.MRA.GetHonoValueUpdateReasonListMRA)
 		r.Post("/time-slot-payments", hs.MRA.AddTimeSlotPaymentsMRA)

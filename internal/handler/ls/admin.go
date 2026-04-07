@@ -30,7 +30,7 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 	if !h.AdminService.QsAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
-			"errorMessage": "An error occured while adding user roles",
+			"errorMessage": "An error occurred while adding user roles",
 		})
 		return
 	}
@@ -44,7 +44,7 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while adding user roles",
+				"errorMessage": "An error occurred while adding user roles",
 			})
 			return
 		}
@@ -62,7 +62,7 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 		if err := h.AdminService.RestoreByEmail(r.Context(), req.Email); err != nil {
 			utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 				"error":        err.Error(),
-				"errorMessage": "An error occured while adding user roles",
+				"errorMessage": "An error occurred while adding user roles",
 			})
 			return
 		}
@@ -78,7 +78,7 @@ func (h *Handler) AddUserRoles(w http.ResponseWriter, r *http.Request) {
 	if err := h.AdminService.AddRoles(r.Context(), user.ID, []int{req.RoleID}); err != nil {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while adding user roles",
+			"errorMessage": "An error occurred while adding user roles",
 		})
 		return
 	}
@@ -97,7 +97,7 @@ func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
 	if !h.AdminService.QsAvailable() {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        "no database available",
-			"errorMessage": "An error occured while removing user roles",
+			"errorMessage": "An error occurred while removing user roles",
 		})
 		return
 	}
@@ -107,7 +107,7 @@ func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while removing user roles",
+			"errorMessage": "An error occurred while removing user roles",
 		})
 		return
 	}
@@ -116,7 +116,7 @@ func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
 	if err := h.AdminService.DeleteRoles(r.Context(), user.ID, []int{req.RoleID}); err != nil {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while removing user roles",
+			"errorMessage": "An error occurred while removing user roles",
 		})
 		return
 	}
@@ -124,7 +124,7 @@ func (h *Handler) DeleteUserRoles(w http.ResponseWriter, r *http.Request) {
 	if err := h.AdminService.SoftDelete(r.Context(), user.ID); err != nil {
 		utilities.WriteJSON(w, http.StatusInternalServerError, map[string]any{
 			"error":        err.Error(),
-			"errorMessage": "An error occured while removing user roles",
+			"errorMessage": "An error occurred while removing user roles",
 		})
 		return
 	}
