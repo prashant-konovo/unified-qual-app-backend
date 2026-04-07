@@ -13,6 +13,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/jobs"
 	"github.com/InCrowd/unified-qual-api/internal/logger"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
+	"github.com/InCrowd/unified-qual-api/internal/repository/adapter"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/InCrowd/unified-qual-api/internal/router"
@@ -48,8 +49,9 @@ func main() {
 	}
 
 	// Service + handler layer
+	adapters := adapter.NewAdapters(irisRepos, qsRepos)
 	svcClients := integration.NewServiceClients(cfg)
-	svcs := service.NewServices(cfg, qsRepos, irisRepos, svcClients)
+	svcs := service.NewServices(cfg, qsRepos, irisRepos, svcClients, adapters)
 
 	hs := handler.NewHandlers(cfg, db, svcs)
 	r := router.New(hs, jwtAuth)

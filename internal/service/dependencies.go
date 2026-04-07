@@ -4,6 +4,7 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
+	"github.com/InCrowd/unified-qual-api/internal/repository/adapter"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
@@ -58,6 +59,7 @@ func NewServices(
 	qsRepos *qs.Repositories,
 	irisRepos *iris.Repositories,
 	clients *integration.ServiceClients,
+	adapters *adapter.Adapters,
 ) *Services {
 	// Nil-safe repo access
 	var (
@@ -122,9 +124,15 @@ func NewServices(
 		googleSheets = clients.GoogleSheets
 	}
 
+	// Nil-safe adapter access
+	var projectAdapter *adapter.ProjectAdapter
+	if adapters != nil {
+		projectAdapter = adapters.Project
+	}
+
 	return &Services{
 		Auth:         NewAuthService(cfg, icAuth, qsUser),
-		Project:      NewProjectService(irisProject, qsProject, s3Client),
+		Project:      NewProjectService(irisProject, qsProject, s3Client, projectAdapter),
 		Participant:  NewParticipantService(qsRespondent, qsTimeSlot),
 		Booking:      NewBookingService(qsTimeSlot),
 		Translation:  NewTranslationService(qsAnswer, qsProject),

@@ -9,6 +9,7 @@ import (
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
+	"github.com/InCrowd/unified-qual-api/internal/repository/adapter"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 	"github.com/InCrowd/unified-qual-api/internal/utilities"
@@ -25,14 +26,16 @@ type ProjectService struct {
 	irisProjectRepo iris.ProjectRepository
 	qsProjectRepo   qs.ProjectRepository
 	s3              *integration.S3Client
+	projectAdapter  *adapter.ProjectAdapter
 }
 
 // NewProjectService creates a new ProjectService.
-func NewProjectService(irisProjectRepo iris.ProjectRepository, qsProjectRepo qs.ProjectRepository, s3 *integration.S3Client) *ProjectService {
+func NewProjectService(irisProjectRepo iris.ProjectRepository, qsProjectRepo qs.ProjectRepository, s3 *integration.S3Client, projectAdapter *adapter.ProjectAdapter) *ProjectService {
 	return &ProjectService{
 		irisProjectRepo: irisProjectRepo,
 		qsProjectRepo:   qsProjectRepo,
 		s3:              s3,
+		projectAdapter:  projectAdapter,
 	}
 }
 
