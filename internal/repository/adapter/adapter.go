@@ -43,20 +43,8 @@ type Adapters struct {
 }
 
 // NewAdapters creates all adapter instances from the IRIS and QS repository containers.
-// Handles nil repos gracefully (repos may be nil if DB connections failed at startup).
 func NewAdapters(irisRepos *iris.Repositories, qsRepos *qs.Repositories) *Adapters {
-	var (
-		irisProject iris.ProjectRepository
-		qsProject   qs.ProjectRepository
-	)
-	if irisRepos != nil {
-		irisProject = irisRepos.Project
-	}
-	if qsRepos != nil {
-		qsProject = qsRepos.Project
-	}
-
 	return &Adapters{
-		Project: NewProjectAdapter(irisProject, qsProject),
+		Project: NewProjectAdapter(irisRepos.Project, qsRepos.Project),
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/config"
 	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
-	"github.com/InCrowd/unified-qual-api/internal/repository/adapter"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
@@ -13,9 +12,8 @@ import (
 // Handlers access business logic exclusively through service fields.
 // DB is retained solely for the Health endpoint.
 type Deps struct {
-	Cfg      *config.Config
-	DB       *database.DBPair // used only by Health endpoint
-	Adapters *adapter.Adapters
+	Cfg *config.Config
+	DB  *database.DBPair // used only by Health endpoint
 
 	AuthService         *AuthService
 	ProjectService      *ProjectService
@@ -51,7 +49,6 @@ type Services struct {
 	Survey       *SurveyService
 	Moderator    *ModeratorService
 	Subscription *SubscriptionService
-	Adapters     *adapter.Adapters
 }
 
 // NewServices creates all service instances, wiring repositories,
@@ -141,6 +138,5 @@ func NewServices(
 		Survey:       NewSurveyService(qsSurvey, irisSurvey, decipher, eventLog),
 		Moderator:    NewModeratorService(qsUser, qsTimeSlot, googleCal, googleSheets),
 		Subscription: NewSubscriptionService(irisSurvey, s3Client, notification, cfg.InquiryEmailRecipient),
-		Adapters:     adapter.NewAdapters(irisRepos, qsRepos),
 	}
 }
