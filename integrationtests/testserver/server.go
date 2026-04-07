@@ -134,7 +134,7 @@ func New() *TestServer {
 	svcs := service.NewServices(cfg, qsRepos, irisRepos, nil, nil)
 	// Override SurveyService: the mock QsSurveyRepo can't be stored in
 	// qs.Repositories.Survey (concrete *SurveyRepo), so wire it manually.
-	svcs.Survey = service.NewSurveyService(ts.QsSurveyRepo, ts.IrisSurveyRepo, nil, nil)
+	svcs.SurveyService = service.NewSurveyService(ts.QsSurveyRepo, ts.IrisSurveyRepo, nil, nil)
 
 	db := &database.DBPair{} // nil DBs — health will show "not_configured"
 	hs := handler.NewHandlers(cfg, db, svcs)

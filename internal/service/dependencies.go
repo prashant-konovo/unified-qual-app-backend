@@ -33,34 +33,16 @@ type Deps struct {
 	SubscriptionService *SubscriptionService
 }
 
-// Services holds all service layer instances.
-type Services struct {
-	Auth         *AuthService
-	Project      *ProjectService
-	Participant  *ParticipantService
-	Booking      *BookingService
-	Translation  *TranslationService
-	Admin        *AdminService
-	Conference   *ConferenceService
-	Payment      *PaymentService
-	Notification *NotificationService
-	Media        *MediaService
-	User         *UserService
-	Interview    *InterviewService
-	Survey       *SurveyService
-	Moderator    *ModeratorService
-	Subscription *SubscriptionService
-}
-
 // NewServices creates all service instances, wiring repositories,
 // integration clients, and config values.
+// The returned Deps has Cfg and DB left nil — set them in the handler layer.
 func NewServices(
 	cfg *config.Config,
 	qsRepos *qs.Repositories,
 	irisRepos *iris.Repositories,
 	clients *integration.ServiceClients,
 	adapters *adapter.Adapters,
-) *Services {
+) *Deps {
 	// Nil-safe repo access
 	var (
 		qsProject    qs.ProjectRepository
@@ -130,21 +112,21 @@ func NewServices(
 		projectAdapter = adapters.Project
 	}
 
-	return &Services{
-		Auth:         NewAuthService(cfg, icAuth, qsUser),
-		Project:      NewProjectService(irisProject, qsProject, s3Client, projectAdapter),
-		Participant:  NewParticipantService(qsRespondent, qsTimeSlot),
-		Booking:      NewBookingService(qsTimeSlot),
-		Translation:  NewTranslationService(qsAnswer, qsProject),
-		Admin:        NewAdminService(qsUser, irisUser, qsTimeSlot),
-		Conference:   NewConferenceService(qsConference, conference, castingWords, sms, notification),
-		Payment:      NewPaymentService(qsAnswer, qsTimeSlot, qsProject, lambda, stepFn, cfg.AWS.Environment, cfg.AWS.ICApiURL),
-		Notification: NewNotificationService(irisSurvey, qsAnswer),
-		Media:        NewMediaService(irisSurvey, s3Client, cfg.S3.RecordingBucket),
-		User:         NewUserService(qsUser, irisUser, eventLog, cfg.Cognito.Region, cfg.Cognito.AppClientID),
-		Interview:    NewInterviewService(qsTimeSlot, qsInterviews),
-		Survey:       NewSurveyService(qsSurvey, irisSurvey, decipher, eventLog),
-		Moderator:    NewModeratorService(qsUser, qsTimeSlot, googleCal, googleSheets),
-		Subscription: NewSubscriptionService(irisSurvey, s3Client, notification, cfg.InquiryEmailRecipient),
+	return &Deps{
+		AuthService:         NewAuthService(cfg, icAuth, qsUser),
+		ProjectService:      NewProjectService(irisProject, qsProject, s3Client, projectAdapter),
+		ParticipantService:  NewParticipantService(qsRespondent, qsTimeSlot),
+		BookingService:      NewBookingService(qsTimeSlot),
+		TranslationService:  NewTranslationService(qsAnswer, qsProject),
+		AdminService:        NewAdminService(qsUser, irisUser, qsTimeSlot),
+		ConferenceService:   NewConferenceService(qsConference, conference, castingWords, sms, notification),
+		PaymentService:      NewPaymentService(qsAnswer, qsTimeSlot, qsProject, lambda, stepFn, cfg.AWS.Environment, cfg.AWS.ICApiURL),
+		NotificationService: NewNotificationService(irisSurvey, qsAnswer),
+		MediaService:        NewMediaService(irisSurvey, s3Client, cfg.S3.RecordingBucket),
+		UserService:         NewUserService(qsUser, irisUser, eventLog, cfg.Cognito.Region, cfg.Cognito.AppClientID),
+		InterviewService:    NewInterviewService(qsTimeSlot, qsInterviews),
+		SurveyService:       NewSurveyService(qsSurvey, irisSurvey, decipher, eventLog),
+		ModeratorService:    NewModeratorService(qsUser, qsTimeSlot, googleCal, googleSheets),
+		SubscriptionService: NewSubscriptionService(irisSurvey, s3Client, notification, cfg.InquiryEmailRecipient),
 	}
 }

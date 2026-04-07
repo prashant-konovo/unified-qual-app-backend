@@ -22,26 +22,10 @@ type Handlers struct {
 
 // NewHandlers creates all domain handlers by wiring config, DB, and services
 // into the shared Deps container.
-func NewHandlers(cfg *config.Config, db *database.DBPair, svcs *service.Services) *Handlers {
-	d := &service.Deps{
-		Cfg:                 cfg,
-		DB:                  db,
-		AuthService:         svcs.Auth,
-		ProjectService:      svcs.Project,
-		ParticipantService:  svcs.Participant,
-		BookingService:      svcs.Booking,
-		TranslationService:  svcs.Translation,
-		AdminService:        svcs.Admin,
-		ConferenceService:   svcs.Conference,
-		PaymentService:      svcs.Payment,
-		NotificationService: svcs.Notification,
-		MediaService:        svcs.Media,
-		UserService:         svcs.User,
-		InterviewService:    svcs.Interview,
-		SurveyService:       svcs.Survey,
-		ModeratorService:    svcs.Moderator,
-		SubscriptionService: svcs.Subscription,
-	}
+func NewHandlers(cfg *config.Config, db *database.DBPair, d *service.Deps) *Handlers {
+	d.Cfg = cfg
+	d.DB = db
+
 	return &Handlers{
 		Auth:      &shared.AuthHandler{Deps: d},
 		Project:   &shared.ProjectHandler{Deps: d},
