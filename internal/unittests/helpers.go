@@ -35,10 +35,10 @@ func TestConfig() *config.Config {
 	}
 }
 
-// TestDeps creates a *service.Deps with test config and nil repos.
+// TestServices creates a *service.Services with test config and nil repos.
 // Callers should set the specific repos they need for their test.
-func TestDeps() *service.Deps {
-	return &service.Deps{
+func TestServices() *service.Services {
+	return &service.Services{
 		Cfg: TestConfig(),
 		DB:  &database.DBPair{},
 	}

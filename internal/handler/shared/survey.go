@@ -15,7 +15,7 @@ import (
 )
 
 // SurveyHandler handles survey CRUD endpoints.
-type SurveyHandler struct{ *service.Deps }
+type SurveyHandler struct{ *service.Services }
 
 // ──────────────────────────────────────────────
 // Surveys

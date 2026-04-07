@@ -56,7 +56,7 @@ func sampleQSRow(id int64, name string) qs.ProjectListRow {
 }
 
 func TestListProjects_BothSources(t *testing.T) {
-	deps := unittests.TestDeps()
+	deps := unittests.TestServices()
 
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	qsRepo := new(mocks.MockQsProjectRepository)
@@ -68,7 +68,7 @@ func TestListProjects_BothSources(t *testing.T) {
 
 	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil, nil)
 
-	handler := &shared.ProjectHandler{Deps: deps}
+	handler := &shared.ProjectHandler{Services: deps}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/projects", nil)
 
@@ -102,7 +102,7 @@ func TestListProjects_BothSources(t *testing.T) {
 }
 
 func TestListProjects_IRISOnly(t *testing.T) {
-	deps := unittests.TestDeps()
+	deps := unittests.TestServices()
 
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	qsRepo := new(mocks.MockQsProjectRepository)
@@ -112,7 +112,7 @@ func TestListProjects_IRISOnly(t *testing.T) {
 
 	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil, nil)
 
-	handler := &shared.ProjectHandler{Deps: deps}
+	handler := &shared.ProjectHandler{Services: deps}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/projects?source=iris", nil)
 
@@ -134,7 +134,7 @@ func TestListProjects_IRISOnly(t *testing.T) {
 }
 
 func TestListProjects_QSOnly(t *testing.T) {
-	deps := unittests.TestDeps()
+	deps := unittests.TestServices()
 
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	qsRepo := new(mocks.MockQsProjectRepository)
@@ -144,7 +144,7 @@ func TestListProjects_QSOnly(t *testing.T) {
 
 	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil, nil)
 
-	handler := &shared.ProjectHandler{Deps: deps}
+	handler := &shared.ProjectHandler{Services: deps}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/projects?serviceCategory=MRA", nil)
 
@@ -167,7 +167,7 @@ func TestListProjects_QSOnly(t *testing.T) {
 }
 
 func TestListProjects_EmptyResult(t *testing.T) {
-	deps := unittests.TestDeps()
+	deps := unittests.TestServices()
 
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	qsRepo := new(mocks.MockQsProjectRepository)
@@ -179,7 +179,7 @@ func TestListProjects_EmptyResult(t *testing.T) {
 
 	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil, nil)
 
-	handler := &shared.ProjectHandler{Deps: deps}
+	handler := &shared.ProjectHandler{Services: deps}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/projects", nil)
 
@@ -200,7 +200,7 @@ func TestListProjects_EmptyResult(t *testing.T) {
 }
 
 func TestListProjects_IRISError(t *testing.T) {
-	deps := unittests.TestDeps()
+	deps := unittests.TestServices()
 
 	irisRepo := new(mocks.MockIrisProjectRepository)
 	qsRepo := new(mocks.MockQsProjectRepository)
@@ -212,7 +212,7 @@ func TestListProjects_IRISError(t *testing.T) {
 
 	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil, nil)
 
-	handler := &shared.ProjectHandler{Deps: deps}
+	handler := &shared.ProjectHandler{Services: deps}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/projects", nil)
 
@@ -234,10 +234,10 @@ func TestListProjects_IRISError(t *testing.T) {
 }
 
 func TestListProjects_NilRepos(t *testing.T) {
-	deps := unittests.TestDeps()
+	deps := unittests.TestServices()
 	deps.ProjectService = service.NewProjectService(nil, nil, nil, nil)
 
-	handler := &shared.ProjectHandler{Deps: deps}
+	handler := &shared.ProjectHandler{Services: deps}
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/projects", nil)
 

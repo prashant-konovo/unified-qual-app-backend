@@ -9,10 +9,10 @@ import (
 	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
 )
 
-// Deps holds shared dependencies injected into all domain handlers.
+// Services holds shared dependencies injected into all domain handlers.
 // Handlers access business logic exclusively through service fields.
 // DB is retained solely for the Health endpoint.
-type Deps struct {
+type Services struct {
 	Cfg *config.Config
 	DB  *database.DBPair // used only by Health endpoint
 
@@ -35,14 +35,14 @@ type Deps struct {
 
 // NewServices creates all service instances, wiring repositories,
 // integration clients, and config values.
-// The returned Deps has Cfg and DB left nil — set them in the handler layer.
+// The returned Services has Cfg and DB left nil — set them in the handler layer.
 func NewServices(
 	cfg *config.Config,
 	qsRepos *qs.Repositories,
 	irisRepos *iris.Repositories,
 	clients *integration.ServiceClients,
 	adapters *adapter.Adapters,
-) *Deps {
+) *Services {
 	// Nil-safe repo access
 	var (
 		qsProject    qs.ProjectRepository
@@ -112,7 +112,7 @@ func NewServices(
 		projectAdapter = adapters.Project
 	}
 
-	return &Deps{
+	return &Services{
 		AuthService:         NewAuthService(cfg, icAuth, qsUser),
 		ProjectService:      NewProjectService(irisProject, qsProject, s3Client, projectAdapter),
 		ParticipantService:  NewParticipantService(qsRespondent, qsTimeSlot),

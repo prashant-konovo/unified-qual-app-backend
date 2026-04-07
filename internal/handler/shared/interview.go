@@ -14,7 +14,7 @@ import (
 )
 
 // InterviewHandler handles timeslot and interview scheduling endpoints.
-type InterviewHandler struct{ *service.Deps }
+type InterviewHandler struct{ *service.Services }
 
 // ──────────────────────────────────────────────
 // Timeslots

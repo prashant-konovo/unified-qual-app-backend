@@ -11,8 +11,8 @@ import (
 )
 
 // Handler holds the remaining (non-auth) handler methods.
-// It embeds *Deps so all promoted fields (cfg, db, repos, etc.) are accessible.
-type Handler struct{ *service.Deps }
+// It embeds *Services so all promoted fields (cfg, db, repos, etc.) are accessible.
+type Handler struct{ *service.Services }
 
 // ──────────────────────────────────────────────
 // Health

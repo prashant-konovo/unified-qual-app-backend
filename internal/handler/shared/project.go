@@ -11,7 +11,7 @@ import (
 )
 
 // ProjectHandler handles project CRUD endpoints.
-type ProjectHandler struct{ *service.Deps }
+type ProjectHandler struct{ *service.Services }
 
 func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	pg := utilities.ParsePagination(r, 20, 100)

@@ -12,7 +12,7 @@ import (
 )
 
 // AuthHandler handles authentication and authorization endpoints.
-type AuthHandler struct{ *service.Deps }
+type AuthHandler struct{ *service.Services }
 
 // ──────────────────────────────────────────────
 // Auth — delegates to AuthService for business logic

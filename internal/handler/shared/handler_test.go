@@ -16,7 +16,7 @@ import (
 // newHandler returns a Handler backed by testutil defaults.
 // The DBPair has nil databases so HealthCheck reports "not_configured".
 func newHandler() *Handler {
-	return &Handler{unittests.TestDeps()}
+	return &Handler{unittests.TestServices()}
 }
 
 func callHealth(h *Handler) *httptest.ResponseRecorder {
@@ -48,7 +48,7 @@ func TestHealth_AllDBsHealthy(t *testing.T) {
 // TestHealth_NoDB confirms that a completely empty DBPair (all nil) is treated
 // as healthy because "not_configured" is an acceptable status.
 func TestHealth_NoDB(t *testing.T) {
-	deps := unittests.TestDeps()
+	deps := unittests.TestServices()
 	deps.DB = &database.DBPair{} // all nil
 	h := &Handler{deps}
 
@@ -64,7 +64,7 @@ func TestHealth_NoDB(t *testing.T) {
 // TestHealth_IncludesEnvironment verifies that the response contains the
 // environment value from the injected config.
 func TestHealth_IncludesEnvironment(t *testing.T) {
-	deps := unittests.TestDeps()
+	deps := unittests.TestServices()
 	deps.Cfg = &config.Config{Environment: "staging"}
 	h := &Handler{deps}
 
@@ -91,4 +91,4 @@ func TestHealth_IncludesVersion(t *testing.T) {
 }
 
 // Verify Handler satisfies the expected embedding.
-var _ *service.Deps = (&Handler{}).Deps
+var _ *service.Services = (&Handler{}).Services
