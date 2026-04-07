@@ -6,7 +6,7 @@ Go 1.24 + Chi v5. Deployed to EKS (data-qa) via ArgoCD.
 ## Tech Stack
 - **Go 1.24** + **Chi v5** router
 - **robfig/cron/v3** — 9 scheduled jobs
-- MySQL (IRIS + QS-Tool) + DocumentDB
+- MySQL (IRIS + QS-Tool)
 - 11 external service integrations (Conference, Notification, GCal, Stripe, Tango, PayPal, Bandwidth, Decipher, CastingWords, EventLog, GoogleSheets)
 - Docker multi-stage build → ECR → EKS
 
@@ -98,7 +98,7 @@ Pre-configured with data-qa credentials. Key overrides for local:
 | Name | `unified-qual-ssm-tunnel` |
 | Type | `t3.micro` (Amazon Linux 2023) |
 | VPC | `vpc-7ae31207` (us-east-1, same as databases) |
-| Security Group | `sg-03a01fb2e53f47724` (egress: 3306/27017 VPC + 443 internet) |
+| Security Group | `sg-03a01fb2e53f47724` (egress: 3306 VPC + 443 internet) |
 | IAM Profile | `EC2-SSM-InstanceProfile` |
 
 ## Build & Deploy

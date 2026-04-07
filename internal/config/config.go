@@ -21,9 +21,6 @@ type Config struct {
 	// QS-Tool MySQL database — legacy qual-scheduler
 	QSDB DatabaseConfig
 
-	// DocumentDB (MongoDB-compatible) — legacy user/answer store
-	DocumentDB DocumentDBConfig
-
 	// AWS Cognito
 	Cognito CognitoConfig
 
@@ -111,11 +108,6 @@ func (d DatabaseConfig) DSN() string {
 		"%s:%s@tcp(%s:%d)/%s?%s",
 		d.User, d.Password, d.Host, d.Port, d.Name, d.Params,
 	)
-}
-
-type DocumentDBConfig struct {
-	ConnectionString   string
-	ConnectionStringV2 string
 }
 
 type CognitoConfig struct {
@@ -247,11 +239,6 @@ func Load() *Config {
 			MaxOpenConns:    envIntOr("QS_DB_MAX_OPEN", 25),
 			MaxIdleConns:    envIntOr("QS_DB_MAX_IDLE", 5),
 			ConnMaxLifetime: time.Duration(envIntOr("QS_DB_CONN_MAX_LIFE_MIN", 10)) * time.Minute,
-		},
-
-		DocumentDB: DocumentDBConfig{
-			ConnectionString:   envOr("DOCUMENT_DB_CONNECTION_STRING", ""),
-			ConnectionStringV2: envOr("DOCUMENT_DB_CONNECTION_STRING_V2", ""),
 		},
 
 		Cognito: CognitoConfig{
