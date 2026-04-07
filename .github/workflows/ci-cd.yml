@@ -1,0 +1,175 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [data-qa, qa, staging, production]
+  pull_request:
+    branches: [data-qa]
+
+env:
+  ECR_REPOSITORY: unified-qual-api
+  AWS_REGION: us-east-2
+  EKS_CLUSTER: eks-cluster-apps-use2-konovo-dev
+  K8S_NAMESPACE: unified-qual
+  K8S_DEPLOYMENT: unified-qual-api
+
+jobs:
+  # ── CI jobs: lint, test, security, build — run on data-qa only ──────────
+  lint-test:
+    if: github.ref_name == 'data-qa'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Tidy modules
+        run: go mod tidy
+      - name: Format check
+        run: test -z "$(gofmt -l .)" || (echo "Unformatted files:"; gofmt -l .; exit 1)
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+      - name: Unit Tests
+        run: |
+          go test -race -coverprofile=coverage.out ./...
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+          echo "Total coverage: ${COVERAGE}%"
+          THRESHOLD=1
+          if [ "$(echo "$COVERAGE < $THRESHOLD" | bc -l)" -eq 1 ]; then
+            echo "::error::Coverage ${COVERAGE}% is below ${THRESHOLD}% threshold"
+            exit 1
+          fi
+      - name: Integration Tests
+        run: go test -tags=integration -race -v ./integrationtests/...
+
+  security:
+    if: github.ref_name == 'data-qa'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - name: Install Snyk CLI
+        uses: snyk/actions/setup@master
+      - name: Snyk Open Source (dependency scan)
+        continue-on-error: true
+        run: snyk test --all-projects --severity-threshold=high
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Snyk Code (SAST)
+        continue-on-error: true
+        run: snyk code test
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Snyk Monitor (upload to dashboard)
+        if: github.event_name == 'push'
+        continue-on-error: true
+        run: snyk monitor --all-projects
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  build-push:
+    needs: [lint-test, security]
+    if: github.ref_name == 'data-qa' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build & Push
+        id: build
+        run: |
+          IMAGE=${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
+          docker build -t $IMAGE .
+          docker push $IMAGE
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+  # ── Deploy: runs on data-qa, qa, staging, production ────────────────────
+  # On data-qa: runs after build-push succeeds (full CI pipeline)
+  # On qa/staging/production: runs standalone (CI jobs skipped)
+  # Uses GitHub Environments for approval gate — configure required reviewers
+  # in GitHub repo Settings → Environments → <branch-name>
+  deploy:
+    needs: build-push
+    if: |
+      always()
+      && github.event_name == 'push'
+      && contains(fromJSON('["data-qa","qa","staging","production"]'), github.ref_name)
+      && (needs.build-push.result == 'success' || needs.build-push.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name }}
+    steps:
+      - name: Resolve deploy config
+        id: config
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          echo "gitops_branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+
+          # Map branch → gitops values path
+          # Update these mappings as new environments are added
+          case "${BRANCH}" in
+            data-qa)
+              echo "values_path=envs/konovo-dev/us-east-2/unified-qual-api-values.yaml" >> "$GITHUB_OUTPUT"
+              ;;
+            qa)
+              echo "values_path=envs/konovo-qa/us-east-2/unified-qual-api-values.yaml" >> "$GITHUB_OUTPUT"
+              ;;
+            staging)
+              echo "values_path=envs/konovo-staging/us-east-2/unified-qual-api-values.yaml" >> "$GITHUB_OUTPUT"
+              ;;
+            production)
+              echo "values_path=envs/konovo-prod/us-east-2/unified-qual-api-values.yaml" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "::error::No deploy mapping for branch ${BRANCH}"
+              exit 1
+              ;;
+          esac
+          echo "Deploying branch=${BRANCH} → values=${{ steps.config.outputs.values_path }}"
+
+      - name: Checkout GitOps repo
+        uses: actions/checkout@v4
+        with:
+          repository: prashant-konovo/qual-gitops
+          ref: ${{ steps.config.outputs.gitops_branch }}
+          token: ${{ secrets.GITOPS_PAT }}
+          path: gitops
+
+      - name: Update image tag in values
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          VALUES_FILE="gitops/${{ steps.config.outputs.values_path }}"
+
+          if [ ! -f "$VALUES_FILE" ]; then
+            echo "::error::Values file not found: $VALUES_FILE"
+            exit 1
+          fi
+
+          sed -i "s|tag: .*|tag: \"${IMAGE_TAG}\"|" "$VALUES_FILE"
+          echo "Updated image tag to ${IMAGE_TAG} in $VALUES_FILE"
+          grep 'tag:' "$VALUES_FILE"
+
+      - name: Commit and push
+        run: |
+          cd gitops
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: update unified-qual-api image to ${{ github.sha }} [${{ github.ref_name }}]"
+          git push origin ${{ steps.config.outputs.gitops_branch }}

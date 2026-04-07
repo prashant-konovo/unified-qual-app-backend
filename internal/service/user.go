@@ -1,0 +1,113 @@
+package service
+
+import (
+	"context"
+
+	"github.com/InCrowd/unified-qual-api/internal/integration"
+	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
+	"github.com/InCrowd/unified-qual-api/internal/repository/qs"
+)
+
+// UserService encapsulates user profile and preference operations.
+type UserService struct {
+	qsUserRepo         qs.UserRepository
+	irisUserRepo       iris.UserRepository
+	eventLog           *integration.EventLogClient
+	cognitoRegion      string
+	cognitoAppClientID string
+}
+
+// NewUserService creates a new UserService.
+func NewUserService(qsUserRepo qs.UserRepository, irisUserRepo iris.UserRepository, eventLog *integration.EventLogClient, cognitoRegion, cognitoAppClientID string) *UserService {
+	return &UserService{qsUserRepo: qsUserRepo, irisUserRepo: irisUserRepo, eventLog: eventLog, cognitoRegion: cognitoRegion, cognitoAppClientID: cognitoAppClientID}
+}
+
+// QsAvailable returns true if the QS user repository is configured.
+func (s *UserService) QsAvailable() bool { return s.qsUserRepo != nil }
+
+// IrisAvailable returns true if the IRIS user repository is configured.
+func (s *UserService) IrisAvailable() bool { return s.irisUserRepo != nil }
+
+// --- QsUserRepo methods ---
+
+func (s *UserService) GetByID(ctx context.Context, id int64) (*qs.UserWithRoles, error) {
+	return s.qsUserRepo.GetByID(ctx, id)
+}
+
+func (s *UserService) Update(ctx context.Context, id int64, firstName, lastName, timeZone string) error {
+	return s.qsUserRepo.Update(ctx, id, firstName, lastName, timeZone)
+}
+
+func (s *UserService) GetEmailByCognitoID(ctx context.Context, cognitoID string) (string, error) {
+	return s.qsUserRepo.GetEmailByCognitoID(ctx, cognitoID)
+}
+
+func (s *UserService) UpdateTimeZone(ctx context.Context, userID int64, timeZone string) error {
+	return s.qsUserRepo.UpdateTimeZone(ctx, userID, timeZone)
+}
+
+func (s *UserService) CheckUserIsQsToolAndI2(ctx context.Context, email string) (map[string]any, error) {
+	return s.qsUserRepo.CheckUserIsQsToolAndI2(ctx, email)
+}
+
+func (s *UserService) GetUserCommPreference(ctx context.Context, userID int64) ([]map[string]any, error) {
+	return s.qsUserRepo.GetUserCommPreference(ctx, userID)
+}
+
+func (s *UserService) UpdateUserCommPreference(ctx context.Context, cognitoUserID, pmUserID string, allowContactByEmail int) ([]map[string]any, error) {
+	return s.qsUserRepo.UpdateUserCommPreference(ctx, cognitoUserID, pmUserID, allowContactByEmail)
+}
+
+// --- IrisUserRepo methods ---
+
+func (s *UserService) GetIrisUserByID(ctx context.Context, id int64) (*iris.ICUserWithRoles, error) {
+	return s.irisUserRepo.GetByID(ctx, id)
+}
+
+func (s *UserService) UpdateIrisUser(ctx context.Context, id int64, firstName, lastName, timeZone string) error {
+	return s.irisUserRepo.Update(ctx, id, firstName, lastName, timeZone)
+}
+
+func (s *UserService) GetIrisUserByEmail(ctx context.Context, email string) (*iris.ICUserWithRoles, error) {
+	return s.irisUserRepo.GetByEmail(ctx, email)
+}
+
+// --- Migrated from handler raw DB calls ---
+
+func (s *UserService) GetUserClientID(ctx context.Context, userID int64) (int64, error) {
+	return s.qsUserRepo.GetUserClientID(ctx, userID)
+}
+
+func (s *UserService) GetUserAccountSelection(ctx context.Context, userID int64) (string, error) {
+	return s.qsUserRepo.GetUserAccountSelection(ctx, userID)
+}
+
+func (s *UserService) GetUserClientSelections(ctx context.Context, userID int64) ([]string, error) {
+	return s.qsUserRepo.GetUserClientSelections(ctx, userID)
+}
+
+func (s *UserService) CreateQSEventLog(ctx context.Context, eventType, description string, userID, projectID, timeSlotID int64, metaData string) error {
+	return s.qsUserRepo.CreateEventLog(ctx, eventType, description, userID, projectID, timeSlotID, metaData)
+}
+
+func (s *UserService) DeleteGoogleCalendarImport(ctx context.Context, moderatorID int64) error {
+	return s.qsUserRepo.DeleteGoogleCalendarImport(ctx, moderatorID)
+}
+
+// --- EventLog / Cognito delegation methods ---
+
+func (s *UserService) EventLogConfigured() bool {
+	return s.eventLog != nil && s.eventLog.Configured()
+}
+
+func (s *UserService) LogEvent(ctx context.Context, eventType, description string, metadata map[string]any) error {
+	return s.eventLog.LogEvent(ctx, eventType, description, metadata)
+}
+
+func (s *UserService) CognitoRegion() string {
+	return s.cognitoRegion
+}
+
+func (s *UserService) CognitoAppClientID() string {
+	return s.cognitoAppClientID
+}
