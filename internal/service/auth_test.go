@@ -87,6 +87,10 @@ func (m *mockICAuth) ChangePassword(_ context.Context, _ int64, _, _, _ string) 
 	return m.changePwdErr
 }
 
+func (m *mockICAuth) PasswordMatches(_ context.Context, _ int64, _, _ string) (bool, error) {
+	return true, nil
+}
+
 func boolPtr(b bool) *bool { return &b }
 
 func sqlStr(s string) sql.NullString {

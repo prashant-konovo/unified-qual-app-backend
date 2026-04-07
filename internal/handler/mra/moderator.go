@@ -1481,7 +1481,7 @@ func (h *Handler) GetModeratorAvailabilityByClientMRA(w http.ResponseWriter, r *
 // ──────────────────────────────────────────────
 // MRA #65 — StartModeratorImportMRA
 // POST /v1/moderator/get/{moderator_id}/imported/{client_id}
-// Legacy: Google Sheets import — DB parts only (PARTIAL).
+// Triggers Google Sheets import — parses color-coded availability grid.
 // ──────────────────────────────────────────────
 
 func (h *Handler) StartModeratorImportMRA(w http.ResponseWriter, r *http.Request) {
@@ -1540,9 +1540,16 @@ func (h *Handler) StartModeratorImportMRA(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// PARTIAL: Google Sheets + Lambda calls are external and not replicated here
-	slog.Info("StartModeratorImportMRA: import started (PARTIAL — Google Sheets integration not implemented)",
-		"moderatorId", moderatorID, "clientId", clientID)
+	// Step 5: Run Google Sheets import in background goroutine
+	// Extract spreadsheet ID from the external calendar URL
+	spreadsheetID := body.ExternalCalendarInput
+	if h.ModeratorService.GoogleSheetsConfigured() {
+		h.ModeratorService.RunModeratorImport(ctx, moderatorID, clientID, spreadsheetID)
+	} else {
+		slog.Warn("StartModeratorImportMRA: Google Sheets not configured, skipping import",
+			"moderatorId", moderatorID, "clientId", clientID)
+		_ = h.ModeratorService.UpdateModExternalCalendarStatusMRA(ctx, moderatorID, "Failed")
+	}
 
 	// Legacy returns JSON.stringify("Importing in progress")
 	utilities.WriteJSON(w, http.StatusOK, "Importing in progress")

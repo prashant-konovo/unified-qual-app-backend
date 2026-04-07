@@ -71,3 +71,67 @@ func (gs *GoogleSheetsClient) UpdateFirstDate(ctx context.Context, sheetName, ce
 	}
 	return nil
 }
+
+// SheetGridData holds the raw grid data from a Google Sheets spreadsheet,
+// including cell values and background colors for availability parsing.
+type SheetGridData struct {
+	Sheets []struct {
+		Data []struct {
+			RowData []struct {
+				Values []struct {
+					FormattedValue  string `json:"formattedValue"`
+					EffectiveFormat struct {
+						BackgroundColor struct {
+							Red   float64 `json:"red"`
+							Green float64 `json:"green"`
+							Blue  float64 `json:"blue"`
+						} `json:"backgroundColor"`
+					} `json:"effectiveFormat"`
+				} `json:"values"`
+			} `json:"rowData"`
+		} `json:"data"`
+	} `json:"sheets"`
+}
+
+// GetGridData fetches the full spreadsheet grid with formatting data (cell colors).
+// Uses the spreadsheets.get endpoint with includeGridData=true.
+func (gs *GoogleSheetsClient) GetGridData(ctx context.Context, spreadsheetID string) (*SheetGridData, error) {
+	sid := spreadsheetID
+	if sid == "" {
+		sid = gs.spreadsheetID
+	}
+	if sid == "" {
+		return nil, fmt.Errorf("no spreadsheet ID provided")
+	}
+
+	apiURL := fmt.Sprintf(
+		"https://sheets.googleapis.com/v4/spreadsheets/%s?includeGridData=true",
+		url.PathEscape(sid),
+	)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := gs.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("google sheets grid data call: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read grid data response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("google sheets grid data returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var grid SheetGridData
+	if err := json.Unmarshal(body, &grid); err != nil {
+		return nil, fmt.Errorf("parse grid data: %w", err)
+	}
+	return &grid, nil
+}

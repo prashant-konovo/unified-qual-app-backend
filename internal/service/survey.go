@@ -405,8 +405,12 @@ func (s *SurveyService) DecipherConfigured() bool {
 	return s.decipher != nil && s.decipher.Configured()
 }
 
-func (s *SurveyService) GetDecipherRespondentData(ctx context.Context, surveyID string) ([]map[string]any, error) {
+func (s *SurveyService) GetDecipherRespondentData(ctx context.Context, surveyID string) ([]integration.DecipherRespondent, error) {
 	return s.decipher.GetRespondentData(ctx, surveyID)
+}
+
+func (s *SurveyService) GetDecipherRespondentByIdentifier(ctx context.Context, surveyID, identifier string) (*integration.DecipherRespondent, error) {
+	return s.decipher.GetRespondentByIdentifier(ctx, surveyID, identifier)
 }
 
 func (s *SurveyService) EventLogConfigured() bool {

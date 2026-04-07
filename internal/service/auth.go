@@ -28,6 +28,7 @@ type ICAuthClient interface {
 	AcceptTerms(ctx context.Context, userID int64) error
 	Logout(ctx context.Context, userID int64, icAuthToken string) error
 	ChangePassword(ctx context.Context, userID int64, icAuthToken, oldPassword, newPassword string) error
+	PasswordMatches(ctx context.Context, userID int64, password, authToken string) (bool, error)
 }
 
 // AuthService encapsulates authentication business logic,
@@ -322,6 +323,14 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID int64, icAuthTo
 	}
 
 	return map[string]any{"changed": true}, nil
+}
+
+// PasswordMatches validates a user's password via InCrowdAPI.
+func (s *AuthService) PasswordMatches(ctx context.Context, userID int64, password, authToken string) (bool, error) {
+	if s.icAuth == nil || !s.icAuth.Configured() {
+		return false, fmt.Errorf("password validation service unavailable")
+	}
+	return s.icAuth.PasswordMatches(ctx, userID, password, authToken)
 }
 
 // ResolveUserID resolves a user's ID from their email using the QS DB.

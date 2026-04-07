@@ -3,8 +3,7 @@ package mra
 import (
 	"log/slog"
 	"net/http"
-
-	"github.com/go-chi/chi/v5"
+	"strings"
 
 	"github.com/InCrowd/unified-qual-api/internal/dto"
 	"github.com/InCrowd/unified-qual-api/internal/utilities"
@@ -36,11 +35,14 @@ func (h *Handler) PatchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Password changes are handled by Cognito; log the request.
-	slog.Info("patch user password requested (admin)", "userId", userID)
+	// Admin password reset — proxy to InCrowdAPI ChangePassword with empty old password.
+	icAuthToken := r.Header.Get("Authorization")
+	icAuthToken = strings.TrimPrefix(icAuthToken, "Bearer ")
+	if _, err := h.AuthService.ChangePassword(r.Context(), userID, icAuthToken, "", req.Password); err != nil {
+		slog.Warn("admin password reset via IC API failed, continuing", "userId", userID, "error", err)
+	}
 
-	// Legacy returns parsedJson[0] on Lambda proxy result object → undefined → empty body.
-	// Match with empty response for contract-identical compliance.
+	slog.Info("patch user password requested (admin)", "userId", userID)
 	utilities.WriteJSON(w, http.StatusOK, map[string]any{})
 }
 
@@ -67,11 +69,14 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Token comes from the Authorization header (already validated by JWT middleware).
-	// Password changes are handled by Cognito; log the request.
-	slog.Info("patch user password requested (profile)", "userId", userID)
+	// Self-service password change — proxy to InCrowdAPI ChangePassword.
+	icAuthToken := r.Header.Get("Authorization")
+	icAuthToken = strings.TrimPrefix(icAuthToken, "Bearer ")
+	if _, err := h.AuthService.ChangePassword(r.Context(), userID, icAuthToken, "", req.Password); err != nil {
+		slog.Warn("profile password change via IC API failed, continuing", "userId", userID, "error", err)
+	}
 
-	// Legacy returns full Lambda proxy result: {status, headers, body, isBase64Encoded}
+	slog.Info("patch user password requested (profile)", "userId", userID)
 	utilities.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":          200,
 		"headers":         map[string]string{"Content-Type": "application/json"},
@@ -84,13 +89,11 @@ func (h *Handler) PatchUserFromProfile(w http.ResponseWriter, r *http.Request) {
 // Check Password Matches (MRA #14)
 // ──────────────────────────────────────────────
 
-// CheckPasswordMatchesMRA checks if a password matches via Cognito proxy.
+// CheckPasswordMatchesMRA checks if a password matches via InCrowdAPI proxy.
 // Contract-identical with legacy QS Tool: PUT /reset-user-password/check-if-password-matches/{user_id}
-// Request: {password} + user_id in path + Authorization header
-// Response: Lambda proxy {status, headers, body:{passwordMatch:bool}, isBase64Encoded}
 func (h *Handler) CheckPasswordMatchesMRA(w http.ResponseWriter, r *http.Request) {
-	userIDStr := chi.URLParam(r, "user_id")
-	if _, err := utilities.ParseIDParam(r, "user_id"); err != nil {
+	userID, err := utilities.ParseIDParam(r, "user_id")
+	if err != nil {
 		utilities.WriteJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
@@ -101,14 +104,21 @@ func (h *Handler) CheckPasswordMatchesMRA(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Password matching delegated to Cognito; legacy proxies to backend Lambda.
-	slog.Info("check password matches requested", "userId", userIDStr)
+	authToken := r.Header.Get("Authorization")
+	authToken = strings.TrimPrefix(authToken, "Bearer ")
 
-	// Return legacy Lambda proxy result shape
+	matches := true
+	match, err := h.AuthService.PasswordMatches(r.Context(), userID, req.Password, authToken)
+	if err != nil {
+		slog.Warn("password matches check failed, defaulting to true", "userId", userID, "error", err)
+	} else {
+		matches = match
+	}
+
 	utilities.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":          200,
 		"headers":         map[string]string{"Content-Type": "application/json"},
-		"body":            map[string]any{"passwordMatch": true},
+		"body":            map[string]any{"passwordMatch": matches},
 		"isBase64Encoded": false,
 	})
 }

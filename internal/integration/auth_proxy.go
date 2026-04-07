@@ -208,3 +208,42 @@ func (ic *InCrowdAPIAuthClient) ChangePassword(ctx context.Context, userID int64
 
 	return nil
 }
+
+// PasswordMatches calls InCrowdAPI PUT /v1/user/:userId/password_matches_qstool
+// to validate that the provided password matches the user's current password.
+func (ic *InCrowdAPIAuthClient) PasswordMatches(ctx context.Context, userID int64, password, authToken string) (bool, error) {
+	if !ic.Configured() {
+		return false, fmt.Errorf("incrowd api auth client not configured")
+	}
+
+	url := fmt.Sprintf("%s/v1/user/%d/password_matches_qstool", ic.baseURL, userID)
+	payload, _ := json.Marshal(map[string]any{"password": password})
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, url, bytes.NewReader(payload))
+	if err != nil {
+		return false, fmt.Errorf("create password matches request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+
+	resp, err := ic.client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("incrowd api password matches call: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("password matches failed (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		PasswordMatch bool `json:"passwordMatch"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return false, fmt.Errorf("parse password matches response: %w", err)
+	}
+	return result.PasswordMatch, nil
+}
