@@ -66,7 +66,7 @@ func TestListProjects_BothSources(t *testing.T) {
 	qsRepo.On("List", mock.Anything, 1, 20, (*int)(nil), "").
 		Return([]qs.ProjectListRow{sampleQSRow(2, "QS Project")}, 1, nil)
 
-	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil)
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -110,7 +110,7 @@ func TestListProjects_IRISOnly(t *testing.T) {
 	irisRepo.On("List", mock.Anything, 1, 20, (*int)(nil), "").
 		Return([]iris.ProjectListRow{sampleIRISRow(10, "Only IRIS")}, 1, nil)
 
-	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil)
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -142,7 +142,7 @@ func TestListProjects_QSOnly(t *testing.T) {
 	qsRepo.On("List", mock.Anything, 1, 20, (*int)(nil), "").
 		Return([]qs.ProjectListRow{sampleQSRow(20, "Only QS")}, 1, nil)
 
-	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil)
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -177,7 +177,7 @@ func TestListProjects_EmptyResult(t *testing.T) {
 	qsRepo.On("List", mock.Anything, 1, 20, (*int)(nil), "").
 		Return([]qs.ProjectListRow{}, 0, nil)
 
-	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil)
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -210,7 +210,7 @@ func TestListProjects_IRISError(t *testing.T) {
 	qsRepo.On("List", mock.Anything, 1, 20, (*int)(nil), "").
 		Return([]qs.ProjectListRow{sampleQSRow(5, "Surviving QS")}, 1, nil)
 
-	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil)
+	deps.ProjectService = service.NewProjectService(irisRepo, qsRepo, nil, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
@@ -235,7 +235,7 @@ func TestListProjects_IRISError(t *testing.T) {
 
 func TestListProjects_NilRepos(t *testing.T) {
 	deps := unittests.TestDeps()
-	deps.ProjectService = service.NewProjectService(nil, nil, nil)
+	deps.ProjectService = service.NewProjectService(nil, nil, nil, nil)
 
 	handler := &shared.ProjectHandler{Deps: deps}
 	rec := httptest.NewRecorder()
