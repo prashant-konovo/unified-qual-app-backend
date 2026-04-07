@@ -131,7 +131,7 @@ func New() *TestServer {
 	}
 
 	// Create all services via centralized wiring
-	svcs := service.NewServices(cfg, qsRepos, irisRepos, nil)
+	svcs := service.NewServices(cfg, qsRepos, irisRepos, nil, nil)
 	// Override SurveyService: the mock QsSurveyRepo can't be stored in
 	// qs.Repositories.Survey (concrete *SurveyRepo), so wire it manually.
 	svcs.Survey = service.NewSurveyService(ts.QsSurveyRepo, ts.IrisSurveyRepo, nil, nil)
