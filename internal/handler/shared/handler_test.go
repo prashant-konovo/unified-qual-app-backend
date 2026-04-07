@@ -8,13 +8,12 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
-	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/service"
 	"github.com/InCrowd/unified-qual-api/internal/unittests"
 )
 
 // newHandler returns a Handler backed by testutil defaults.
-// The DBPair has nil databases so HealthCheck reports "not_configured".
+// HealthService wraps nil DBs so HealthCheck reports "not_configured".
 func newHandler() *Handler {
 	return &Handler{unittests.TestServices()}
 }
@@ -45,11 +44,11 @@ func TestHealth_AllDBsHealthy(t *testing.T) {
 	}
 }
 
-// TestHealth_NoDB confirms that a completely empty DBPair (all nil) is treated
+// TestHealth_NoDB confirms that a nil-DB HealthService is treated
 // as healthy because "not_configured" is an acceptable status.
 func TestHealth_NoDB(t *testing.T) {
 	deps := unittests.TestServices()
-	deps.DB = &database.DBPair{} // all nil
+	deps.HealthService = service.NewHealthService(nil)
 	h := &Handler{deps}
 
 	rec := callHealth(h)

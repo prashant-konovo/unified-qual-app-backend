@@ -2,7 +2,6 @@ package handler
 
 import (
 	"github.com/InCrowd/unified-qual-api/internal/config"
-	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/handler/ls"
 	"github.com/InCrowd/unified-qual-api/internal/handler/mra"
 	"github.com/InCrowd/unified-qual-api/internal/handler/shared"
@@ -20,11 +19,9 @@ type Handlers struct {
 	Handler   *shared.Handler // shared non-brand-specific handlers
 }
 
-// NewHandlers creates all domain handlers by wiring config, DB, and services
-// into the shared Services container.
-func NewHandlers(cfg *config.Config, db *database.DBPair, d *service.Services) *Handlers {
+// NewHandlers creates all domain handlers from the Services container.
+func NewHandlers(cfg *config.Config, d *service.Services) *Handlers {
 	d.Cfg = cfg
-	d.DB = db
 
 	return &Handlers{
 		Auth:      &shared.AuthHandler{Services: d},

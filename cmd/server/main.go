@@ -52,8 +52,9 @@ func main() {
 	adapters := adapter.NewAdapters(irisRepos, qsRepos)
 	svcClients := integration.NewServiceClients(cfg)
 	svcs := service.NewServices(cfg, qsRepos, irisRepos, svcClients, adapters)
+	svcs.HealthService = service.NewHealthService(db)
 
-	hs := handler.NewHandlers(cfg, db, svcs)
+	hs := handler.NewHandlers(cfg, svcs)
 	r := router.New(hs, jwtAuth)
 
 	// Start scheduled jobs (if enabled)

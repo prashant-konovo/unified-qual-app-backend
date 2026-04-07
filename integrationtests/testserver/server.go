@@ -18,7 +18,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
-	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/handler"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
@@ -135,9 +134,9 @@ func New() *TestServer {
 	// Override SurveyService: the mock QsSurveyRepo can't be stored in
 	// qs.Repositories.Survey (concrete *SurveyRepo), so wire it manually.
 	svcs.SurveyService = service.NewSurveyService(ts.QsSurveyRepo, ts.IrisSurveyRepo, nil, nil)
+	svcs.HealthService = service.NewHealthService(nil) // nil DBs — health will show "not_configured"
 
-	db := &database.DBPair{} // nil DBs — health will show "not_configured"
-	hs := handler.NewHandlers(cfg, db, svcs)
+	hs := handler.NewHandlers(cfg, svcs)
 
 	// Create JWTAuth that fetches keys from our test JWKS server.
 	// Override the issuer URL so token validation matches our test tokens.

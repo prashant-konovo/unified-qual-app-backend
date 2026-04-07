@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/InCrowd/unified-qual-api/internal/config"
-	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/middleware"
 	"github.com/InCrowd/unified-qual-api/internal/service"
 )
@@ -39,8 +38,8 @@ func TestConfig() *config.Config {
 // Callers should set the specific repos they need for their test.
 func TestServices() *service.Services {
 	return &service.Services{
-		Cfg: TestConfig(),
-		DB:  &database.DBPair{},
+		Cfg:           TestConfig(),
+		HealthService: service.NewHealthService(nil),
 	}
 }
 

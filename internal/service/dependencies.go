@@ -2,7 +2,6 @@ package service
 
 import (
 	"github.com/InCrowd/unified-qual-api/internal/config"
-	"github.com/InCrowd/unified-qual-api/internal/database"
 	"github.com/InCrowd/unified-qual-api/internal/integration"
 	"github.com/InCrowd/unified-qual-api/internal/repository/adapter"
 	"github.com/InCrowd/unified-qual-api/internal/repository/iris"
@@ -11,11 +10,10 @@ import (
 
 // Services holds shared dependencies injected into all domain handlers.
 // Handlers access business logic exclusively through service fields.
-// DB is retained solely for the Health endpoint.
 type Services struct {
 	Cfg *config.Config
-	DB  *database.DBPair // used only by Health endpoint
 
+	HealthService       *HealthService
 	AuthService         *AuthService
 	ProjectService      *ProjectService
 	ParticipantService  *ParticipantService

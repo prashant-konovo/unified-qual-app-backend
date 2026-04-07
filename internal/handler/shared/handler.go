@@ -22,7 +22,7 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 
-	dbChecks := h.DB.HealthCheck(ctx)
+	dbChecks := h.HealthService.Check(ctx)
 
 	status := "healthy"
 	httpCode := http.StatusOK
